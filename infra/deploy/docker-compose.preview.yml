@@ -1,0 +1,50 @@
+# Vorschau auf EINEM Server, ohne Domain, per HTTP ueber die IP.
+# Nur zum Anschauen des Fortschritts - nicht fuer echte Nutzerdaten (kein TLS!).
+# Start: cd ~/vereine && docker compose -f infra/deploy/docker-compose.preview.yml --env-file .env.preview up -d --build
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vereine
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: vereine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vereine"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
+      API_PORT: "4000"
+      COOKIE_SECURE: "false" # nur Vorschau ueber HTTP
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile.preview:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
+      - api
+
+volumes:
+  pgdata:

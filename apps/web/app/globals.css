@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Design-Tokens. Farben hier anpassen, um das gesamte Erscheinungsbild zu aendern. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --surface-2: #eef1ed;
+  --border: #dfe4dc;
+  --text: #1b241d;
+  --muted: #5b6a5f;
+  --brand: #1f7a4d;
+  --brand-hover: #176239;
+  --brand-contrast: #ffffff;
+  --accent: #e9a23b;
+  --danger: #c0392b;
+  --ring: #1f7a4d66;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1511;
+    --surface: #171f19;
+    --surface-2: #1f2922;
+    --border: #2a362d;
+    --text: #e8eee9;
+    --muted: #9aab9f;
+    --brand: #3fb27a;
+    --brand-hover: #55c78f;
+    --brand-contrast: #08150d;
+    --accent: #f0b35a;
+    --danger: #ef6b5b;
+    --ring: #3fb27a66;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

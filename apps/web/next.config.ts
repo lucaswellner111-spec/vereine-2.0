@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // Nur fuer lokale Entwicklung: /api -> NestJS. In Produktion routet Caddy /api direkt zur API.
+  async rewrites() {
+    const target = process.env.API_INTERNAL_URL ?? "http://localhost:4000";
+    return [{ source: "/api/:path*", destination: `${target}/:path*` }];
+  },
   async headers() {
     return [
       {

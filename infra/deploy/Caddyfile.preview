@@ -1,0 +1,18 @@
+{
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header -Server
+}

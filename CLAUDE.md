@@ -1,0 +1,24 @@
+# Vereine 2.0 – Projektleitfaden für Claude
+
+DSGVO-konforme Social-Media-Plattform für Vereine, Mitglieder und Fans (Betreiber: UG/GmbH, Hosting: Hetzner DE).
+Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und Doku: **Deutsch** (Du-Form).
+
+## Aufbau (npm Workspaces + Turborepo)
+- `apps/web` – Next.js 15 (App Router, Tailwind v4)
+- `apps/api` – NestJS 11 auf Fastify, Drizzle ORM (PostgreSQL), argon2id, Cookie-Sessions
+- `packages/shared` – Zod-Schemas/Typen, von Web und API genutzt (nach Änderung `npm run build -w @vereine/shared`)
+- `infra/` – Terraform (Hetzner), Ansible, Docker/Compose (`infra/deploy/docker-compose.preview.yml`)
+
+## Befehle
+- `npm run typecheck` · `npm run build` · `npm test` (API-Tests nutzen PGlite, kein Docker nötig)
+- Lokal ohne Docker: `npm run dev:pglite -w @vereine/api` (API mit In-Memory-DB) + `npm run dev -w @vereine/web`; tsx erzeugt keine Decorator-Metadaten, daher immer `@Inject(Klasse)` im Konstruktor nutzen
+- DB: `npm run db:generate -w @vereine/api` (Migration erzeugen), `npm run db:migrate -w @vereine/api`
+- Turbo-Telemetrie aus: `DO_NOT_TRACK=1`
+
+## Regeln
+- **Datenschutz zuerst**: keine Drittanbieter-Requests im Frontend (keine CDNs, Google Fonts, Tracker); Daten minimieren; Einwilligungen append-only in `consents`.
+- Keine Geheimnisse einchecken (`.env*`, `*.tfvars`, `inventory.ini` sind ignoriert). Passwörter/Tokens nie in den Chat.
+- API-Eingaben immer mit Zod aus `packages/shared` validieren; Auth-Fehler generisch halten.
+- Schema-Änderungen nur per Drizzle-Migration; neue Endpunkte brauchen Tests in `apps/api/src/**/*.spec.ts`.
+- Frontend: Seiten sind bewusst Konzept-Shells mit Mock-Daten (`apps/web/lib/mock.ts`), die schrittweise an echte Funktionen/Dienste angebunden werden.
+- Vorschau-Server (Hetzner, nur HTTP, Testdaten): Deploy per `tar` über SSH nach `/opt/vereine`, siehe `infra/README.md`. Kein Commit/Push ohne Auftrag.
