@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -11,7 +10,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
-import type { ZodType } from "zod";
 import {
   deleteAccountSchema,
   setConsentSchema,
@@ -19,13 +17,8 @@ import {
   type PublicUser,
 } from "@vereine/shared";
 import { SESSION_COOKIE, CurrentUser, SessionGuard } from "../auth/session.guard";
+import { parse } from "../common/parse";
 import { PrivacyService } from "./privacy.service";
-
-function parse<T>(schema: ZodType<T>, body: unknown): T {
-  const result = schema.safeParse(body);
-  if (!result.success) throw new BadRequestException(result.error.flatten().fieldErrors);
-  return result.data;
-}
 
 @Controller("privacy")
 @UseGuards(SessionGuard)

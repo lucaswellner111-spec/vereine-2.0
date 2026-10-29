@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -11,18 +10,10 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { ZodType } from "zod";
 import { loginSchema, registerSchema, type PublicUser } from "@vereine/shared";
+import { parse } from "../common/parse";
 import { AuthService, SESSION_TTL_MS } from "./auth.service";
 import { SESSION_COOKIE } from "./session.guard";
-
-function parse<T>(schema: ZodType<T>, body: unknown): T {
-  const result = schema.safeParse(body);
-  if (!result.success) {
-    throw new BadRequestException(result.error.flatten().fieldErrors);
-  }
-  return result.data;
-}
 
 @Controller("auth")
 export class AuthController {

@@ -71,6 +71,65 @@ export const deleteAccountSchema = z.object({
 });
 export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 
+// --- Vereine, Beitraege, Feed ------------------------------------------------
+
+export const ORG_CATEGORIES = ["Sport", "Kultur", "Feuerwehr", "Umwelt", "Soziales", "Bildung", "Sonstiges"] as const;
+
+export const createOrgSchema = z.object({
+  name: z.string().trim().min(3).max(80),
+  category: z.enum(ORG_CATEGORIES),
+  city: z.string().trim().min(2).max(60),
+  about: z.string().trim().max(600).default(""),
+});
+export type CreateOrgInput = z.infer<typeof createOrgSchema>;
+
+export const ORG_ROLES = ["admin", "treasurer", "moderator", "member"] as const;
+export type OrgRole = (typeof ORG_ROLES)[number];
+
+export type OrgSummary = {
+  slug: string;
+  name: string;
+  category: string;
+  city: string;
+  about: string;
+  followers: number;
+  members: number;
+};
+export type OrgDetail = OrgSummary & {
+  viewer: { following: boolean; membership: "none" | "pending" | "active"; role: OrgRole | null };
+};
+
+export const POST_KINDS = ["update", "event", "donation"] as const;
+export const createPostSchema = z.object({
+  body: z.string().trim().min(1).max(1000),
+  orgSlug: z.string().trim().min(1).max(100).optional(),
+  kind: z.enum(POST_KINDS).default("update"),
+});
+export type CreatePostInput = z.infer<typeof createPostSchema>;
+
+export const createCommentSchema = z.object({ body: z.string().trim().min(1).max(500) });
+export const reportSchema = z.object({
+  reason: z.enum(["spam", "hate", "illegal", "other"]),
+  note: z.string().trim().max(300).optional(),
+});
+export type ReportInput = z.infer<typeof reportSchema>;
+
+export type FeedPost = {
+  id: string;
+  body: string;
+  kind: (typeof POST_KINDS)[number];
+  createdAt: string;
+  author: { id: string; name: string };
+  org: { slug: string; name: string } | null;
+  likes: number;
+  comments: number;
+  likedByMe: boolean;
+  canDelete: boolean;
+  reason: string;
+};
+export type FeedResponse = { mode: "ranked" | "chrono"; personalized: boolean; posts: FeedPost[] };
+export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string } };
+
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
   service: z.string(),

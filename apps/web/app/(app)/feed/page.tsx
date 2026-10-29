@@ -2,53 +2,81 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { ConsentState } from "@vereine/shared";
-import { api } from "@/lib/api";
-import { Alert, Avatar, Badge, Button, Card, ConceptNote, PageHeader } from "@/components/ui";
-import { posts as initialPosts, type Post } from "@/lib/mock";
+import { useCallback, useEffect, useState } from "react";
+import type { FeedPost, FeedResponse, OrgSummary } from "@vereine/shared";
+import { PostCard } from "@/components/post-card";
+import { Alert, Button, Card, PageHeader } from "@/components/ui";
+import { api, describeError } from "@/lib/api";
 
-const modes = [
-  { id: "ranked", label: "Für dich", hint: "Transparent sortiert nach Aktualität, Beziehung und Interaktion." },
-  { id: "chrono", label: "Neueste", hint: "Rein chronologisch, ohne Personalisierung." },
-] as const;
+const hints = {
+  ranked: "Sortiert nach Beziehung, Interaktion und Aktualität – den Grund siehst du unter „Warum sehe ich das?“.",
+  chrono: "Rein chronologisch, ohne Personalisierung.",
+};
 
 export default function FeedPage() {
-  const [mode, setMode] = useState<(typeof modes)[number]["id"]>("ranked");
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [mode, setMode] = useState<"ranked" | "chrono">("ranked");
+  const [feed, setFeed] = useState<FeedResponse | null>(null);
+  const [orgs, setOrgs] = useState<OrgSummary[]>([]);
+  const [target, setTarget] = useState(""); // "" = persoenlich, sonst Vereins-Slug
   const [draft, setDraft] = useState("");
-  const [liked, setLiked] = useState<Set<string>>(new Set());
-  const [why, setWhy] = useState<string | null>(null);
-  const [personalized, setPersonalized] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Personalisierung nur mit Einwilligung (Einstellungen > Datenschutz); sonst chronologisch.
-  useEffect(() => {
-    api<ConsentState[]>("/privacy/consents")
-      .then((c) => {
-        const on = c.find((x) => x.purpose === "personalized_feed")?.granted ?? false;
-        setPersonalized(on);
-        setMode(on ? "ranked" : "chrono");
-      })
-      .catch(() => setPersonalized(false));
+  const load = useCallback(async (m: "ranked" | "chrono") => {
+    try {
+      setFeed(await api<FeedResponse>(`/feed?mode=${m}`));
+    } catch (e) {
+      setError(describeError(e));
+    }
   }, []);
 
-  // Konzept-Ranking: Interaktion, abgeschwaecht durch das Alter. Echtes Ranking folgt serverseitig.
-  const score = (p: Post) => (p.likes + p.comments * 3) / (1 + p.ageHours / 12);
-  const list = [...posts].sort((a, b) => (mode === "chrono" ? a.ageHours - b.ageHours : score(b) - score(a)));
+  useEffect(() => {
+    void load(mode);
+  }, [mode, load]);
 
-  function publish() {
+  useEffect(() => {
+    api<OrgSummary[]>("/orgs/mine").then(setOrgs).catch(() => setOrgs([]));
+  }, []);
+
+  async function publish() {
     if (!draft.trim()) return;
-    setPosts((p) => [
-      { id: crypto.randomUUID(), author: "Du", orgSlug: "", time: "gerade eben", ageHours: 0, text: draft.trim(), likes: 0, comments: 0, reason: "Dein eigener Beitrag.", kind: "update" },
-      ...p,
-    ]);
-    setDraft("");
+    setBusy(true);
+    setError(null);
+    try {
+      await api<FeedPost>("/posts", { method: "POST", body: { body: draft, orgSlug: target || undefined } });
+      setDraft("");
+      await load(mode);
+    } catch (e) {
+      setError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
   }
+
+  const effective = feed?.mode ?? "chrono";
+  const rankedLocked = feed !== null && !feed.personalized && mode === "ranked";
+  // Ohne Einwilligung ist faktisch "Neueste" aktiv; der Tab soll das zeigen.
+  const activeTab = rankedLocked ? "chrono" : mode;
 
   return (
     <>
-      <PageHeader title="Feed" subtitle={modes.find((m) => m.id === mode)?.hint} />
-      {personalized === false && (
+      <PageHeader title="Feed" subtitle={hints[effective]} />
+
+      <div role="tablist" aria-label="Feed-Sortierung" className="mb-4 inline-flex rounded-lg border border-border bg-surface p-1">
+        {([["ranked", "Für dich"], ["chrono", "Neueste"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={activeTab === id}
+            onClick={() => setMode(id)}
+            className={clsx("rounded-md px-3 py-1.5 text-sm font-medium", activeTab === id ? "bg-brand text-brand-contrast" : "text-muted hover:text-text")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {rankedLocked && (
         <div className="mb-4">
           <Alert tone="info">
             Du siehst den chronologischen Feed. Für „Für dich“ aktiviere den personalisierten Feed unter{" "}
@@ -56,22 +84,7 @@ export default function FeedPage() {
           </Alert>
         </div>
       )}
-      <ConceptNote>Beiträge sind Beispieldaten. Speichern, Ranking und Moderation folgen im Modul „Feed“.</ConceptNote>
-
-      <div role="tablist" aria-label="Feed-Sortierung" className="mb-4 inline-flex rounded-lg border border-border bg-surface p-1">
-        {modes.map((m) => (
-          <button
-            key={m.id}
-            role="tab"
-            aria-selected={mode === m.id}
-            onClick={() => setMode(m.id)}
-            disabled={m.id === "ranked" && personalized === false}
-            className={clsx("rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40", mode === m.id ? "bg-brand text-brand-contrast" : "text-muted hover:text-text")}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <Card className="mb-4">
         <label htmlFor="composer" className="sr-only">Neuer Beitrag</label>
@@ -81,63 +94,48 @@ export default function FeedPage() {
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
           maxLength={1000}
-          placeholder="Was gibt es Neues im Verein?"
+          placeholder="Was gibt es Neues?"
           className="w-full resize-none rounded-lg border border-border bg-bg p-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         />
-        <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-muted">{draft.length}/1000</span>
-          <Button size="sm" onClick={publish} disabled={!draft.trim()}>Veröffentlichen</Button>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <label htmlFor="target" className="text-xs text-muted">Posten als</label>
+            <select
+              id="target"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-bg px-2 text-xs"
+            >
+              <option value="">Ich selbst</option>
+              {orgs.map((o) => (
+                <option key={o.slug} value={o.slug}>{o.name}</option>
+              ))}
+            </select>
+            <span className="text-xs text-muted">{draft.length}/1000</span>
+          </div>
+          <Button size="sm" onClick={publish} disabled={!draft.trim() || busy}>Veröffentlichen</Button>
         </div>
       </Card>
 
-      <ul className="space-y-4">
-        {list.map((post) => (
-          <li key={post.id}>
-            <Card>
-              <div className="flex items-start gap-3">
-                <Avatar name={post.author} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {post.orgSlug ? (
-                      <Link href={`/vereine/${post.orgSlug}`} className="font-medium hover:underline">{post.author}</Link>
-                    ) : (
-                      <span className="font-medium">{post.author}</span>
-                    )}
-                    <span className="text-xs text-muted">{post.time}</span>
-                    {post.kind === "event" && <Badge tone="brand">Termin</Badge>}
-                    {post.kind === "donation" && <Badge tone="accent">Spendenaktion</Badge>}
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{post.text}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-1 text-sm text-muted">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-pressed={liked.has(post.id)}
-                      onClick={() =>
-                        setLiked((s) => {
-                          const n = new Set(s);
-                          n.has(post.id) ? n.delete(post.id) : n.add(post.id);
-                          return n;
-                        })
-                      }
-                    >
-                      {liked.has(post.id) ? "♥" : "♡"} {post.likes + (liked.has(post.id) ? 1 : 0)}
-                    </Button>
-                    <Button variant="ghost" size="sm">💬 {post.comments}</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setWhy(why === post.id ? null : post.id)}>
-                      Warum sehe ich das?
-                    </Button>
-                    <Button variant="ghost" size="sm" className="ml-auto">Melden</Button>
-                  </div>
-                  {why === post.id && (
-                    <p className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">{post.reason}</p>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </li>
-        ))}
-      </ul>
+      {feed === null ? (
+        <p className="text-sm text-muted" role="status">Lade …</p>
+      ) : feed.posts.length === 0 ? (
+        <Card>
+          <p className="text-sm">Hier ist noch nichts. Folge Vereinen oder schreibe den ersten Beitrag.</p>
+          <Link href="/vereine" className="mt-3 inline-block text-sm font-medium text-brand hover:underline">Vereine entdecken →</Link>
+        </Card>
+      ) : (
+        <ul className="space-y-4">
+          {feed.posts.map((p) => (
+            <li key={p.id}>
+              <PostCard
+                post={p}
+                onDeleted={(id) => setFeed((f) => (f ? { ...f, posts: f.posts.filter((x) => x.id !== id) } : f))}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }

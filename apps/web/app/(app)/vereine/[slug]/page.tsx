@@ -1,19 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { use, useState } from "react";
-import { Avatar, Badge, Button, Card, ConceptNote } from "@/components/ui";
-import { eur, orgs, posts } from "@/lib/mock";
+import { use, useCallback, useEffect, useState } from "react";
+import type { FeedPost, OrgDetail } from "@vereine/shared";
+import { PostCard } from "@/components/post-card";
+import { Alert, Avatar, Badge, Button, Card } from "@/components/ui";
+import { api, ApiError, describeError } from "@/lib/api";
+
+const roleLabel = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" } as const;
 
 export default function OrgPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const org = orgs.find((o) => o.slug === slug);
-  const [following, setFollowing] = useState(false);
-  if (!org) notFound();
+  const [org, setOrg] = useState<OrgDetail | null>(null);
+  const [posts, setPosts] = useState<FeedPost[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
-  const orgPosts = posts.filter((p) => p.orgSlug === org.slug);
-  const goal = org.donationGoal;
+  const load = useCallback(async () => {
+    try {
+      const [o, p] = await Promise.all([api<OrgDetail>(`/orgs/${slug}`), api<FeedPost[]>(`/orgs/${slug}/posts`)]);
+      setOrg(o);
+      setPosts(p);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      else setError(describeError(e));
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function act(fn: () => Promise<OrgDetail>) {
+    setError(null);
+    try {
+      setOrg(await fn());
+    } catch (e) {
+      setError(describeError(e));
+    }
+  }
+
+  if (notFound) {
+    return (
+      <Card>
+        <p className="text-sm">Dieser Verein existiert nicht.</p>
+        <Link href="/vereine" className="mt-2 inline-block text-sm text-brand hover:underline">Zur Übersicht</Link>
+      </Card>
+    );
+  }
+  if (!org) return <p className="text-sm text-muted" role="status">{error ?? "Lade …"}</p>;
+
+  const { viewer } = org;
 
   return (
     <>
@@ -23,47 +60,42 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           <Avatar name={org.name} size={64} />
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-semibold">{org.name}</h1>
-            <p className="text-sm text-muted">{org.city} · <Badge>{org.category}</Badge></p>
+            <p className="mt-1 flex items-center gap-2 text-sm text-muted">
+              {org.city} <Badge>{org.category}</Badge>
+              {viewer.role && <Badge tone="brand">{roleLabel[viewer.role]}</Badge>}
+            </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant={following ? "secondary" : "primary"} onClick={() => setFollowing((f) => !f)}>
-              {following ? "Folgst du" : "Folgen"}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={viewer.following ? "secondary" : "primary"}
+              onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/follow`, viewer.following ? { method: "DELETE" } : { method: "POST", body: {} }))}
+            >
+              {viewer.following ? "Du folgst" : "Folgen"}
             </Button>
-            <Button variant="secondary">Mitglied werden</Button>
+            {viewer.membership === "none" && (
+              <Button variant="secondary" onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/membership`, { method: "POST", body: {} }))}>
+                Mitglied werden
+              </Button>
+            )}
+            {viewer.membership === "pending" && <Badge tone="accent">Antrag wartet auf Freigabe</Badge>}
           </div>
         </div>
-        <p className="mt-4 text-sm">{org.about}</p>
-        <p className="mt-2 text-xs text-muted">{org.members} Mitglieder · {org.followers + (following ? 1 : 0)} Follower</p>
+        {org.about && <p className="mt-4 text-sm">{org.about}</p>}
+        <p className="mt-2 text-xs text-muted">{org.members} Mitglieder · {org.followers} Follower</p>
       </Card>
 
-      <ConceptNote>Vereinsseiten (Beiträge, Termine, Mitgliedschaftsantrag, Spendenseite) werden hier ausgebaut.</ConceptNote>
-
-      {goal && (
-        <Card className="mb-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">{goal.title}</p>
-              <p className="text-xs text-muted">{eur(goal.raised)} von {eur(goal.goal)}</p>
-            </div>
-            <Link href="/spenden" className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-black hover:opacity-90">Spenden</Link>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={Math.round((goal.raised / goal.goal) * 100)} aria-valuemin={0} aria-valuemax={100}>
-            <div className="h-full bg-accent" style={{ width: `${Math.min(100, (goal.raised / goal.goal) * 100)}%` }} />
-          </div>
-        </Card>
-      )}
+      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <h2 className="mb-3 mt-6 font-semibold">Beiträge</h2>
-      {orgPosts.length === 0 ? (
-        <p className="text-sm text-muted">Noch keine Beiträge.</p>
+      {posts === null ? (
+        <p className="text-sm text-muted">Lade …</p>
+      ) : posts.length === 0 ? (
+        <p className="text-sm text-muted">Noch keine Beiträge.{viewer.role === "admin" && " Schreibe den ersten im Feed („Posten als“)."}</p>
       ) : (
-        <ul className="space-y-3">
-          {orgPosts.map((p) => (
+        <ul className="space-y-4">
+          {posts.map((p) => (
             <li key={p.id}>
-              <Card>
-                <p className="text-xs text-muted">{p.time}</p>
-                <p className="mt-1 text-sm">{p.text}</p>
-              </Card>
+              <PostCard post={p} onDeleted={(id) => setPosts((l) => (l ?? []).filter((x) => x.id !== id))} />
             </li>
           ))}
         </ul>

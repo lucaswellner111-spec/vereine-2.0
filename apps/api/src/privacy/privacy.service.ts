@@ -10,7 +10,7 @@ import {
 } from "@vereine/shared";
 import { AuthService } from "../auth/auth.service";
 import { DB, type Database } from "../db/db.module";
-import { auditLog, consents, sessions, users } from "../db/schema";
+import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
 
 @Injectable()
 export class PrivacyService {
@@ -56,10 +56,14 @@ export class PrivacyService {
 
   /** Auskunft/Datenportabilitaet (Art. 15, 20 DSGVO). */
   async exportData(user: PublicUser) {
-    const [consentHistory, audit, sessionRows] = await Promise.all([
+    const [consentHistory, audit, sessionRows, ownPosts, ownComments, followed, memberships] = await Promise.all([
       this.db.select().from(consents).where(eq(consents.userId, user.id)),
       this.db.select().from(auditLog).where(eq(auditLog.userId, user.id)),
       this.db.select().from(sessions).where(eq(sessions.userId, user.id)),
+      this.db.select().from(posts).where(eq(posts.authorId, user.id)),
+      this.db.select().from(comments).where(eq(comments.authorId, user.id)),
+      this.db.select().from(follows).where(eq(follows.userId, user.id)),
+      this.db.select().from(orgMembers).where(eq(orgMembers.userId, user.id)),
     ]);
     return {
       exportedAt: new Date().toISOString(),
@@ -74,6 +78,10 @@ export class PrivacyService {
         createdAt: s.createdAt.toISOString(),
         expiresAt: s.expiresAt.toISOString(),
       })),
+      posts: ownPosts.map((p) => ({ body: p.body, kind: p.kind, orgId: p.orgId, at: p.createdAt.toISOString(), deleted: !!p.deletedAt })),
+      comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, at: c.createdAt.toISOString() })),
+      follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
+      memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
       activityLog: audit.map((a) => ({
         action: a.action,
         at: a.createdAt.toISOString(),
