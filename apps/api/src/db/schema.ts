@@ -78,7 +78,7 @@ export const orgMembers = pgTable(
     status: text("status").notNull().default("pending"), // pending | active
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.orgId, t.userId] })],
+  (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("org_members_user_idx").on(t.userId)],
 );
 
 export const follows = pgTable(
@@ -88,7 +88,7 @@ export const follows = pgTable(
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.orgId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.orgId] }), index("follows_org_idx").on(t.orgId)],
 );
 
 export const posts = pgTable(
@@ -101,8 +101,15 @@ export const posts = pgTable(
     kind: text("kind").notNull().default("update"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Moderation (DSA): ausgeblendete Beitraege bleiben mit Begruendung gespeichert.
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    hiddenReason: text("hidden_reason"),
   },
-  (t) => [index("posts_created_idx").on(t.createdAt), index("posts_org_idx").on(t.orgId)],
+  (t) => [
+    index("posts_created_idx").on(t.createdAt),
+    index("posts_org_created_idx").on(t.orgId, t.createdAt),
+    index("posts_author_created_idx").on(t.authorId, t.createdAt),
+  ],
 );
 
 export const postLikes = pgTable(
@@ -133,6 +140,23 @@ export const reports = pgTable("reports", {
   reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   reason: text("reason").notNull(),
   note: text("note"),
-  status: text("status").notNull().default("open"),
+  orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("open"), // open | dismissed | actioned
+  resolvedBy: uuid("resolved_by"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolution: text("resolution"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("reports_org_status_idx").on(t.orgId, t.status)]);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(), // comment | membership_request | membership_decision | post_hidden
+    data: jsonb("data").notNull().default({}),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { NotificationBell } from "./notification-bell";
 import { Logo } from "./site";
 import { Avatar, Button } from "./ui";
 
@@ -39,7 +40,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh">
       <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-border bg-surface p-4 md:flex">
-        <Logo className="mb-6 px-2 text-lg" />
+        <div className="mb-6 flex items-center justify-between px-2">
+          <Logo className="text-lg" />
+          <NotificationBell align="left" />
+        </div>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Hauptnavigation">
           {nav.map((item) => (
             <Link
@@ -72,9 +76,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface/90 px-4 backdrop-blur md:hidden">
         <Logo />
-        <Button variant="ghost" size="sm" onClick={() => logout().then(() => router.replace("/login"))}>
-          Abmelden
-        </Button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <Button variant="ghost" size="sm" onClick={() => logout().then(() => router.replace("/login"))}>
+            Abmelden
+          </Button>
+        </div>
       </header>
 
       <main className="px-4 py-6 pb-24 md:ml-60 md:px-8 md:pb-10">

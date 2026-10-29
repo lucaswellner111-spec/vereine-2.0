@@ -22,9 +22,10 @@ export default function FeedPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async (m: "ranked" | "chrono") => {
+  const load = useCallback(async (m: "ranked" | "chrono", cursor?: string) => {
     try {
-      setFeed(await api<FeedResponse>(`/feed?mode=${m}`));
+      const res = await api<FeedResponse>(`/feed?mode=${m}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      setFeed((prev) => (cursor && prev ? { ...res, posts: [...prev.posts, ...res.posts] } : res));
     } catch (e) {
       setError(describeError(e));
     }
@@ -135,6 +136,11 @@ export default function FeedPage() {
             </li>
           ))}
         </ul>
+      )}
+      {feed?.nextCursor && (
+        <div className="mt-4 text-center">
+          <Button variant="secondary" onClick={() => load(mode, feed.nextCursor!)}>Mehr laden</Button>
+        </div>
       )}
     </>
   );

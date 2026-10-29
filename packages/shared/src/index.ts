@@ -127,7 +127,53 @@ export type FeedPost = {
   canDelete: boolean;
   reason: string;
 };
-export type FeedResponse = { mode: "ranked" | "chrono"; personalized: boolean; posts: FeedPost[] };
+export type FeedResponse = {
+  mode: "ranked" | "chrono";
+  personalized: boolean;
+  posts: FeedPost[];
+  /** Opaker Cursor fuer die naechste Seite; null = Ende. */
+  nextCursor: string | null;
+};
+
+// --- Mitgliederverwaltung ----------------------------------------------------
+
+export const decisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
+export const setRoleSchema = z.object({ role: z.enum(ORG_ROLES) });
+
+export type MemberItem = {
+  userId: string;
+  name: string;
+  role: OrgRole;
+  status: "pending" | "active";
+  since: string;
+};
+
+// --- Moderation (DSA: Meldeverfahren, Begruendung) ---------------------------
+
+export const resolveReportSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("dismiss") }),
+  z.object({ action: z.literal("hide"), reason: z.string().trim().min(10).max(500) }),
+]);
+export type ResolveReportInput = z.infer<typeof resolveReportSchema>;
+
+export type ReportItem = {
+  id: string;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  post: { id: string; body: string; authorName: string; hidden: boolean };
+};
+
+// --- Benachrichtigungen ------------------------------------------------------
+
+export type NotificationItem = {
+  id: string;
+  type: "comment" | "membership_request" | "membership_decision" | "post_hidden";
+  data: Record<string, string>;
+  readAt: string | null;
+  createdAt: string;
+};
+export type NotificationsResponse = { unread: number; items: NotificationItem[] };
 export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string } };
 
 export const healthResponseSchema = z.object({

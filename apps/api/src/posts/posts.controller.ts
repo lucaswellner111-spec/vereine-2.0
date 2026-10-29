@@ -3,6 +3,8 @@ import {
   createCommentSchema,
   createPostSchema,
   reportSchema,
+  resolveReportSchema,
+  type ReportItem,
   type CommentItem,
   type FeedPost,
   type FeedResponse,
@@ -10,21 +12,52 @@ import {
 } from "@vereine/shared";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
+import { ModerationService } from "./moderation.service";
 import { PostsService } from "./posts.service";
 
 @Controller()
 @UseGuards(SessionGuard)
 export class PostsController {
-  constructor(@Inject(PostsService) private readonly posts: PostsService) {}
+  constructor(
+    @Inject(PostsService) private readonly posts: PostsService,
+    @Inject(ModerationService) private readonly moderation: ModerationService,
+  ) {}
 
   @Get("feed")
-  feed(@CurrentUser() user: PublicUser, @Query("mode") mode?: string): Promise<FeedResponse> {
-    return this.posts.feed(user, mode === "chrono" ? "chrono" : "ranked");
+  feed(
+    @CurrentUser() user: PublicUser,
+    @Query("mode") mode?: string,
+    @Query("cursor") cursor?: string,
+  ): Promise<FeedResponse> {
+    return this.posts.feed(user, mode === "chrono" ? "chrono" : "ranked", cursor);
   }
 
   @Get("orgs/:slug/posts")
-  orgPosts(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<FeedPost[]> {
-    return this.posts.orgFeed(user, slug);
+  orgPosts(
+    @CurrentUser() user: PublicUser,
+    @Param("slug") slug: string,
+    @Query("cursor") cursor?: string,
+  ): Promise<{ posts: FeedPost[]; nextCursor: string | null }> {
+    return this.posts.orgFeed(user, slug, cursor);
+  }
+
+  @Get("orgs/:slug/reports")
+  reports(
+    @CurrentUser() user: PublicUser,
+    @Param("slug") slug: string,
+    @Query("status") status?: string,
+  ): Promise<ReportItem[]> {
+    return this.moderation.list(user, slug, status === "dismissed" || status === "actioned" ? status : "open");
+  }
+
+  @Post("reports/:id/resolve")
+  @HttpCode(204)
+  resolve(
+    @CurrentUser() user: PublicUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ): Promise<void> {
+    return this.moderation.resolve(user, id, parse(resolveReportSchema, body));
   }
 
   @Post("posts")

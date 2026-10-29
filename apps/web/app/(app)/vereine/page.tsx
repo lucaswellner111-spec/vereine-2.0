@@ -61,7 +61,7 @@ export default function OrgsPage() {
                   {org.about && <p className="mt-3 line-clamp-2 text-sm text-muted">{org.about}</p>}
                   <div className="mt-3 flex items-center gap-2 text-xs text-muted">
                     <Badge>{org.category}</Badge>
-                    <span>{org.members} Mitglieder</span>
+                    <span>{org.members} {org.members === 1 ? "Mitglied" : "Mitglieder"}</span>
                     <span>· {org.followers} Follower</span>
                   </div>
                 </Card>

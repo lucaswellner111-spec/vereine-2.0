@@ -158,9 +158,9 @@ describe("Vereine, Beitraege, Feed", () => {
     expect((await req(ben, "GET", `/posts/${id}/comments`)).statusCode).toBe(404);
 
     const orgFeed = await req(clara, "GET", "/orgs/tsv-muesterstadt-1904/posts");
-    expect(orgFeed.json()).toHaveLength(1);
-    expect(orgFeed.json()[0].canDelete).toBe(false);
-    expect((await req(anna, "GET", "/orgs/tsv-muesterstadt-1904/posts")).json()[0].canDelete).toBe(true);
+    expect(orgFeed.json().posts).toHaveLength(1);
+    expect(orgFeed.json().posts[0].canDelete).toBe(false);
+    expect((await req(anna, "GET", "/orgs/tsv-muesterstadt-1904/posts")).json().posts[0].canDelete).toBe(true);
   });
 
   it("Kontoloeschung entfernt Beitraege und Follows des Nutzers", async () => {

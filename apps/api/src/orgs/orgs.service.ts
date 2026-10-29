@@ -1,8 +1,16 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import type { CreateOrgInput, OrgDetail, OrgRole, OrgSummary, PublicUser } from "@vereine/shared";
+import type { CreateOrgInput, MemberItem, OrgDetail, OrgRole, OrgSummary, PublicUser } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { follows, orgMembers, organizations } from "../db/schema";
+import { follows, orgMembers, organizations, users } from "../db/schema";
+import { NotificationsService } from "../notifications/notifications.service";
 
 type OrgRow = typeof organizations.$inferSelect;
 
@@ -17,7 +25,10 @@ const slugify = (name: string) =>
 
 @Injectable()
 export class OrgsService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+  ) {}
 
   async create(user: PublicUser, input: CreateOrgInput): Promise<OrgDetail> {
     const base = slugify(input.name);
@@ -99,7 +110,99 @@ export class OrgsService {
       .onConflictDoNothing()
       .returning();
     if (inserted.length === 0) throw new ConflictException("Du bist bereits Mitglied oder hast schon einen Antrag gestellt.");
+    const admins = await this.db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")));
+    await this.notifications.notify(
+      admins.map((a) => a.userId),
+      "membership_request",
+      { orgSlug: org.slug, orgName: org.name },
+    );
     return this.detail(slug, userId);
+  }
+
+  // --- Mitgliederverwaltung (nur Vorstand) -------------------------------------
+
+  private async requireAdmin(orgId: string, userId: string) {
+    if ((await this.activeRole(orgId, userId)) !== "admin") {
+      throw new ForbiddenException("Nur der Vorstand darf Mitglieder verwalten.");
+    }
+  }
+
+  private async adminCount(orgId: string): Promise<number> {
+    const [{ n }] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")));
+    return n;
+  }
+
+  /** Datensparsam: nur Anzeigename, Rolle, Status. Stammdaten (Adresse etc.) folgen im Modul Verwaltung. */
+  async members(slug: string, actor: PublicUser, status?: "pending" | "active"): Promise<MemberItem[]> {
+    const org = await this.requireBySlug(slug);
+    await this.requireAdmin(org.id, actor.id);
+    const rows = await this.db
+      .select({
+        userId: users.id,
+        name: users.displayName,
+        role: orgMembers.role,
+        status: orgMembers.status,
+        since: orgMembers.createdAt,
+      })
+      .from(orgMembers)
+      .innerJoin(users, eq(users.id, orgMembers.userId))
+      .where(and(eq(orgMembers.orgId, org.id), status ? eq(orgMembers.status, status) : undefined))
+      .orderBy(orgMembers.createdAt)
+      .limit(500);
+    return rows.map((r) => ({
+      ...r,
+      role: r.role as OrgRole,
+      status: r.status as "pending" | "active",
+      since: r.since.toISOString(),
+    }));
+  }
+
+  async decide(slug: string, actor: PublicUser, targetId: string, decision: "approve" | "reject"): Promise<void> {
+    const org = await this.requireBySlug(slug);
+    await this.requireAdmin(org.id, actor.id);
+    const key = and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId));
+    const [m] = await this.db.select().from(orgMembers).where(and(key, eq(orgMembers.status, "pending"))).limit(1);
+    if (!m) throw new NotFoundException("Kein offener Antrag gefunden.");
+    if (decision === "approve") await this.db.update(orgMembers).set({ status: "active" }).where(key);
+    else await this.db.delete(orgMembers).where(key);
+    await this.notifications.notify([targetId], "membership_decision", {
+      orgSlug: org.slug,
+      orgName: org.name,
+      decision,
+    });
+  }
+
+  async setRole(slug: string, actor: PublicUser, targetId: string, role: OrgRole): Promise<void> {
+    const org = await this.requireBySlug(slug);
+    await this.requireAdmin(org.id, actor.id);
+    const current = await this.activeRole(org.id, targetId);
+    if (!current) throw new NotFoundException("Aktives Mitglied nicht gefunden.");
+    if (current === "admin" && role !== "admin" && (await this.adminCount(org.id)) <= 1) {
+      throw new BadRequestException("Der Verein braucht mindestens einen Vorstand.");
+    }
+    await this.db
+      .update(orgMembers)
+      .set({ role })
+      .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId)));
+  }
+
+  /** Austritt (selbst) oder Entfernen (Vorstand). */
+  async removeMember(slug: string, actor: PublicUser, targetId: string): Promise<void> {
+    const org = await this.requireBySlug(slug);
+    if (targetId !== actor.id) await this.requireAdmin(org.id, actor.id);
+    const key = and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId));
+    const [m] = await this.db.select().from(orgMembers).where(key).limit(1);
+    if (!m) throw new NotFoundException("Mitglied nicht gefunden.");
+    if (m.role === "admin" && m.status === "active" && (await this.adminCount(org.id)) <= 1) {
+      throw new BadRequestException("Der letzte Vorstand kann den Verein nicht verlassen.");
+    }
+    await this.db.delete(orgMembers).where(key);
   }
 
   async findBySlug(slug: string): Promise<OrgRow | undefined> {
