@@ -1,0 +1,35 @@
+# Laeuft auf den App-Servern. Images kommen aus der Registry (IMAGE_TAG).
+# Postgres/Redis liegen auf dem DB-Server (privates Netz 10.10.1.0/24), nicht hier.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - web
+      - api
+
+  web:
+    image: ${REGISTRY}/vereine-web:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+
+  api:
+    image: ${REGISTRY}/vereine-api:${IMAGE_TAG}
+    restart: unless-stopped
+    env_file: .env.app
+    environment:
+      NODE_ENV: production
+      API_PORT: "4000"
+
+volumes:
+  caddy_data:

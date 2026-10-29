@@ -1,0 +1,88 @@
+---
+# Grundhaertung und Docker-Installation fuer alle Server.
+# Aufruf: ansible-playbook -i inventory.ini bootstrap.yml
+- name: Basis-Setup und Haertung
+  hosts: all
+  become: true
+  vars:
+    deploy_user: deploy
+    deploy_pubkey: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+  tasks:
+    - name: Pakete aktualisieren
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Basis-Pakete
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - fail2ban
+          - unattended-upgrades
+          - docker.io
+          - docker-compose-v2
+        state: present
+
+    - name: Docker aktivieren
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Deploy-Benutzer anlegen
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+        shell: /bin/bash
+
+    - name: SSH-Schluessel fuer Deploy-Benutzer
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ deploy_pubkey }}"
+
+    - name: SSH haerten (kein Root-Login, keine Passwoerter)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-hardening.conf
+        mode: "0644"
+        content: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          MaxAuthTries 3
+      notify: Restart ssh
+
+    - name: Fail2ban aktivieren
+      ansible.builtin.systemd:
+        name: fail2ban
+        enabled: true
+        state: started
+
+    - name: Automatische Sicherheitsupdates
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+
+    - name: Docker-Logs begrenzen
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+        content: |
+          {"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}
+      notify: Restart docker
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+
+    - name: Restart docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted

@@ -1,0 +1,10 @@
+# Kopie als staging.tfvars bzw. production.tfvars anlegen (wird nicht eingecheckt).
+# Token NICHT hier eintragen, sondern: export TF_VAR_hcloud_token=...
+environment    = "staging"
+location       = "fsn1"
+ssh_public_key = "ssh-ed25519 AAAA... admin@example"
+admin_cidrs    = ["203.0.113.4/32"]
+
+app_server_count = 1
+app_server_type  = "cx22"
+db_server_type   = "cx32"

@@ -11,3 +11,5 @@ coverage/
 infra/**/.terraform/
 infra/**/*.tfstate*
 infra/**/*.tfvars
+*.tsbuildinfo
+infra/ansible/inventory.ini
