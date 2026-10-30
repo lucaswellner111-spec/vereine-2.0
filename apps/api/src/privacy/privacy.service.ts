@@ -95,6 +95,7 @@ export class PrivacyService {
     if (!(await this.auth.verifyPassword(user.id, password))) {
       throw new ForbiddenException("Passwort ist falsch.");
     }
+    await this.auth.invalidateUserSessions(user.id);
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, user.id));

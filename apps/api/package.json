@@ -21,6 +21,7 @@
     "@node-rs/argon2": "^2.2.2",
     "@vereine/shared": "*",
     "drizzle-orm": "^0.45.4",
+    "ioredis": "^5.11.1",
     "postgres": "^4.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0"
@@ -31,6 +32,7 @@
     "@swc/core": "^1.16.20",
     "@types/node": "^22.0.0",
     "drizzle-kit": "^0.31.11",
+    "ioredis-mock": "^8.13.1",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "unplugin-swc": "^2.0.0",

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ORG_ROLES, type MemberItem, type OrgDetail, type OrgRole, type OrgSummary, type ReportItem } from "@vereine/shared";
 import { Alert, Badge, Button, Card, ConceptNote, PageHeader } from "@/components/ui";
+import { EventsAdmin } from "@/components/events-admin";
+import { TeamsAdmin } from "@/components/teams-admin";
 import { api, describeError } from "@/lib/api";
 import { eur, invoices } from "@/lib/mock";
 
@@ -12,7 +14,7 @@ const roleLabel: Record<OrgRole, string> = { admin: "Vorstand", treasurer: "Kass
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
 const statusTone = { bezahlt: "brand", offen: "accent", überfällig: "danger" } as const;
 
-type Tab = "Anträge" | "Mitglieder" | "Moderation" | "Rechnungen";
+type Tab = "Anträge" | "Mitglieder" | "Teams" | "Termine" | "Moderation" | "Rechnungen";
 
 export default function AdminPage() {
   const [orgs, setOrgs] = useState<OrgSummary[] | null>(null);
@@ -41,7 +43,9 @@ export default function AdminPage() {
   }, [refresh]);
 
   const isAdmin = detail?.viewer.role === "admin";
-  const tabs: Tab[] = isAdmin ? ["Anträge", "Mitglieder", "Moderation", "Rechnungen"] : ["Moderation"];
+  const tabs: Tab[] = isAdmin
+    ? ["Anträge", "Mitglieder", "Teams", "Termine", "Moderation", "Rechnungen"]
+    : ["Termine", "Moderation"];
 
   useEffect(() => {
     if (detail && !tabs.includes(tab)) setTab(tabs[0]);
@@ -100,6 +104,8 @@ export default function AdminPage() {
 
       {detail && slug && tab === "Anträge" && <Members slug={slug} mode="pending" onError={setError} onChanged={refresh} />}
       {detail && slug && tab === "Mitglieder" && <Members slug={slug} mode="active" onError={setError} onChanged={refresh} />}
+      {detail && slug && tab === "Teams" && <TeamsAdmin slug={slug} onError={setError} />}
+      {detail && slug && tab === "Termine" && <EventsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Moderation" && <Moderation slug={slug} onError={setError} />}
       {tab === "Rechnungen" && (
         <>

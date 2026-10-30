@@ -9,6 +9,8 @@ import { api } from "@/lib/api";
 // wird das durch einen WebSocket/SSE-Kanal mit Redis Pub/Sub ersetzt.
 const POLL_MS = 30_000;
 
+const fmt = (iso: string) => new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
 function describe(n: NotificationItem): { text: string; href: string } {
   const d = n.data;
   switch (n.type) {
@@ -21,6 +23,12 @@ function describe(n: NotificationItem): { text: string; href: string } {
         text: d.decision === "approve" ? `Du bist jetzt Mitglied bei ${d.orgName}.` : `Dein Antrag bei ${d.orgName} wurde abgelehnt.`,
         href: `/vereine/${d.orgSlug}`,
       };
+    case "event_created":
+      return { text: `Neuer Termin bei ${d.orgName}: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
+    case "event_reminder":
+      return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: "/kalender" };
+    case "event_canceled":
+      return { text: `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }

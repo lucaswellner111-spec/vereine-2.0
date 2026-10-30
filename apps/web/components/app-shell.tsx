@@ -12,10 +12,10 @@ import { Avatar, Button } from "./ui";
 const nav = [
   { href: "/feed", label: "Feed", icon: "◧" },
   { href: "/vereine", label: "Vereine", icon: "◎" },
+  { href: "/kalender", label: "Kalender", icon: "▦" },
   { href: "/chat", label: "Chat", icon: "✉" },
   { href: "/spenden", label: "Spenden", icon: "♡" },
   { href: "/verwaltung", label: "Verwaltung", icon: "▤" },
-  { href: "/einstellungen/datenschutz", label: "Datenschutz", icon: "⚿" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -68,7 +68,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={() => logout().then(() => router.replace("/login"))}>
+          <Link href="/einstellungen/datenschutz" className="mt-2 block rounded-lg px-3 py-1.5 text-center text-xs text-muted hover:bg-surface-2 hover:text-text">
+            Datenschutz & Konto
+          </Link>
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => logout().then(() => router.replace("/login"))}>
             Abmelden
           </Button>
         </div>
@@ -78,6 +81,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Logo />
         <div className="flex items-center gap-1">
           <NotificationBell />
+          <Link href="/einstellungen/datenschutz" aria-label="Datenschutz und Konto" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
+            <span aria-hidden>⚙</span>
+          </Link>
           <Button variant="ghost" size="sm" onClick={() => logout().then(() => router.replace("/login"))}>
             Abmelden
           </Button>

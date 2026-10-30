@@ -8,6 +8,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configureApp } from "../app.setup";
 import { AuthModule } from "../auth/auth.module";
+import { CacheModule } from "../cache/cache.module";
 import { DB, DbModule } from "../db/db.module";
 import * as schema from "../db/schema";
 import { PrivacyModule } from "./privacy.module";
@@ -23,7 +24,7 @@ describe("Privacy", () => {
     db = drizzle(new PGlite(), { schema });
     await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule, AuthModule, PrivacyModule],
+      imports: [DbModule, CacheModule, AuthModule, PrivacyModule],
     })
       .overrideProvider(DB)
       .useValue(db)

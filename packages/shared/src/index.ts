@@ -164,11 +164,67 @@ export type ReportItem = {
   post: { id: string; body: string; authorName: string; hidden: boolean };
 };
 
+// --- Termine & Teams ---------------------------------------------------------
+
+export const createTeamSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  description: z.string().trim().max(200).default(""),
+});
+export type TeamItem = { id: string; name: string; description: string; members: number; isMember: boolean };
+export type TeamMemberItem = { userId: string; name: string };
+
+export const EVENT_VISIBILITY = ["members", "public"] as const;
+export const createEventSchema = z
+  .object({
+    title: z.string().trim().min(3).max(120),
+    description: z.string().trim().max(1000).default(""),
+    location: z.string().trim().max(120).default(""),
+    startsAt: z.string().datetime({ offset: true }),
+    endsAt: z.string().datetime({ offset: true }).optional(),
+    teamId: z.string().uuid().optional(),
+    visibility: z.enum(EVENT_VISIBILITY).default("members"),
+  })
+  .refine((e) => !e.endsAt || new Date(e.endsAt) > new Date(e.startsAt), {
+    message: "Das Ende muss nach dem Beginn liegen.",
+    path: ["endsAt"],
+  });
+export type CreateEventInput = z.infer<typeof createEventSchema>;
+
+export const RSVP_STATUS = ["yes", "maybe", "no"] as const;
+export type RsvpStatus = (typeof RSVP_STATUS)[number];
+export const rsvpSchema = z.object({ status: z.enum(RSVP_STATUS) });
+
+export type EventItem = {
+  id: string;
+  orgSlug: string;
+  orgName: string;
+  teamId: string | null;
+  teamName: string | null;
+  title: string;
+  description: string;
+  location: string;
+  startsAt: string;
+  endsAt: string | null;
+  visibility: (typeof EVENT_VISIBILITY)[number];
+  canceled: boolean;
+  counts: { yes: number; maybe: number; no: number };
+  myStatus: RsvpStatus | null;
+  canManage: boolean;
+};
+export type RsvpItem = { userId: string; name: string; status: RsvpStatus };
+
 // --- Benachrichtigungen ------------------------------------------------------
 
 export type NotificationItem = {
   id: string;
-  type: "comment" | "membership_request" | "membership_decision" | "post_hidden";
+  type:
+    | "comment"
+    | "membership_request"
+    | "membership_decision"
+    | "post_hidden"
+    | "event_created"
+    | "event_reminder"
+    | "event_canceled";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;

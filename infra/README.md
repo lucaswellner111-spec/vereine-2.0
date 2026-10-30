@@ -22,3 +22,14 @@ ansible-playbook -i inventory.ini bootstrap.yml
 - **Object Storage**-Bucket (Medien) - vom hcloud-Provider nicht verwaltet, separat anlegen.
 - **Monitoring** (Prometheus/Grafana/Loki), Registry und Deploy-Pipeline.
 - **AVV mit Hetzner** abschliessen und DNS (A/AAAA auf Load Balancer) setzen.
+
+## Backups (Vorschau/Staging)
+- `infra/deploy/backup.sh`: Postgres-Dump (gzip, nur root lesbar, die letzten 14 bleiben, Plausibilitaetspruefung).
+- `infra/deploy/restore-test.sh`: stellt das neueste Backup in einer Wegwerf-Datenbank wieder her und zaehlt Nutzer.
+- Taeglich per Cron (auf dem Server als root einrichten, bewusst nicht automatisch installiert):
+  `17 3 * * * /opt/vereine/infra/deploy/backup.sh >> /var/log/vereine-backup.log 2>&1`
+- Produktion: Dumps zusaetzlich verschluesselt auf eine Hetzner Storage Box kopieren (pgBackRest/WAL-Archivierung im Plan).
+
+## Redis
+- Cache/Zaehler-Speicher fuer Sessions (60 s) und Rate-Limit, ohne Persistenz, 128 MB LRU. `REDIS_URL` setzen; ohne Redis faellt die API auf einen Prozess-Cache zurueck (nur lokal sinnvoll).
+- Readiness: `GET /api/health/ready` (DB + Redis), Docker-Healthcheck der API nutzt das.

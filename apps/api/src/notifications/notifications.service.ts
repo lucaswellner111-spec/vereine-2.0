@@ -16,8 +16,13 @@ export class NotificationsService {
    */
   async notify(userIds: string[], type: Type, data: Record<string, string>): Promise<void> {
     const unique = [...new Set(userIds)];
-    if (unique.length === 0) return;
-    await this.db.insert(notifications).values(unique.map((userId) => ({ userId, type, data })));
+    // SKALIERUNG: Massen-Fan-out (z. B. Termin an 5.000 Mitglieder) in Bloecken schreiben;
+    // ab ~50k Empfaengern in einen BullMQ-Job (Redis) auslagern.
+    for (let i = 0; i < unique.length; i += 500) {
+      await this.db
+        .insert(notifications)
+        .values(unique.slice(i, i + 500).map((userId) => ({ userId, type, data })));
+    }
   }
 
   async list(userId: string, limit = 30): Promise<NotificationsResponse> {

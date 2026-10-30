@@ -22,6 +22,13 @@
       "when": 1793311540953,
       "tag": "0002_moderation_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793387993198,
+      "tag": "0003_events_teams",
+      "breakpoints": true
     }
   ]
 }

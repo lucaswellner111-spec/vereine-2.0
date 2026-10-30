@@ -13,6 +13,8 @@ Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und D
 - `npm run typecheck` · `npm run build` · `npm test` (API-Tests nutzen PGlite, kein Docker nötig)
 - Lokal ohne Docker: `npm run dev:pglite -w @vereine/api` (API mit In-Memory-DB) + `npm run dev -w @vereine/web`; tsx erzeugt keine Decorator-Metadaten, daher immer `@Inject(Klasse)` im Konstruktor nutzen
 - DB: `npm run db:generate -w @vereine/api` (Migration erzeugen), `npm run db:migrate -w @vereine/api`
+- Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis)
+- Redis: `REDIS_URL` (Rate-Limit + Session-Cache); ohne Redis Prozess-Cache. Tests nutzen `ioredis-mock`.
 - Turbo-Telemetrie aus: `DO_NOT_TRACK=1`
 
 ## Regeln

@@ -3,20 +3,26 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
 import { hash, verify } from "@node-rs/argon2";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import {
   LEGAL_VERSION,
   type LoginInput,
   type PublicUser,
   type RegisterInput,
 } from "@vereine/shared";
+import { CACHE, type Cache } from "../cache/cache.module";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, consents, sessions, users } from "../db/schema";
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Sessions werden kurz gecacht: spart eine DB-Abfrage pro Request (SKALIERUNG). */
+const SESSION_CACHE_TTL_S = 60;
+const sessionKey = (tokenHash: string) => `sess:${tokenHash}`;
 
 // OWASP-Empfehlung fuer argon2id: m=19 MiB, t=2, p=1 (Algorithm 2 = argon2id)
 const ARGON_OPTIONS = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
@@ -29,11 +35,37 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit, OnModuleDestroy {
+  private cleanupTimer?: NodeJS.Timeout;
+
   // Wird bei unbekannter E-Mail verifiziert, damit Antwortzeit nicht verraet, ob ein Konto existiert.
   private dummyHash: Promise<string> = hash("dummy-password-for-timing", ARGON_OPTIONS);
 
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    @Inject(CACHE) private readonly cache: Cache,
+  ) {}
+
+  onModuleInit() {
+    // Abgelaufene Sessions stuendlich entfernen (idempotent, darf auf jedem Server laufen).
+    this.cleanupTimer = setInterval(() => void this.purgeExpiredSessions().catch(() => undefined), 60 * 60 * 1000);
+    this.cleanupTimer.unref();
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.cleanupTimer);
+  }
+
+  async purgeExpiredSessions(): Promise<number> {
+    const removed = await this.db.delete(sessions).where(lt(sessions.expiresAt, new Date())).returning({ id: sessions.tokenHash });
+    return removed.length;
+  }
+
+  /** Entfernt alle gecachten Sessions eines Nutzers (z. B. vor Kontoloeschung). */
+  async invalidateUserSessions(userId: string): Promise<void> {
+    const rows = await this.db.select({ tokenHash: sessions.tokenHash }).from(sessions).where(eq(sessions.userId, userId));
+    await this.cache.del(...rows.map((r) => sessionKey(r.tokenHash)));
+  }
 
   async register(input: RegisterInput): Promise<PublicUser> {
     const passwordHash = await hash(input.password, ARGON_OPTIONS);
@@ -96,23 +128,32 @@ export class AuthService {
   }
 
   async logout(token: string): Promise<void> {
-    await this.db.delete(sessions).where(eq(sessions.tokenHash, sha256(token)));
+    const tokenHash = sha256(token);
+    await this.db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    await this.cache.del(sessionKey(tokenHash));
   }
 
   async userForToken(token: string): Promise<PublicUser | null> {
+    const tokenHash = sha256(token);
+    const cached = await this.cache.get(sessionKey(tokenHash)).catch(() => null);
+    if (cached) return JSON.parse(cached) as PublicUser;
+
     const [row] = await this.db
       .select({ user: users })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
       .where(
         and(
-          eq(sessions.tokenHash, sha256(token)),
+          eq(sessions.tokenHash, tokenHash),
           gt(sessions.expiresAt, new Date()),
           isNull(users.deletedAt),
         ),
       )
       .limit(1);
-    return row ? this.toPublic(row.user) : null;
+    if (!row) return null;
+    const user = this.toPublic(row.user);
+    await this.cache.set(sessionKey(tokenHash), JSON.stringify(user), SESSION_CACHE_TTL_S).catch(() => undefined);
+    return user;
   }
 
   private toPublic(user: typeof users.$inferSelect): PublicUser {
