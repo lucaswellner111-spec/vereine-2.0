@@ -1,0 +1,25 @@
+# Vorschau mit Domain und automatischem HTTPS (Let's Encrypt).
+# Aktivieren: in .env.preview setzen: CADDY_FILE=Caddyfile.tls, DOMAIN=<deine-domain>,
+# COOKIE_SECURE=true, WEB_ORIGIN=https://<deine-domain>; DNS A/AAAA auf den Server, Ports 80+443 in der Hetzner-Firewall.
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

@@ -33,3 +33,9 @@ ansible-playbook -i inventory.ini bootstrap.yml
 ## Redis
 - Cache/Zaehler-Speicher fuer Sessions (60 s) und Rate-Limit, ohne Persistenz, 128 MB LRU. `REDIS_URL` setzen; ohne Redis faellt die API auf einen Prozess-Cache zurueck (nur lokal sinnvoll).
 - Readiness: `GET /api/health/ready` (DB + Redis), Docker-Healthcheck der API nutzt das.
+
+## Domain und HTTPS (klubnest.de)
+- DNS (Hetzner KonsoleH): `A @` und `A www` -> Server-IP, keine `AAAA`-Eintraege zum Webhosting.
+- `.env.preview` auf dem Server: `CADDY_FILE=Caddyfile.tls`, `DOMAIN=klubnest.de`, `COOKIE_SECURE=true`, `WEB_ORIGIN=https://klubnest.de`.
+- Caddy holt und erneuert Zertifikate automatisch (Let's Encrypt). Ports 80 und 443 muessen erreichbar sein.
+- HSTS mit `includeSubDomains`: alle Subdomains von klubnest.de muessen HTTPS koennen (z. B. `webmail.`).
