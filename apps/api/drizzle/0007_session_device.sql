@@ -1,0 +1,1 @@
+ALTER TABLE "identity"."sessions" ADD COLUMN "device" text;

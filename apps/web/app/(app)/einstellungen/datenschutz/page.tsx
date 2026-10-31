@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ConsentState } from "@vereine/shared";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Alert, Button, Card, Field, PageHeader, Toggle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -67,6 +68,7 @@ export default function PrivacyPage() {
   return (
     <>
       <PageHeader title="Datenschutz" subtitle={`Deine Einstellungen und Rechte, ${user?.displayName ?? ""}.`} />
+      <SettingsTabs active="/einstellungen/datenschutz" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 

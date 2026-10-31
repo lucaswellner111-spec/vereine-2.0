@@ -50,6 +50,20 @@
       "when": 1793447768325,
       "tag": "0006_platform_role",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793450058122,
+      "tag": "0007_session_device",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793450376074,
+      "tag": "0008_profiles_media",
+      "breakpoints": true
     }
   ]
 }

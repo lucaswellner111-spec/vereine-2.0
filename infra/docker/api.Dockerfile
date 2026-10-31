@@ -18,6 +18,9 @@ COPY --from=build /app/apps/api/node_modules apps/api/node_modules
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/drizzle apps/api/drizzle
 COPY --from=build /app/apps/api/package.json apps/api/
+# Medienverzeichnis (Docker-Volume) gehoert dem unprivilegierten Nutzer
+RUN mkdir -p /data/media && chown -R node:node /data
+ENV MEDIA_DIR=/data/media
 USER node
 EXPOSE 4000
 CMD ["sh", "-c", "node apps/api/dist/db/migrate.js && node apps/api/dist/main.js"]

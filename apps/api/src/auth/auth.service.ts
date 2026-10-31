@@ -1,18 +1,20 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
 import { hash, verify } from "@node-rs/argon2";
-import { and, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
 import {
   LEGAL_VERSION,
   type LoginInput,
   type PublicUser,
   type RegisterInput,
+  type SessionInfo,
 } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { JobsService } from "../jobs/jobs.service";
@@ -23,6 +25,19 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Sessions werden kurz gecacht: spart eine DB-Abfrage pro Request (SKALIERUNG). */
 const SESSION_CACHE_TTL_S = 60;
 const sessionKey = (tokenHash: string) => `sess:${tokenHash}`;
+
+/** Brute-Force-Schutz je Konto (zusaetzlich zum IP-Limit): nach 10 Fehlversuchen 15 Minuten Sperre. */
+const MAX_LOGIN_FAILS = 10;
+const LOGIN_FAIL_WINDOW_S = 15 * 60;
+const failKey = (email: string) => `login:fail:${email}`;
+
+/** Grobe Beschreibung aus dem User-Agent (ohne Bibliothek, bewusst ungenau). */
+export function describeDevice(ua?: string): string {
+  if (!ua) return "Unbekanntes Gerät";
+  const browser = /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad|iOS/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "unbekanntem System";
+  return `${browser} auf ${os}`;
+}
 
 // OWASP-Empfehlung fuer argon2id: m=19 MiB, t=2, p=1 (Algorithm 2 = argon2id)
 const ARGON_OPTIONS = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
@@ -94,7 +109,12 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(input: LoginInput): Promise<{ user: PublicUser; token: string }> {
+  async login(input: LoginInput, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
+    // Fehlversuche je E-Mail zaehlen (auch fuer unbekannte Adressen: verraet nicht, ob ein Konto existiert).
+    const fails = Number((await this.cache.get(failKey(input.email)).catch(() => null)) ?? 0);
+    if (fails >= MAX_LOGIN_FAILS) {
+      throw new HttpException({ message: "Zu viele Fehlversuche. Bitte warte 15 Minuten und versuche es erneut.", statusCode: 429 }, 429);
+    }
     const [user] = await this.db
       .select()
       .from(users)
@@ -103,17 +123,74 @@ export class AuthService implements OnModuleInit {
 
     const valid = await verify(user?.passwordHash ?? (await this.dummyHash), input.password);
     if (!user || !valid) {
+      await this.cache.incr(failKey(input.email), LOGIN_FAIL_WINDOW_S).catch(() => undefined);
       throw new UnauthorizedException("E-Mail oder Passwort ist falsch.");
     }
+    await this.cache.del(failKey(input.email)).catch(() => undefined);
 
     const token = randomBytes(32).toString("base64url");
     await this.db.insert(sessions).values({
       tokenHash: sha256(token),
       userId: user.id,
       expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      device: describeDevice(userAgent),
     });
     await this.db.insert(auditLog).values({ userId: user.id, action: "user.login" });
     return { user: this.toPublic(user), token };
+  }
+
+  /** Anzeigename aendern (Bereich identity; das Profil im Bereich social ruft diese Methode auf). */
+  async updateDisplayName(userId: string, name: string): Promise<void> {
+    await this.db.update(users).set({ displayName: name }).where(eq(users.id, userId));
+    await this.invalidateUserSessions(userId); // zwischengespeicherte Sitzungen enthalten den Namen
+  }
+
+  // --- Sitzungen und Passwort --------------------------------------------------
+
+  async listSessions(userId: string, currentToken?: string): Promise<SessionInfo[]> {
+    const current = currentToken ? sha256(currentToken) : null;
+    const rows = await this.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, new Date())))
+      .orderBy(desc(sessions.createdAt))
+      .limit(50);
+    return rows.map((r) => ({
+      id: r.tokenHash.slice(0, 16),
+      current: r.tokenHash === current,
+      device: r.device ?? "Unbekanntes Gerät",
+      createdAt: r.createdAt.toISOString(),
+      expiresAt: r.expiresAt.toISOString(),
+    }));
+  }
+
+  /** Eine Sitzung beenden (die Kennung ist ein Praefix des Hashes; nur eigene Sitzungen). */
+  async revokeSession(userId: string, publicId: string): Promise<boolean> {
+    const rows = await this.db
+      .delete(sessions)
+      .where(and(eq(sessions.userId, userId), sql`left(${sessions.tokenHash}, 16) = ${publicId}`))
+      .returning({ hash: sessions.tokenHash });
+    await this.cache.del(...rows.map((r) => sessionKey(r.hash)));
+    return rows.length > 0;
+  }
+
+  /** Alle anderen Sitzungen beenden (z. B. nach Passwortaenderung oder bei Verdacht). */
+  async revokeOtherSessions(userId: string, currentToken: string): Promise<number> {
+    const keep = sha256(currentToken);
+    const others = await this.db.select({ hash: sessions.tokenHash }).from(sessions).where(and(eq(sessions.userId, userId), ne(sessions.tokenHash, keep)));
+    await this.db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.tokenHash, keep)));
+    await this.cache.del(...others.map((o) => sessionKey(o.hash)));
+    return others.length;
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string, currentToken: string): Promise<void> {
+    if (!(await this.verifyPassword(userId, currentPassword))) {
+      throw new UnauthorizedException("Das aktuelle Passwort ist falsch.");
+    }
+    if (currentPassword === newPassword) throw new ConflictException("Das neue Passwort muss sich vom alten unterscheiden.");
+    await this.db.update(users).set({ passwordHash: await hash(newPassword, ARGON_OPTIONS) }).where(eq(users.id, userId));
+    await this.revokeOtherSessions(userId, currentToken); // gestohlene Sitzungen sind damit ungueltig
+    await this.db.insert(auditLog).values({ userId, action: "user.password.changed" });
   }
 
   /** Plattform-Moderation vergeben/entziehen (nur per CLI, nie ueber die Web-Oberflaeche). */

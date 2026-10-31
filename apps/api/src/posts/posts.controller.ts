@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, 
 import {
   createCommentSchema,
   createPostSchema,
+  feedbackSchema,
+  type MutedItem,
   reportSchema,
   resolveReportSchema,
   type ReportItem,
@@ -60,6 +62,32 @@ export class PostsController {
     return this.moderation.resolve(user, id, parse(resolveReportSchema, body));
   }
 
+  @Get("profiles/:handle/posts")
+  userPosts(
+    @CurrentUser() user: PublicUser,
+    @Param("handle") handle: string,
+    @Query("cursor") cursor?: string,
+  ): Promise<{ posts: FeedPost[]; nextCursor: string | null; locked: boolean }> {
+    return this.posts.userPosts(user, handle.toLowerCase(), cursor);
+  }
+
+  @Post("posts/:id/feedback")
+  @HttpCode(204)
+  feedback(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    return this.posts.feedback(user, id, parse(feedbackSchema, body).kind);
+  }
+
+  @Get("feed/muted")
+  muted(@CurrentUser() user: PublicUser): Promise<MutedItem[]> {
+    return this.posts.muted(user);
+  }
+
+  @Delete("feed/muted/:kind/:id")
+  @HttpCode(204)
+  unmute(@CurrentUser() user: PublicUser, @Param("kind") kind: string, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
+    return this.posts.unmute(user, kind === "post" || kind === "user" || kind === "org" ? kind : "post", id);
+  }
+
   @Post("posts")
   create(@CurrentUser() user: PublicUser, @Body() body: unknown): Promise<FeedPost> {
     return this.posts.create(user, parse(createPostSchema, body));
@@ -78,8 +106,8 @@ export class PostsController {
   }
 
   @Get("posts/:id/comments")
-  comments(@Param("id", ParseUUIDPipe) id: string): Promise<CommentItem[]> {
-    return this.posts.listComments(id);
+  comments(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<CommentItem[]> {
+    return this.posts.listComments(user, id);
   }
 
   @Post("posts/:id/comments")

@@ -41,6 +41,8 @@ export const sessions = identity.table(
       .references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Grobe Geraetebeschreibung (z. B. "Chrome auf Windows") fuer die Sitzungsliste; keine IP-Adresse. */
+    device: text("device"),
   },
   (t) => [index("sessions_user_idx").on(t.userId)],
 );
@@ -304,3 +306,64 @@ export const messageReports = chat.table("message_reports", {
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Profile, Medien, Feed-Feedback (Bereich social) ---------------------------
+
+export const profiles = social.table("profiles", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  handle: text("handle").notNull().unique(),
+  bio: text("bio").notNull().default(""),
+  location: text("location").notNull().default(""),
+  visibility: text("visibility").notNull().default("public"), // public | private (Folgeanfragen)
+  showClubs: boolean("show_clubs").notNull().default(true),
+  avatarMediaId: uuid("avatar_media_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const userFollows = social.table(
+  "user_follows",
+  {
+    followerId: uuid("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    followedId: uuid("followed_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"), // active | pending
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.followerId, t.followedId] }), index("user_follows_followed_idx").on(t.followedId, t.status)],
+);
+
+export const media = social.table(
+  "media",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // avatar | post
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    bytes: integer("bytes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("media_owner_idx").on(t.ownerId)],
+);
+
+export const postMedia = social.table(
+  "post_media",
+  {
+    postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+    mediaId: uuid("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.mediaId] })],
+);
+
+/** "Weniger davon": ausgeblendete Beitraege sowie stummgeschaltete Nutzer/Vereine (nur fuer den eigenen Feed). */
+export const feedFeedback = social.table(
+  "feed_feedback",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    targetKind: text("target_kind").notNull(), // post | user | org
+    targetId: uuid("target_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.targetKind, t.targetId] })],
+);

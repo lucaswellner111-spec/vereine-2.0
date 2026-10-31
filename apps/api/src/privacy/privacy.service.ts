@@ -10,6 +10,7 @@ import {
 } from "@vereine/shared";
 import { AuthService } from "../auth/auth.service";
 import { ChatService } from "../chat/chat.service";
+import { MediaService } from "../media/media.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
 
@@ -19,6 +20,7 @@ export class PrivacyService {
     @Inject(DB) private readonly db: Database,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(ChatService) private readonly chat: ChatService,
+    @Inject(MediaService) private readonly mediaSvc: MediaService,
   ) {}
 
   /** Neuester Eintrag je Zweck; Zwecke ohne Eintrag gelten als nicht erteilt. */
@@ -86,6 +88,7 @@ export class PrivacyService {
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
       chat: chatData,
+      media: await this.mediaSvc.countFor(user.id),
       activityLog: audit.map((a) => ({
         action: a.action,
         at: a.createdAt.toISOString(),
@@ -101,6 +104,7 @@ export class PrivacyService {
     }
     await this.auth.invalidateUserSessions(user.id);
     await this.chat.eraseUser(user.id);
+    await this.mediaSvc.eraseUser(user.id); // Bilddateien (Zeilen folgen per Kaskade)
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, user.id));

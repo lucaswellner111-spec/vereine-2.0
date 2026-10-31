@@ -13,3 +13,4 @@ infra/**/*.tfstate*
 infra/**/*.tfvars
 *.tsbuildinfo
 infra/ansible/inventory.ini
+apps/api/data/

@@ -101,8 +101,8 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
               <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
           </div>
-          <Link href="/einstellungen/datenschutz" className="mt-2 block rounded-lg px-3 py-1.5 text-center text-xs text-muted hover:bg-surface-2 hover:text-text">
-            Datenschutz & Konto
+          <Link href="/einstellungen/profil" className="mt-2 block rounded-lg px-3 py-1.5 text-center text-xs text-muted hover:bg-surface-2 hover:text-text">
+            Profil & Konto
           </Link>
           <Button variant="ghost" size="sm" className="w-full" onClick={() => logout().then(() => router.replace("/login"))}>
             Abmelden
@@ -114,7 +114,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         <Logo />
         <div className="flex items-center gap-1">
           <NotificationBell />
-          <Link href="/einstellungen/datenschutz" aria-label="Datenschutz und Konto" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
+          <Link href="/einstellungen/profil" aria-label="Profil und Konto" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
             <span aria-hidden>⚙</span>
           </Link>
           <Button variant="ghost" size="sm" onClick={() => logout().then(() => router.replace("/login"))}>

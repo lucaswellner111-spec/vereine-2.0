@@ -36,6 +36,12 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(12).max(128),
+});
+export type SessionInfo = { id: string; current: boolean; device: string; createdAt: string; expiresAt: string };
+
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   password: z.string().min(1).max(128),
@@ -101,11 +107,14 @@ export type OrgDetail = OrgSummary & {
 };
 
 export const POST_KINDS = ["update", "event", "donation"] as const;
-export const createPostSchema = z.object({
-  body: z.string().trim().min(1).max(1000),
-  orgSlug: z.string().trim().min(1).max(100).optional(),
-  kind: z.enum(POST_KINDS).default("update"),
-});
+export const createPostSchema = z
+  .object({
+    body: z.string().trim().max(1000).default(""),
+    orgSlug: z.string().trim().min(1).max(100).optional(),
+    kind: z.enum(POST_KINDS).default("update"),
+    mediaIds: z.array(z.string().uuid()).max(4).default([]),
+  })
+  .refine((p) => p.body.length > 0 || p.mediaIds.length > 0, { message: "Text oder Bild erforderlich.", path: ["body"] });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 
 export const createCommentSchema = z.object({ body: z.string().trim().min(1).max(500) });
@@ -115,13 +124,16 @@ export const reportSchema = z.object({
 });
 export type ReportInput = z.infer<typeof reportSchema>;
 
+export type MediaRef = { id: string; width: number; height: number };
+
 export type FeedPost = {
   id: string;
   body: string;
   kind: (typeof POST_KINDS)[number];
   createdAt: string;
-  author: { id: string; name: string };
+  author: { id: string; name: string; handle: string | null; avatarId: string | null };
   org: { slug: string; name: string } | null;
+  media: MediaRef[];
   likes: number;
   comments: number;
   likedByMe: boolean;
@@ -225,13 +237,16 @@ export type NotificationItem = {
     | "post_hidden"
     | "event_created"
     | "event_reminder"
-    | "event_canceled";
+    | "event_canceled"
+    | "new_follower"
+    | "follow_request"
+    | "follow_accepted";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
 };
 export type NotificationsResponse = { unread: number; items: NotificationItem[] };
-export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string } };
+export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string; handle?: string | null } };
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -315,3 +330,45 @@ export type ChatReportItem = {
   /** Nur die gemeldete Nachricht, null wenn bereits geloescht. */
   text: string | null;
 };
+
+// --- Profile ----------------------------------------------------------------
+
+export const PROFILE_VISIBILITY = ["public", "private"] as const;
+export const RESERVED_HANDLES = ["admin", "api", "ws", "me", "root", "system", "support", "klubnest", "plattform", "vereine", "chat", "feed", "kalender"];
+export const handleSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9_]{3,30}$/, "3–30 Zeichen: Buchstaben, Ziffern, Unterstrich")
+  .refine((h) => !RESERVED_HANDLES.includes(h), "Dieser Name ist reserviert.");
+
+export const updateProfileSchema = z.object({
+  handle: handleSchema.optional(),
+  displayName: z.string().trim().min(2).max(50).optional(),
+  bio: z.string().trim().max(300).optional(),
+  location: z.string().trim().max(60).optional(),
+  visibility: z.enum(PROFILE_VISIBILITY).optional(),
+  showClubs: z.boolean().optional(),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export type FollowState = "none" | "requested" | "following";
+export type ProfileView = {
+  userId: string;
+  handle: string;
+  displayName: string;
+  bio: string;
+  location: string;
+  avatarId: string | null;
+  visibility: (typeof PROFILE_VISIBILITY)[number];
+  showClubs: boolean;
+  counts: { posts: number; followers: number; following: number };
+  clubs: { slug: string; name: string }[] | null;
+  viewer: { isMe: boolean; follow: FollowState; canView: boolean };
+};
+export type PersonItem = { userId: string; handle: string; displayName: string; avatarId: string | null; follow: FollowState };
+export type FollowRequest = { userId: string; handle: string; displayName: string; avatarId: string | null; at: string };
+
+export const followDecisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
+export const feedbackSchema = z.object({ kind: z.enum(["hide", "mute_author", "mute_org"]) });
+export type MutedItem = { kind: "post" | "user" | "org"; id: string; label: string };

@@ -102,12 +102,27 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "bran
   );
 }
 
-export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 36, mediaId }: { name: string; size?: number; mediaId?: string | null }) {
   const initials = name
-    .split(/\s+/)
+    .split(/s+/)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
+  if (mediaId) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={`/api/media/${mediaId}/${size <= 48 ? "avatar-sm" : "avatar"}`}
+        alt=""
+        aria-hidden
+        width={size}
+        height={size}
+        loading="lazy"
+        className="shrink-0 rounded-full bg-surface-2 object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <span
       aria-hidden

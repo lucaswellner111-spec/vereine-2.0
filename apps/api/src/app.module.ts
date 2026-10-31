@@ -6,6 +6,8 @@ import { DbModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { HealthController } from "./health.controller";
+import { MediaModule } from "./media/media.module";
+import { ProfilesModule } from "./profiles/profiles.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { OrgsModule } from "./orgs/orgs.module";
 import { PlatformModule } from "./platform/platform.module";
@@ -13,7 +15,7 @@ import { PostsModule } from "./posts/posts.module";
 import { PrivacyModule } from "./privacy/privacy.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule],
   controllers: [HealthController],
 })
 export class AppModule {}

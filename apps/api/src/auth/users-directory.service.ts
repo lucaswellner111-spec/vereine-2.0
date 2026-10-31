@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
 import type { ConsentPurpose } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { consents, users } from "../db/schema";
@@ -22,6 +22,16 @@ export class UsersDirectory {
       .from(users)
       .where(inArray(users.id, unique));
     return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  /** Nutzersuche nach Anzeigename (Teiltreffer, ohne geloeschte Konten). */
+  async search(term: string, limit = 20): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(ilike(users.displayName, `%${term.replace(/[%_]/g, "")}%`), isNull(users.deletedAt)))
+      .limit(limit);
+    return rows.map((r) => r.id);
   }
 
   /** Letzter Stand einer Einwilligung (append-only Protokoll); ohne Eintrag = nicht erteilt. */

@@ -17,5 +17,14 @@ $COMPOSE exec -T postgres pg_dump -U vereine --no-owner vereine | gzip > "$FILE.
 gunzip -c "$FILE.tmp" | grep -q 'CREATE TABLE identity.users' || { rm -f "$FILE.tmp"; echo "Backup ungueltig" >&2; exit 1; }
 mv "$FILE.tmp" "$FILE"
 
+# Medien (Bilder) liegen im Docker-Volume, nicht in der Datenbank: ebenfalls sichern
+VOL="${MEDIA_VOLUME:-deploy_mediadata}"
+if docker volume inspect "$VOL" >/dev/null 2>&1; then
+  MFILE="$DIR/media-$(date +%Y%m%d-%H%M%S).tar.gz"
+  docker run --rm -v "$VOL":/data:ro alpine tar czf - -C /data . > "$MFILE.tmp" && mv "$MFILE.tmp" "$MFILE"
+  ls -1t "$DIR"/media-*.tar.gz 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm -f
+  echo "Medien gesichert: $MFILE ($(du -h "$MFILE" | cut -f1))"
+fi
+
 ls -1t "$DIR"/vereine-*.sql.gz | tail -n +"$((KEEP + 1))" | xargs -r rm -f
 echo "Backup erstellt: $FILE ($(du -h "$FILE" | cut -f1))"

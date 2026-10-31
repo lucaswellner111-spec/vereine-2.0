@@ -29,6 +29,12 @@ function describe(n: NotificationItem): { text: string; href: string } {
       return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: "/kalender" };
     case "event_canceled":
       return { text: `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
+    case "new_follower":
+      return { text: `${d.name} folgt dir jetzt.`, href: `/profil/${d.handle}` };
+    case "follow_request":
+      return { text: `${d.name} möchte dir folgen.`, href: "/einstellungen/profil" };
+    case "follow_accepted":
+      return { text: `${d.name} hat deine Folgeanfrage angenommen.`, href: `/profil/${d.handle}` };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }

@@ -1,4 +1,5 @@
 import fastifyCookie from "@fastify/cookie";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { HttpException } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -14,6 +15,8 @@ export async function configureApp(
   const fastify = app.getHttpAdapter().getInstance();
 
   await fastify.register(fastifyCookie);
+  // Uploads: nur 1 Datei je Anfrage, max. 8 MB (die eigentliche Pruefung macht MediaService am Inhalt).
+  await fastify.register(fastifyMultipart, { limits: { files: 1, fileSize: 8 * 1024 * 1024, fields: 2, parts: 3 } });
 
   if (opts.rateLimit !== false) {
     // Mit Redis teilen sich alle App-Server dieselben Zaehler; ohne Redis zaehlt jeder Prozess einzeln.

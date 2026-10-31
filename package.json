@@ -20,5 +20,14 @@
   "devDependencies": {
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.32",
+    "next": {
+      "postcss": "^8.5.32"
+    },
+    "@nestjs/platform-fastify": {
+      "fastify": "^5.12.7"
+    }
   }
 }
