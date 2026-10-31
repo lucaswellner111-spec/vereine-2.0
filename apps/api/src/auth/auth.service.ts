@@ -116,6 +116,16 @@ export class AuthService implements OnModuleInit {
     return { user: this.toPublic(user), token };
   }
 
+  /** Plattform-Moderation vergeben/entziehen (nur per CLI, nie ueber die Web-Oberflaeche). */
+  async setPlatformAdmin(email: string, on: boolean): Promise<boolean> {
+    const [user] = await this.db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
+    if (!user) return false;
+    await this.db.update(users).set({ platformRole: on ? "admin" : null }).where(eq(users.id, user.id));
+    await this.db.insert(auditLog).values({ userId: user.id, action: on ? "platform.admin.granted" : "platform.admin.revoked" });
+    await this.invalidateUserSessions(user.id); // Rolle gilt sofort, nicht erst nach Cache-Ablauf
+    return true;
+  }
+
   /** Prueft das Passwort eines bereits eingeloggten Nutzers (fuer sensible Aktionen). */
   async verifyPassword(userId: string, password: string): Promise<boolean> {
     const [user] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -157,6 +167,7 @@ export class AuthService implements OnModuleInit {
       email: user.email,
       displayName: user.displayName,
       createdAt: user.createdAt.toISOString(),
+      isPlatformAdmin: user.platformRole === "admin",
     };
   }
 }

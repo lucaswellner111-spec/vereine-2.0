@@ -47,6 +47,7 @@ export const publicUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string(),
   createdAt: z.string(),
+  isPlatformAdmin: z.boolean().optional(),
 });
 export type PublicUser = z.infer<typeof publicUserSchema>;
 
@@ -296,3 +297,21 @@ export type ChatEvent =
   | { type: "message"; conversationId: string; messageId: string }
   | { type: "conversation"; conversationId: string }
   | { type: "read"; conversationId: string };
+
+// --- Plattform-Moderation ----------------------------------------------------
+
+export const resolveChatReportSchema = z.object({
+  action: z.enum(["dismiss", "delete"]),
+  note: z.string().trim().max(500).optional(),
+});
+export type ChatReportItem = {
+  id: string;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  reporterName: string;
+  senderName: string;
+  conversationKind: "direct" | "group";
+  /** Nur die gemeldete Nachricht, null wenn bereits geloescht. */
+  text: string | null;
+};

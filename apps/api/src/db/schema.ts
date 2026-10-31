@@ -25,6 +25,8 @@ export const users = identity.table("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name").notNull(),
+  /** Plattform-Rolle (null = normaler Nutzer, "admin" = Plattform-Moderation). Nur per CLI vergeben. */
+  platformRole: text("platform_role"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });

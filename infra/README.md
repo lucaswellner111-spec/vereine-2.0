@@ -44,3 +44,8 @@ ansible-playbook -i inventory.ini bootstrap.yml
 - `CHAT_MASTER_KEYS=1:<32 Byte base64>` steht nur in `/opt/vereine/.env.preview` (Server). Neu erzeugen: `openssl rand -base64 32`.
 - **Sichern:** Schlüsselzeile separat (Passwortmanager) ablegen. Geht er verloren, sind Chat-Inhalte unwiderruflich unlesbar. Datenbank-Backups enthalten ihn nicht.
 - Rotation: `CHAT_MASTER_KEYS=1:<alt>,2:<neu>`, `CHAT_ACTIVE_KEY_VERSION=2`, API+Worker neu starten, `node apps/api/dist/jobs/enqueue-cli.js chat.rewrap-keys`; danach den alten Schlüssel entfernen.
+
+## Plattform-Moderation
+- Rolle nur per CLI (kein Web-Weg), wirkt sofort: `docker compose ... exec api node apps/api/dist/auth/set-platform-admin.js <e-mail>` (Entziehen: `--revoke`). Jede Vergabe wird im Zugriffsprotokoll (`identity.audit_log`) festgehalten.
+- Oberfläche: `/plattform` (nur für die Rolle sichtbar). Dort: Meldungen zu persönlichen Beiträgen ohne Verein und Chat-Meldungen. Chat-Klartext nur für die gemeldete Nachricht; jedes Öffnen der Liste wird protokolliert (`platform.chat-reports.viewed`).
+- Readiness `/api/health/ready` zeigt jetzt Warteschlangen-Zähler (`jobs.waiting/active/delayed/failed`) für Monitoring/Alarm.

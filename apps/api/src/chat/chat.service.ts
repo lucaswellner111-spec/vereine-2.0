@@ -11,6 +11,7 @@ import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm"
 import type {
   ChatContact,
   ChatEvent,
+  ChatReportItem,
   ChatMessage,
   ConversationDetail,
   ConversationMember,
@@ -20,6 +21,7 @@ import type {
   PublicUser,
   ReportInput,
 } from "@vereine/shared";
+import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { DB, type Database } from "../db/db.module";
@@ -67,6 +69,7 @@ export class ChatService implements OnModuleInit {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   onModuleInit() {
@@ -387,6 +390,61 @@ export class ChatService implements OnModuleInit {
       note: input.note,
       snapshot: m.ciphertext,
     });
+  }
+
+  // --- Plattform-Moderation (nur Rolle platform admin, jeder Zugriff wird protokolliert) ---------
+
+  /** Gemeldete Nachrichten im Klartext - ausschliesslich die gemeldete Nachricht, kein Verlauf. */
+  async listReports(admin: PublicUser, status = "open"): Promise<ChatReportItem[]> {
+    const rows = await this.db
+      .select({ r: messageReports, m: messages, c: conversations })
+      .from(messageReports)
+      .innerJoin(messages, eq(messages.id, messageReports.messageId))
+      .innerJoin(conversations, eq(conversations.id, messageReports.conversationId))
+      .where(eq(messageReports.status, status))
+      .orderBy(desc(messageReports.createdAt))
+      .limit(100);
+    const names = await this.directory.names(rows.flatMap(({ r, m }) => [r.reporterId, m.senderId]));
+    await this.audit.record(admin.id, "platform.chat-reports.viewed", { reportIds: rows.map(({ r }) => r.id) });
+    return rows.map(({ r, m, c }) => {
+      const key = this.crypto.unwrap(c.wrappedKey, c.keyVersion);
+      let text: string | null = null;
+      if (!m.deletedAt && r.snapshot) {
+        try {
+          text = this.crypto.decrypt(key, r.snapshot, aad(c.id, m.id)); // Beweiskopie zum Meldezeitpunkt
+        } catch {
+          text = null;
+        }
+      }
+      return {
+        id: r.id,
+        reason: r.reason,
+        note: r.note,
+        createdAt: r.createdAt.toISOString(),
+        reporterName: names.get(r.reporterId) ?? DELETED_USER,
+        senderName: names.get(m.senderId) ?? DELETED_USER,
+        conversationKind: c.kind as "direct" | "group",
+        text,
+      };
+    });
+  }
+
+  async resolveReport(admin: PublicUser, reportId: string, input: { action: "dismiss" | "delete"; note?: string }): Promise<void> {
+    const [report] = await this.db.select().from(messageReports).where(eq(messageReports.id, reportId)).limit(1);
+    if (!report) throw new NotFoundException("Meldung nicht gefunden.");
+    const now = new Date();
+    if (input.action === "delete") {
+      await this.db.update(messages).set({ deletedAt: now, ciphertext: "" }).where(eq(messages.id, report.messageId));
+      await this.db
+        .update(messageReports)
+        .set({ status: "actioned" })
+        .where(and(eq(messageReports.messageId, report.messageId), eq(messageReports.status, "open")));
+      const members = await this.db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, report.conversationId));
+      await this.publish(members.map((m) => m.userId), { type: "message", conversationId: report.conversationId, messageId: report.messageId });
+    } else {
+      await this.db.update(messageReports).set({ status: "dismissed" }).where(eq(messageReports.id, reportId));
+    }
+    await this.audit.record(admin.id, "platform.chat-report.resolved", { reportId, action: input.action, note: input.note ?? null });
   }
 
   // --- Datenschutz: Auskunft und Loeschung --------------------------------------------

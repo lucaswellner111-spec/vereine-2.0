@@ -2,6 +2,7 @@ import {
   CanActivate,
   createParamDecorator,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -24,6 +25,17 @@ export class SessionGuard implements CanActivate {
     const user = token ? await this.auth.userForToken(token) : null;
     if (!user) throw new UnauthorizedException();
     req.user = user;
+    return true;
+  }
+}
+
+/** Nur Plattform-Moderation (Rolle per CLI vergeben). Nicht angemeldet = 401, angemeldet ohne Rolle = 403. */
+@Injectable()
+export class PlatformAdminGuard extends SessionGuard {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    await super.canActivate(context);
+    const user = context.switchToHttp().getRequest<AuthedRequest>().user;
+    if (!user?.isPlatformAdmin) throw new ForbiddenException("Nur fuer die Plattform-Moderation.");
     return true;
   }
 }

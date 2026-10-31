@@ -28,6 +28,10 @@ async function main() {
   await configureApp(app, { rateLimit: false });
   await app.listen(Number(process.env.API_PORT ?? 4000), "127.0.0.1");
   attachChatGateway(app.getHttpServer(), { auth: app.get(AuthService), bus: app.get(REALTIME_BUS) });
+  // Nur lokal: Konto mit dieser E-Mail wird (sobald es existiert) zur Plattform-Moderation, um die Oberflaeche zu testen.
+  if (process.env.DEV_PLATFORM_ADMIN) {
+    setInterval(() => void app.get(AuthService).setPlatformAdmin(process.env.DEV_PLATFORM_ADMIN!, true).catch(() => undefined), 3000).unref();
+  }
   console.log("API (PGlite) laeuft auf http://127.0.0.1:" + (process.env.API_PORT ?? 4000));
 }
 

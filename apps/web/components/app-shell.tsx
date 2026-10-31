@@ -20,6 +20,8 @@ const nav = [
   { href: "/verwaltung", label: "Verwaltung", icon: "▤" },
 ];
 
+const platformItem = { href: "/plattform", label: "Plattform", icon: "⚑" };
+
 function UnreadBadge({ n, floating }: { n: number; floating?: boolean }) {
   return (
     <span
@@ -60,6 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
   const { unread } = useChat();
+  const items = user.isPlatformAdmin ? [...nav, platformItem] : nav;
   const { logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -74,7 +77,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           <NotificationBell align="left" />
         </div>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Hauptnavigation">
-          {nav.map((item) => (
+          {items.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -126,9 +129,10 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
 
       <nav
         aria-label="Hauptnavigation"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-border bg-surface md:hidden"
+        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+        className="fixed inset-x-0 bottom-0 z-10 grid border-t border-border bg-surface md:hidden"
       >
-        {nav.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
