@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configureApp } from "../app.setup";
 import { CacheModule } from "../cache/cache.module";
 import { DB, DbModule } from "../db/db.module";
+import { JobsModule } from "../jobs/jobs.module";
 import * as schema from "../db/schema";
 import { AuthModule } from "./auth.module";
 
@@ -29,7 +30,7 @@ describe("Auth", () => {
     db = drizzle(new PGlite(), { schema });
     await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
 
-    const moduleRef = await Test.createTestingModule({ imports: [DbModule, CacheModule, AuthModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [DbModule, CacheModule, JobsModule, AuthModule] })
       .overrideProvider(DB)
       .useValue(db)
       .compile();

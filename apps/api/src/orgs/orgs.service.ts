@@ -9,7 +9,8 @@ import {
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { CreateOrgInput, MemberItem, OrgDetail, OrgRole, OrgSummary, PublicUser } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { follows, orgMembers, organizations, users } from "../db/schema";
+import { UsersDirectory } from "../auth/users-directory.service";
+import { follows, orgMembers, organizations } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 
 type OrgRow = typeof organizations.$inferSelect;
@@ -28,6 +29,7 @@ export class OrgsService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
   async create(user: PublicUser, input: CreateOrgInput): Promise<OrgDetail> {
@@ -144,19 +146,19 @@ export class OrgsService {
     await this.requireAdmin(org.id, actor.id);
     const rows = await this.db
       .select({
-        userId: users.id,
-        name: users.displayName,
+        userId: orgMembers.userId,
         role: orgMembers.role,
         status: orgMembers.status,
         since: orgMembers.createdAt,
       })
       .from(orgMembers)
-      .innerJoin(users, eq(users.id, orgMembers.userId))
       .where(and(eq(orgMembers.orgId, org.id), status ? eq(orgMembers.status, status) : undefined))
       .orderBy(orgMembers.createdAt)
       .limit(500);
+    const names = await this.directory.names(rows.map((r) => r.userId));
     return rows.map((r) => ({
       ...r,
+      name: names.get(r.userId) ?? "Gelöschter Nutzer",
       role: r.role as OrgRole,
       status: r.status as "pending" | "active",
       since: r.since.toISOString(),

@@ -2,7 +2,8 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nest
 import { and, desc, eq } from "drizzle-orm";
 import type { PublicUser, ReportItem, ResolveReportInput } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { organizations, posts, reports, users } from "../db/schema";
+import { UsersDirectory } from "../auth/users-directory.service";
+import { organizations, posts, reports } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { MODERATION_ROLES } from "./posts.service";
@@ -18,6 +19,7 @@ export class ModerationService {
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
   private async requireModerator(orgId: string, userId: string) {
@@ -37,20 +39,20 @@ export class ModerationService {
         postId: posts.id,
         body: posts.body,
         hidden: posts.hiddenAt,
-        authorName: users.displayName,
+        authorId: posts.authorId,
       })
       .from(reports)
       .innerJoin(posts, eq(posts.id, reports.postId))
-      .innerJoin(users, eq(users.id, posts.authorId))
       .where(and(eq(reports.orgId, org.id), eq(reports.status, status)))
       .orderBy(desc(reports.createdAt))
       .limit(100);
+    const names = await this.directory.names(rows.map((r) => r.authorId));
     return rows.map((r) => ({
       id: r.id,
       reason: r.reason,
       note: r.note,
       createdAt: r.createdAt.toISOString(),
-      post: { id: r.postId, body: r.body, authorName: r.authorName, hidden: !!r.hidden },
+      post: { id: r.postId, body: r.body, authorName: names.get(r.authorId) ?? "Gelöschter Nutzer", hidden: !!r.hidden },
     }));
   }
 

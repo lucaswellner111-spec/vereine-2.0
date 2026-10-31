@@ -3,7 +3,6 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  OnModuleDestroy,
   OnModuleInit,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -16,6 +15,7 @@ import {
   type RegisterInput,
 } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
+import { JobsService } from "../jobs/jobs.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, consents, sessions, users } from "../db/schema";
 
@@ -35,25 +35,20 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 @Injectable()
-export class AuthService implements OnModuleInit, OnModuleDestroy {
-  private cleanupTimer?: NodeJS.Timeout;
-
+export class AuthService implements OnModuleInit {
   // Wird bei unbekannter E-Mail verifiziert, damit Antwortzeit nicht verraet, ob ein Konto existiert.
   private dummyHash: Promise<string> = hash("dummy-password-for-timing", ARGON_OPTIONS);
 
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(CACHE) private readonly cache: Cache,
+    @Inject(JobsService) private readonly jobs: JobsService,
   ) {}
 
   onModuleInit() {
-    // Abgelaufene Sessions stuendlich entfernen (idempotent, darf auf jedem Server laufen).
-    this.cleanupTimer = setInterval(() => void this.purgeExpiredSessions().catch(() => undefined), 60 * 60 * 1000);
-    this.cleanupTimer.unref();
-  }
-
-  onModuleDestroy() {
-    clearInterval(this.cleanupTimer);
+    // Abgelaufene Sessions stuendlich entfernen (laeuft im Worker, idempotent).
+    this.jobs.define("sessions.purge", async () => void (await this.purgeExpiredSessions()));
+    this.jobs.every("sessions.purge", 60 * 60 * 1000);
   }
 
   async purgeExpiredSessions(): Promise<number> {

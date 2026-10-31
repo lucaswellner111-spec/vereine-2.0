@@ -9,7 +9,8 @@ import type {
   ReportInput,
 } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { comments, consents, follows, orgMembers, organizations, postLikes, posts, reports, users } from "../db/schema";
+import { UsersDirectory } from "../auth/users-directory.service";
+import { comments, follows, orgMembers, organizations, postLikes, posts, reports } from "../db/schema";
 import { reasonFor, scorePost, type Relation } from "../feed/ranking";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
@@ -44,6 +45,7 @@ export class PostsService {
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
   async create(user: PublicUser, input: CreatePostInput): Promise<FeedPost> {
@@ -143,17 +145,17 @@ export class PostsService {
   async listComments(postId: string): Promise<CommentItem[]> {
     await this.requirePost(postId);
     const rows = await this.db
-      .select({ id: comments.id, body: comments.body, createdAt: comments.createdAt, authorId: users.id, authorName: users.displayName })
+      .select({ id: comments.id, body: comments.body, createdAt: comments.createdAt, authorId: comments.authorId })
       .from(comments)
-      .innerJoin(users, eq(users.id, comments.authorId))
       .where(eq(comments.postId, postId))
       .orderBy(comments.createdAt)
       .limit(200);
+    const names = await this.directory.names(rows.map((r) => r.authorId));
     return rows.map((r) => ({
       id: r.id,
       body: r.body,
       createdAt: r.createdAt.toISOString(),
-      author: { id: r.authorId, name: r.authorName },
+      author: { id: r.authorId, name: names.get(r.authorId) ?? "Gelöschter Nutzer" },
     }));
   }
 
@@ -253,14 +255,8 @@ export class PostsService {
     return map;
   }
 
-  private async hasConsent(userId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select()
-      .from(consents)
-      .where(and(eq(consents.userId, userId), eq(consents.purpose, "personalized_feed")))
-      .orderBy(desc(consents.createdAt))
-      .limit(1);
-    return row?.granted ?? false;
+  private hasConsent(userId: string): Promise<boolean> {
+    return this.directory.hasConsent(userId, "personalized_feed");
   }
 
   /** Reichert Beitrags-IDs mit Autor, Verein, Zaehlern und Nutzer-Status an (Reihenfolge der ids bleibt). */
@@ -278,11 +274,10 @@ export class PostsService {
       this.db
         .select({
           id: posts.id, body: posts.body, kind: posts.kind, createdAt: posts.createdAt,
-          authorId: users.id, authorName: users.displayName,
+          authorId: posts.authorId,
           orgId: organizations.id, orgSlug: organizations.slug, orgName: organizations.name,
         })
         .from(posts)
-        .innerJoin(users, eq(users.id, posts.authorId))
         .leftJoin(organizations, eq(organizations.id, posts.orgId))
         .where(inArray(posts.id, ids)),
       this.db
@@ -299,6 +294,7 @@ export class PostsService {
     const cmts = new Map(commentCounts.map((r) => [r.id, r.n]));
     const liked = new Set(mine.map((r) => r.id));
     const byId = new Map(rows.map((r) => [r.id, r]));
+    const names = await this.directory.names(rows.map((r) => r.authorId));
 
     const roleCache = new Map<string, Promise<string | null>>();
     const canModerate = async (orgId: string | null) => {
@@ -321,7 +317,7 @@ export class PostsService {
             body: r.body,
             kind: r.kind as FeedPost["kind"],
             createdAt: r.createdAt.toISOString(),
-            author: { id: r.authorId, name: r.authorName },
+            author: { id: r.authorId, name: names.get(r.authorId) ?? "Gelöschter Nutzer" },
             org: r.orgSlug ? { slug: r.orgSlug, name: r.orgName! } : null,
             likes: l,
             comments: c,

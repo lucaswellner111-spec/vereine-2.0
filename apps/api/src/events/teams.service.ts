@@ -2,7 +2,8 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import { and, eq, sql } from "drizzle-orm";
 import type { PublicUser, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { teamMembers, teams, users } from "../db/schema";
+import { UsersDirectory } from "../auth/users-directory.service";
+import { teamMembers, teams } from "../db/schema";
 import { OrgsService } from "../orgs/orgs.service";
 
 @Injectable()
@@ -10,6 +11,7 @@ export class TeamsService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
   private async requireAdmin(orgId: string, userId: string) {
@@ -59,12 +61,11 @@ export class TeamsService {
     const org = await this.orgs.requireBySlug(slug);
     await this.requireAdmin(org.id, user.id);
     await this.requireTeam(org.id, teamId);
-    return this.db
-      .select({ userId: users.id, name: users.displayName })
-      .from(teamMembers)
-      .innerJoin(users, eq(users.id, teamMembers.userId))
-      .where(eq(teamMembers.teamId, teamId))
-      .orderBy(users.displayName);
+    const rows = await this.db.select({ userId: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, teamId)).limit(2000);
+    const names = await this.directory.names(rows.map((r) => r.userId));
+    return rows
+      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "de"));
   }
 
   async addMember(user: PublicUser, slug: string, teamId: string, targetId: string): Promise<void> {

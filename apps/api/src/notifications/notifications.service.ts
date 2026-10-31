@@ -1,14 +1,32 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { NotificationItem, NotificationsResponse } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
+import { JobsService } from "../jobs/jobs.service";
 import { notifications } from "../db/schema";
 
 type Type = NotificationItem["type"];
 
+/** Ab dieser Empfaengerzahl wird der Versand in Bloecken ueber die Job-Warteschlange verteilt. */
+const FANOUT_THRESHOLD = 100;
+const CHUNK = 500;
+
 @Injectable()
-export class NotificationsService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+export class NotificationsService implements OnModuleInit {
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    @Inject(JobsService) private readonly jobs: JobsService,
+  ) {}
+
+  onModuleInit() {
+    this.jobs.define("notifications.insert", async (d: { userIds: string[]; type: Type; data: Record<string, string> }) =>
+      this.insert(d.userIds, d.type, d.data),
+    );
+  }
+
+  private async insert(userIds: string[], type: Type, data: Record<string, string>) {
+    if (userIds.length) await this.db.insert(notifications).values(userIds.map((userId) => ({ userId, type, data })));
+  }
 
   /**
    * Legt Benachrichtigungen an. Bewusst ohne Echtzeit-Push: Clients fragen per Polling ab.
@@ -16,12 +34,11 @@ export class NotificationsService {
    */
   async notify(userIds: string[], type: Type, data: Record<string, string>): Promise<void> {
     const unique = [...new Set(userIds)];
-    // SKALIERUNG: Massen-Fan-out (z. B. Termin an 5.000 Mitglieder) in Bloecken schreiben;
-    // ab ~50k Empfaengern in einen BullMQ-Job (Redis) auslagern.
-    for (let i = 0; i < unique.length; i += 500) {
-      await this.db
-        .insert(notifications)
-        .values(unique.slice(i, i + 500).map((userId) => ({ userId, type, data })));
+    // SKALIERUNG: Kleine Mengen sofort; grosse Mengen (z. B. Termin an 5.000 Mitglieder) als Jobs in Bloecken,
+    // die der Worker parallel abarbeitet. Ab ~50k Empfaengern zusaetzlich Rate begrenzen / eigene Queue.
+    if (unique.length <= FANOUT_THRESHOLD) return this.insert(unique, type, data);
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      await this.jobs.enqueue("notifications.insert", { userIds: unique.slice(i, i + CHUNK), type, data });
     }
   }
 

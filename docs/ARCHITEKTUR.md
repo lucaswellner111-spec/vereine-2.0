@@ -1,0 +1,54 @@
+# Architektur- und Server-Strategie
+
+**Leitidee:** Ein Server, solange es geht – aber so gebaut, dass jeder Bereich später ohne Umbau auf einen eigenen Server ziehen kann. Wir trennen zuerst in **Prozessen/Containern** (kostet nichts), dann auf **Servern** (kostet Geld), und zwar erst, wenn eine Messgröße es verlangt.
+
+## Stufen
+
+| Stufe | Aufbau | Wann |
+|---|---|---|
+| **0 (jetzt)** | 1 Server: Caddy, web, api, Postgres, Redis | bis ein Auslöser (unten) greift |
+| **1** | Selbe Maschine, aber getrennte Container: `api`, `chat`, `worker` (Mail, Jobs), `payments`, je eigene Zugangsdaten | sobald Chat/Zahlungen/Mail gebaut werden |
+| **2** | **DB-Server** eigene Maschine (Postgres + pgBouncer + Backups), App-Server getrennt | erster Auslöser: DB belastet die App (Speicher/CPU/IO) |
+| **3** | **Chat-Server** (WebSocket-Gateway + eigener Postgres-Schema/DB + Redis), App-Server skaliert horizontal hinter Load Balancer | ab ca. 2.000 gleichzeitigen Verbindungen oder Chat-Last stört API |
+| **4** | **Zahlungs-Server** (isoliert, nur Provider-Webhooks + Abrechnung), **Mail-Server/Provider** | mit Start echter Zahlungen bzw. bei Mail-Volumen/Reputation |
+| **5** | Read-Replica, Redis getrennt, Suche (Meilisearch), Object-Storage-CDN | Wachstum |
+
+## Trennlinien (werden jetzt schon im Code eingehalten)
+1. **Ein Modul = ein Bereich = eigene Datenbank-Rolle und eigenes Schema.** Kein Modul liest/schreibt Tabellen eines anderen direkt; nur über dessen Dienst (Service-Schnittstelle). Dann zieht ein Schema 1:1 auf einen anderen Server.
+   - `identity` (users, sessions, consents, audit), `social` (orgs, posts, events, teams, notifications), `chat` (conversations, messages, keys), `billing` (donations, invoices, payments, receipts).
+2. **Prozess-Trennung per Container:** `api` (HTTP), `chat` (WebSocket, eigener Port), `worker` (BullMQ: Mail, Erinnerungen, Fan-out, Aufräumen), `payments` (Webhooks, Provider-Schlüssel). Gleiches Image, andere Startkommandos → später auf andere Hosts verschiebbar.
+3. **Kommunikation nur über definierte Wege:** HTTP (intern), Redis-Queues/Pub-Sub, **nie** über gemeinsame Tabellen. Identität wird über signierte Session/Token geprüft, nicht über direkten DB-Zugriff.
+4. **Konfiguration nur per Umgebungsvariablen** (`DATABASE_URL_<BEREICH>`, `REDIS_URL`, `MAIL_URL`, `PAYMENTS_URL`). Heute zeigen alle auf dieselbe Maschine.
+5. **Secrets je Dienst getrennt:** Zahlungs-Schlüssel nur im `payments`-Container, Chat-Schlüssel nur im `chat`-Container, Mail-Zugang nur im `worker`. Ein Einbruch in `web` gibt keine Zahlungs- oder Chat-Daten frei.
+6. **Interne Netze:** DB/Redis nie öffentlich; Dienste sprechen über das private Netz (Docker-Netz jetzt, Hetzner-Private-Network später).
+
+## Sicherheit und Datenschutz (Grund für die Trennung)
+- **Chat getrennt:** serverseitig verschlüsselte Nachrichten, eigene Schlüssel (Vault/KMS), eigene Löschfristen; Moderation nur auf gemeldete Nachrichten.
+- **Zahlungen getrennt:** Karten-/Kontodaten nie bei uns (gehostete Checkout-Seite von Mollie/Stripe → kleinster PCI-Umfang); eigener Dienst für Webhooks, Beleg- und Quittungserzeugung, Aufbewahrung 8–10 Jahre (GoBD), nicht mit Nutzerlöschung vermischt.
+- **Nutzerdaten (identity) getrennt vom Rest:** kleinster Kreis mit Zugriff; Export/Löschung laufen darüber.
+- **Mail getrennt:** eigener Absender-Ruf (SPF/DKIM/DMARC), Versand nur über `worker`.
+
+## Auslöser (Messgrößen), wann die nächste Stufe fällig ist
+Beobachten per Monitoring (Prometheus/Grafana, noch einzurichten); Schwelle 2 Wochen am Stück überschritten:
+- CPU > 70 % im Schnitt oder RAM > 80 % (ohne Cache), Swap in Benutzung
+- Postgres: Verbindungen > 70 % von `max_connections`, p95-Abfragezeit > 200 ms, Plattenplatz > 70 %
+- WebSocket: > 2.000 gleichzeitige Verbindungen oder Chat-Latenz p95 > 500 ms
+- API p95 > 400 ms trotz Cache, Fehlerrate > 1 %
+- Backup/Restore-Dauer > 30 Minuten
+- Rechtlich/Betrieblich: Start echter Zahlungen → Zahlungsdienst isolieren (auch bei wenig Last)
+
+## Server-Größen (Orientierung Hetzner)
+- Jetzt: CPX/CX mit 4 GB RAM reicht für Vorschau/Pilot.
+- Pilot (wenige tausend Nutzer): 1 Server mit 8 GB RAM / 4 vCPU + Backups.
+- Danach zuerst **vertikal** skalieren (größerer Server, wenige Minuten), erst dann horizontal/aufteilen.
+
+## Arbeitsregel
+Vor jedem neuen Modul: Bereich festlegen (identity/social/chat/billing), eigenes Schema und eigene DB-Rolle, Prozess/Container bestimmen, Secrets zuordnen. Bei jeder Etappe nennen wir Skalierungsgrenzen und die nächste Trennstufe.
+
+## Umsetzungsstand (2026-10-31)
+- **Schemas:** `identity` (users, sessions, consents, audit_log) und `social` (orgs, posts, events, teams, notifications ...) sind getrennt (Migration 0004 verschiebt ohne Datenverlust). `chat` und `billing` folgen mit ihren Modulen.
+- **Lesezugriff auf identity:** nur über `UsersDirectory` (Anzeigenamen, Einwilligungen). Ein Test (`db/boundaries.spec.ts`) bricht, wenn social-Module identity-Tabellen importieren.
+- **Bekannte Kopplung:** Fremdschlüssel `social.* -> identity.users` (Kaskade bei Kontolöschung). Beim Umzug von identity auf einen eigenen Server entfallen diese Fremdschlüssel; die Löschung läuft dann als Ereignis/Job. `chat` und `billing` bekommen von Anfang an keine Fremdschlüssel auf identity.
+- **Worker:** eigener Container (`worker`, gleiches Image) mit BullMQ. Jobs: `sessions.purge` (stündlich), `events.reminders` (10 min), `notifications.insert` (Massen-Fan-out in 500er-Blöcken ab 100 Empfängern).
+- **Zwei Redis-Instanzen:** `redis` (Cache/Rate-Limit, allkeys-lru, keine Persistenz) und `redis-queue` (Jobs, noeviction + AOF). BullMQ verlangt noeviction.
+- **Noch offen:** DB-Rollen je Bereich (heute ein Datenbanknutzer), `chat`-/`payments`-Container, Monitoring (Prometheus/Grafana).

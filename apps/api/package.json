@@ -20,6 +20,7 @@
     "@nestjs/platform-fastify": "^11.0.0",
     "@node-rs/argon2": "^2.2.2",
     "@vereine/shared": "*",
+    "bullmq": "^6.5.3",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^5.11.1",
     "postgres": "^4.0.0",

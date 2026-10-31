@@ -4,13 +4,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { CreateEventInput, EventItem, OrgRole, PublicUser, RsvpItem, RsvpStatus } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
-import { eventRsvps, events, follows, orgMembers, organizations, teamMembers, teams, users } from "../db/schema";
+import { UsersDirectory } from "../auth/users-directory.service";
+import { JobsService } from "../jobs/jobs.service";
+import { eventRsvps, events, follows, orgMembers, organizations, teamMembers, teams } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { buildIcs } from "./ics";
@@ -22,23 +23,19 @@ const REMINDER_INTERVAL_MS = 10 * 60_000;
 type Viewer = { roles: Map<string, OrgRole>; follows: Set<string>; teams: Set<string> };
 
 @Injectable()
-export class EventsService implements OnModuleInit, OnModuleDestroy {
-  private timer?: NodeJS.Timeout;
-
+export class EventsService implements OnModuleInit {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(JobsService) private readonly jobs: JobsService,
   ) {}
 
   onModuleInit() {
-    // Der atomare Claim in sendDueReminders() macht den Lauf auf mehreren Servern gefahrlos.
-    this.timer = setInterval(() => void this.sendDueReminders().catch(() => undefined), REMINDER_INTERVAL_MS);
-    this.timer.unref();
-  }
-
-  onModuleDestroy() {
-    clearInterval(this.timer);
+    // Der atomare Claim in sendDueReminders() macht mehrere Worker gefahrlos.
+    this.jobs.define("events.reminders", async () => void (await this.sendDueReminders()));
+    this.jobs.every("events.reminders", REMINDER_INTERVAL_MS);
   }
 
   // --- Lesen ------------------------------------------------------------------
@@ -67,12 +64,14 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
     const event = await this.get(user, id);
     if (!event.canManage) throw new ForbiddenException("Nur Vorstand und Moderation sehen die Teilnehmerliste.");
     const rows = await this.db
-      .select({ userId: users.id, name: users.displayName, status: eventRsvps.status })
+      .select({ userId: eventRsvps.userId, status: eventRsvps.status })
       .from(eventRsvps)
-      .innerJoin(users, eq(users.id, eventRsvps.userId))
       .where(eq(eventRsvps.eventId, id))
-      .orderBy(users.displayName);
-    return rows.map((r) => ({ ...r, status: r.status as RsvpStatus }));
+      .limit(2000);
+    const names = await this.directory.names(rows.map((r) => r.userId));
+    return rows
+      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer", status: r.status as RsvpStatus }))
+      .sort((a, b) => a.name.localeCompare(b.name, "de"));
   }
 
   async ics(user: PublicUser, id: string): Promise<string> {

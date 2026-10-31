@@ -14,8 +14,12 @@ Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und D
 - Lokal ohne Docker: `npm run dev:pglite -w @vereine/api` (API mit In-Memory-DB) + `npm run dev -w @vereine/web`; tsx erzeugt keine Decorator-Metadaten, daher immer `@Inject(Klasse)` im Konstruktor nutzen
 - DB: `npm run db:generate -w @vereine/api` (Migration erzeugen), `npm run db:migrate -w @vereine/api`
 - Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis)
+- Jobs: BullMQ-Worker (src/worker.ts, Container `worker`), Queue-Redis `QUEUE_REDIS_URL` (noeviction); neue Hintergrundarbeit als Job definieren (`JobsService.define/every/enqueue`). Social-Module lesen Nutzerdaten nur über `UsersDirectory` (Test `boundaries.spec.ts`).
 - Redis: `REDIS_URL` (Rate-Limit + Session-Cache); ohne Redis Prozess-Cache. Tests nutzen `ioredis-mock`.
 - Turbo-Telemetrie aus: `DO_NOT_TRACK=1`
+
+## Architektur
+- Ein Server zuerst, Trennung per Container/Schema vorbereitet: siehe `docs/ARCHITEKTUR.md` (Bereiche identity/social/chat/billing, eigene DB-Rolle je Bereich, keine Cross-Schema-Zugriffe, Secrets je Dienst).
 
 ## Regeln
 - **Datenschutz zuerst**: keine Drittanbieter-Requests im Frontend (keine CDNs, Google Fonts, Tracker); Daten minimieren; Einwilligungen append-only in `consents`.

@@ -29,6 +29,13 @@
       "when": 1793387993198,
       "tag": "0003_events_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793443444193,
+      "tag": "0004_schemas",
+      "breakpoints": true
     }
   ]
 }

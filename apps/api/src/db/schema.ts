@@ -3,7 +3,7 @@ import {
   boolean,
   index,
   jsonb,
-  pgTable,
+  pgSchema,
   primaryKey,
   text,
   timestamp,
@@ -11,7 +11,15 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const users = pgTable("users", {
+/**
+ * Datenbank-Bereiche (siehe docs/ARCHITEKTUR.md). Jeder Bereich hat ein eigenes Schema und kann spaeter
+ * auf einen eigenen Server ziehen. Weitere Bereiche: chat, billing.
+ * Bekannte Kopplung: social.* hat Fremdschluessel auf identity.users (Kaskade bei Kontoloeschung).
+ */
+export const identity = pgSchema("identity");
+export const social = pgSchema("social");
+
+export const users = identity.table("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
@@ -21,7 +29,7 @@ export const users = pgTable("users", {
 });
 
 // Session-ID im Cookie ist ein Zufallstoken; gespeichert wird nur der SHA-256-Hash.
-export const sessions = pgTable(
+export const sessions = identity.table(
   "sessions",
   {
     tokenHash: text("token_hash").primaryKey(),
@@ -35,7 +43,7 @@ export const sessions = pgTable(
 );
 
 // Append-only: jede Erteilung/Widerruf ist ein neuer Eintrag (Nachweispflicht Art. 7 DSGVO).
-export const consents = pgTable(
+export const consents = identity.table(
   "consents",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -50,7 +58,7 @@ export const consents = pgTable(
   (t) => [index("consents_user_purpose_idx").on(t.userId, t.purpose)],
 );
 
-export const auditLog = pgTable("audit_log", {
+export const auditLog = identity.table("audit_log", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id"),
   action: text("action").notNull(),
@@ -60,7 +68,7 @@ export const auditLog = pgTable("audit_log", {
 
 // --- Vereine, Beitraege, Feed ------------------------------------------------
 
-export const organizations = pgTable("organizations", {
+export const organizations = social.table("organizations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
@@ -70,7 +78,7 @@ export const organizations = pgTable("organizations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const orgMembers = pgTable(
+export const orgMembers = social.table(
   "org_members",
   {
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
@@ -82,7 +90,7 @@ export const orgMembers = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("org_members_user_idx").on(t.userId)],
 );
 
-export const follows = pgTable(
+export const follows = social.table(
   "follows",
   {
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -92,7 +100,7 @@ export const follows = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.orgId] }), index("follows_org_idx").on(t.orgId)],
 );
 
-export const posts = pgTable(
+export const posts = social.table(
   "posts",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -113,7 +121,7 @@ export const posts = pgTable(
   ],
 );
 
-export const postLikes = pgTable(
+export const postLikes = social.table(
   "post_likes",
   {
     postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
@@ -123,7 +131,7 @@ export const postLikes = pgTable(
   (t) => [primaryKey({ columns: [t.postId, t.userId] })],
 );
 
-export const comments = pgTable(
+export const comments = social.table(
   "comments",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -135,7 +143,7 @@ export const comments = pgTable(
   (t) => [index("comments_post_idx").on(t.postId)],
 );
 
-export const reports = pgTable("reports", {
+export const reports = social.table("reports", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
   reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -149,7 +157,7 @@ export const reports = pgTable("reports", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("reports_org_status_idx").on(t.orgId, t.status)]);
 
-export const notifications = pgTable(
+export const notifications = social.table(
   "notifications",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -164,7 +172,7 @@ export const notifications = pgTable(
 
 // --- Termine & Teams ---------------------------------------------------------
 
-export const teams = pgTable(
+export const teams = social.table(
   "teams",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -176,7 +184,7 @@ export const teams = pgTable(
   (t) => [unique("teams_org_name_uq").on(t.orgId, t.name)],
 );
 
-export const teamMembers = pgTable(
+export const teamMembers = social.table(
   "team_members",
   {
     teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
@@ -186,7 +194,7 @@ export const teamMembers = pgTable(
   (t) => [primaryKey({ columns: [t.teamId, t.userId] }), index("team_members_user_idx").on(t.userId)],
 );
 
-export const events = pgTable(
+export const events = social.table(
   "events",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -206,7 +214,7 @@ export const events = pgTable(
   (t) => [index("events_org_starts_idx").on(t.orgId, t.startsAt), index("events_starts_idx").on(t.startsAt)],
 );
 
-export const eventRsvps = pgTable(
+export const eventRsvps = social.table(
   "event_rsvps",
   {
     eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
