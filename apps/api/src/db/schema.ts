@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgSchema,
   primaryKey,
@@ -224,3 +225,80 @@ export const eventRsvps = social.table(
   },
   (t) => [primaryKey({ columns: [t.eventId, t.userId] })],
 );
+
+// --- Chat (eigener Bereich, KEINE Fremdschluessel auf identity/social) -----------
+// Nutzer-IDs sind einfache UUID-Spalten: Der Bereich kann auf einen eigenen Server ziehen.
+
+export const chat = pgSchema("chat");
+
+export const conversations = chat.table(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    kind: text("kind").notNull(), // direct | group
+    title: text("title"),
+    orgId: uuid("org_id"),
+    createdBy: uuid("created_by").notNull(),
+    /** Eindeutig je Paar bei Direktchats ("<kleinere-id>:<groessere-id>"). */
+    directKey: text("direct_key").unique(),
+    /** Datenschluessel der Unterhaltung, mit dem Master-Schluessel verschluesselt (AES-256-GCM). */
+    wrappedKey: text("wrapped_key").notNull(),
+    keyVersion: integer("key_version").notNull(),
+    retentionDays: integer("retention_days"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  },
+  (t) => [index("conversations_key_version_idx").on(t.keyVersion)],
+);
+
+export const conversationMembers = chat.table(
+  "conversation_members",
+  {
+    conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull(),
+    role: text("role").notNull().default("member"), // owner | member
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.conversationId, t.userId] }), index("conversation_members_user_idx").on(t.userId)],
+);
+
+export const messages = chat.table(
+  "messages",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id").notNull(),
+    /** "iv.tag.ciphertext" (base64url), AES-256-GCM mit dem Datenschluessel der Unterhaltung. */
+    ciphertext: text("ciphertext").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("messages_conv_created_idx").on(t.conversationId, t.createdAt, t.id),
+    index("messages_sender_idx").on(t.senderId),
+  ],
+);
+
+export const chatBlocks = chat.table(
+  "blocks",
+  {
+    blockerId: uuid("blocker_id").notNull(),
+    blockedId: uuid("blocked_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] }), index("blocks_blocked_idx").on(t.blockedId)],
+);
+
+export const messageReports = chat.table("message_reports", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: uuid("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").notNull(),
+  reporterId: uuid("reporter_id").notNull(),
+  reason: text("reason").notNull(),
+  note: text("note"),
+  /** Kopie des verschluesselten Textes als Beweis (gesperrt gegen Loeschfristen, solange offen). */
+  snapshot: text("snapshot").notNull(),
+  status: text("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

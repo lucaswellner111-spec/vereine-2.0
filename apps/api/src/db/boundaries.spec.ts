@@ -33,3 +33,18 @@ describe("Bereichsgrenzen", () => {
     });
   }
 });
+
+/** Der Chat-Bereich darf nur seine eigenen Tabellen kennen (er kann auf einen eigenen Server ziehen). */
+describe("Chat-Bereich", () => {
+  const CHAT_TABLES = ["chat", "conversations", "conversationMembers", "messages", "chatBlocks", "messageReports"];
+  it("importiert nur chat-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "chat"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !CHAT_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

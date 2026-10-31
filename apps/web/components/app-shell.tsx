@@ -4,7 +4,9 @@ import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import type { PublicUser } from "@vereine/shared";
 import { useAuth } from "@/lib/auth";
+import { ChatProvider, useChat } from "@/lib/chat";
 import { NotificationBell } from "./notification-bell";
 import { Logo } from "./site";
 import { Avatar, Button } from "./ui";
@@ -18,10 +20,23 @@ const nav = [
   { href: "/verwaltung", label: "Verwaltung", icon: "▤" },
 ];
 
+function UnreadBadge({ n, floating }: { n: number; floating?: boolean }) {
+  return (
+    <span
+      aria-label={`${n} ungelesene Nachrichten`}
+      className={clsx(
+        "inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white",
+        floating ? "absolute -right-2.5 -top-1.5" : "ml-auto",
+      )}
+    >
+      {n > 9 ? "9+" : n}
+    </span>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -34,6 +49,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  // Die Chat-Verbindung wird erst fuer angemeldete Nutzer aufgebaut.
+  return (
+    <ChatProvider>
+      <Shell user={user}>{children}</Shell>
+    </ChatProvider>
+  );
+}
+
+function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
+  const { unread } = useChat();
+  const { logout } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
@@ -57,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <span aria-hidden className="w-4 text-center">{item.icon}</span>
               {item.label}
+              {item.href === "/chat" && unread > 0 && <UnreadBadge n={unread} />}
             </Link>
           ))}
         </nav>
@@ -108,7 +138,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               isActive(item.href) ? "text-brand" : "text-muted",
             )}
           >
-            <span aria-hidden className="text-base leading-none">{item.icon}</span>
+            <span aria-hidden className="relative text-base leading-none">
+              {item.icon}
+              {item.href === "/chat" && unread > 0 && <UnreadBadge n={unread} floating />}
+            </span>
             {item.label}
           </Link>
         ))}

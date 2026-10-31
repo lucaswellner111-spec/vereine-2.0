@@ -52,3 +52,11 @@ Vor jedem neuen Modul: Bereich festlegen (identity/social/chat/billing), eigenes
 - **Worker:** eigener Container (`worker`, gleiches Image) mit BullMQ. Jobs: `sessions.purge` (stündlich), `events.reminders` (10 min), `notifications.insert` (Massen-Fan-out in 500er-Blöcken ab 100 Empfängern).
 - **Zwei Redis-Instanzen:** `redis` (Cache/Rate-Limit, allkeys-lru, keine Persistenz) und `redis-queue` (Jobs, noeviction + AOF). BullMQ verlangt noeviction.
 - **Noch offen:** DB-Rollen je Bereich (heute ein Datenbanknutzer), `chat`-/`payments`-Container, Monitoring (Prometheus/Grafana).
+
+## Chat (Stand 2026-10-31)
+- **Schema `chat`** (conversations, conversation_members, messages, blocks, message_reports): keine Fremdschlüssel auf identity/social; Nutzer-IDs sind einfache UUID-Spalten; Test `boundaries.spec.ts` erzwingt, dass der Chat nur eigene Tabellen kennt.
+- **Verschlüsselung (at rest):** je Unterhaltung ein Datenschlüssel, mit Master-Schlüssel (`CHAT_MASTER_KEYS`, Umgebungsvariable) umhüllt; Nachrichten AES-256-GCM mit AAD (Unterhaltung+Nachricht). Rotation: neuen Master-Schlüssel ergänzen, `CHAT_ACTIVE_KEY_VERSION` erhöhen, Job `chat.rewrap-keys` einreihen. **Kein E2EE** (nötig für Meldungen/Auskunft).
+- **Container:** `chat-gateway` (WebSocket `/ws`, kennt keine Schlüssel/Inhalte, liest nur Ereignis-IDs von Redis) getrennt von `api` (REST + Ver-/Entschlüsselung) und `worker` (Löschfristen). Bei Server-Umzug: REST-Routen `/api/chat/*` und Schlüssel in den Chat-Container/-Server verlegen.
+- **Regeln:** Direktnachrichten nur unter Vereinsmitgliedern oder an den Vorstand gefolgter Vereine; Gruppen nur durch Vorstand/Moderation; Blockieren; 30 Nachrichten/Min je Nutzer; Löschfrist Standard 365 Tage, je Gruppe 1–3650; gemeldete Nachrichten bleiben bis zur Prüfung; Kontolöschung/Auskunft sind eingebunden.
+- **Skalierung:** Index (conversation_id, created_at, id) mit Keyset-Paging; ab ~50k Nutzern `messages` nach Monat partitionieren, Chat-DB auf eigenen Server, mehrere Gateways hinter dem Load Balancer (Redis Pub/Sub verteilt). Gateway-Grenzen: 5 Verbindungen je Nutzer.
+- **Schlüssel sichern:** Ohne `CHAT_MASTER_KEYS` sind alle Chat-Inhalte unlesbar. Eine Kopie von `/opt/vereine/.env.preview` (nur die Schlüsselzeile) separat und verschlüsselt ablegen; nie ins Repo.

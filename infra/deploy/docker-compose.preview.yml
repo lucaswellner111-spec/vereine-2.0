@@ -49,6 +49,9 @@ services:
       API_PORT: "4000"
       REDIS_URL: redis://redis:6379
       QUEUE_REDIS_URL: redis://redis-queue:6379
+      CHAT_MASTER_KEYS: ${CHAT_MASTER_KEYS:?CHAT_MASTER_KEYS in .env.preview setzen}
+      CHAT_ACTIVE_KEY_VERSION: ${CHAT_ACTIVE_KEY_VERSION:-1}
+      CHAT_DEFAULT_RETENTION_DAYS: ${CHAT_DEFAULT_RETENTION_DAYS:-365}
       COOKIE_SECURE: ${COOKIE_SECURE:-false} # true, sobald HTTPS aktiv ist
       WEB_ORIGIN: ${WEB_ORIGIN:-}
     healthcheck:
@@ -77,10 +80,37 @@ services:
       DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
       REDIS_URL: redis://redis:6379
       QUEUE_REDIS_URL: redis://redis-queue:6379
+      CHAT_MASTER_KEYS: ${CHAT_MASTER_KEYS:?CHAT_MASTER_KEYS in .env.preview setzen}
+      CHAT_ACTIVE_KEY_VERSION: ${CHAT_ACTIVE_KEY_VERSION:-1}
+      CHAT_DEFAULT_RETENTION_DAYS: ${CHAT_DEFAULT_RETENTION_DAYS:-365}
       WORKER_CONCURRENCY: "5"
     depends_on:
       api:
         condition: service_healthy # Migrationen laufen im API-Start
+
+  # WebSocket-Zustellung fuer den Chat. Eigener Container, kennt KEINE Chat-Schluessel und keine Inhalte
+  # (liest nur Ereignis-IDs von Redis). Kann spaeter auf einen eigenen Server ziehen und mehrfach laufen.
+  chat-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    command: ["node", "apps/api/dist/chat-gateway.js"]
+    environment:
+      DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
+      REDIS_URL: redis://redis:6379
+      QUEUE_REDIS_URL: redis://redis-queue:6379
+      CHAT_GATEWAY_PORT: "4100"
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      api:
+        condition: service_healthy
 
   web:
     build:
@@ -103,6 +133,7 @@ services:
     depends_on:
       - web
       - api
+      - chat-gateway
 
 volumes:
   pgdata:

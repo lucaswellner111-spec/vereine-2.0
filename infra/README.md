@@ -39,3 +39,8 @@ ansible-playbook -i inventory.ini bootstrap.yml
 - `.env.preview` auf dem Server: `CADDY_FILE=Caddyfile.tls`, `DOMAIN=klubnest.de`, `COOKIE_SECURE=true`, `WEB_ORIGIN=https://klubnest.de`.
 - Caddy holt und erneuert Zertifikate automatisch (Let's Encrypt). Ports 80 und 443 muessen erreichbar sein.
 - HSTS mit `includeSubDomains`: alle Subdomains von klubnest.de muessen HTTPS koennen (z. B. `webmail.`).
+
+## Chat-Schlüssel
+- `CHAT_MASTER_KEYS=1:<32 Byte base64>` steht nur in `/opt/vereine/.env.preview` (Server). Neu erzeugen: `openssl rand -base64 32`.
+- **Sichern:** Schlüsselzeile separat (Passwortmanager) ablegen. Geht er verloren, sind Chat-Inhalte unwiderruflich unlesbar. Datenbank-Backups enthalten ihn nicht.
+- Rotation: `CHAT_MASTER_KEYS=1:<alt>,2:<neu>`, `CHAT_ACTIVE_KEY_VERSION=2`, API+Worker neu starten, `node apps/api/dist/jobs/enqueue-cli.js chat.rewrap-keys`; danach den alten Schlüssel entfernen.

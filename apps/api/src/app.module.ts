@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "./auth/auth.module";
+import { ChatModule } from "./chat/chat.module";
 import { CacheModule } from "./cache/cache.module";
 import { DbModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
@@ -11,7 +12,7 @@ import { PostsModule } from "./posts/posts.module";
 import { PrivacyModule } from "./privacy/privacy.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule],
   controllers: [HealthController],
 })
 export class AppModule {}

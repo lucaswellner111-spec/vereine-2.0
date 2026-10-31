@@ -238,3 +238,61 @@ export const healthResponseSchema = z.object({
   time: z.string(),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
+// --- Chat --------------------------------------------------------------------
+
+export const CHAT_MAX_BODY = 2000;
+export const sendMessageSchema = z.object({ body: z.string().trim().min(1).max(CHAT_MAX_BODY) });
+
+export const createConversationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("direct"), userId: z.string().uuid() }),
+  z.object({
+    kind: z.literal("group"),
+    orgSlug: z.string().trim().min(1).max(100),
+    title: z.string().trim().min(2).max(80),
+    memberIds: z.array(z.string().uuid()).max(500).default([]),
+  }),
+]);
+export type CreateConversationInput = z.infer<typeof createConversationSchema>;
+
+export const setRetentionSchema = z.object({ days: z.number().int().min(1).max(3650).nullable() });
+export const reportMessageSchema = z.object({
+  reason: z.enum(["spam", "hate", "illegal", "other"]),
+  note: z.string().trim().max(300).optional(),
+});
+export const addMembersSchema = z.object({ userIds: z.array(z.string().uuid()).min(1).max(100) });
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  body: string | null; // null = geloescht
+  deleted: boolean;
+  createdAt: string;
+  mine: boolean;
+};
+export type ConversationMember = { userId: string; name: string; role: "owner" | "member" };
+export type ConversationSummary = {
+  id: string;
+  kind: "direct" | "group";
+  title: string;
+  orgSlug: string | null;
+  unread: number;
+  lastMessage: { preview: string; createdAt: string; mine: boolean } | null;
+  lastActivityAt: string;
+};
+export type ConversationDetail = ConversationSummary & {
+  members: ConversationMember[];
+  retentionDays: number | null;
+  effectiveRetentionDays: number;
+  iAmOwner: boolean;
+  blocked: boolean;
+};
+export type MessagePage = { messages: ChatMessage[]; nextCursor: string | null };
+export type ChatContact = { userId: string; name: string; context: string };
+
+/** Ereignis ueber den WebSocket: enthaelt nur IDs, keine Nachrichteninhalte. */
+export type ChatEvent =
+  | { type: "message"; conversationId: string; messageId: string }
+  | { type: "conversation"; conversationId: string }
+  | { type: "read"; conversationId: string };

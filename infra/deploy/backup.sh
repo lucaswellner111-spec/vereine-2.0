@@ -13,8 +13,8 @@ mkdir -p "$DIR"
 FILE="$DIR/vereine-$(date +%Y%m%d-%H%M%S).sql.gz"
 
 $COMPOSE exec -T postgres pg_dump -U vereine --no-owner vereine | gzip > "$FILE.tmp"
-# Plausibilitaet: Dump darf nicht leer sein und muss unsere Tabellen enthalten
-gunzip -c "$FILE.tmp" | grep -q 'CREATE TABLE public.users' || { rm -f "$FILE.tmp"; echo "Backup ungueltig" >&2; exit 1; }
+# Plausibilitaet: Dump darf nicht leer sein und muss unsere Tabellen (Schema identity) enthalten
+gunzip -c "$FILE.tmp" | grep -q 'CREATE TABLE identity.users' || { rm -f "$FILE.tmp"; echo "Backup ungueltig" >&2; exit 1; }
 mv "$FILE.tmp" "$FILE"
 
 ls -1t "$DIR"/vereine-*.sql.gz | tail -n +"$((KEEP + 1))" | xargs -r rm -f

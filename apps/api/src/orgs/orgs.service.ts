@@ -207,6 +207,69 @@ export class OrgsService {
     await this.db.delete(orgMembers).where(key);
   }
 
+  // --- Kontakte (fuer den Chat) ---------------------------------------------------
+
+  /**
+   * Wer darf wem schreiben? (1) Beide sind aktive Mitglieder desselben Vereins oder
+   * (2) der Empfaenger ist Vorstand/Moderation eines Vereins, dem der Absender folgt oder angehoert.
+   * Verhindert unerwuenschte Nachrichten von Fremden.
+   */
+  async canContact(userId: string, otherId: string): Promise<boolean> {
+    const [mine, theirs] = await Promise.all([
+      this.db.select({ orgId: orgMembers.orgId }).from(orgMembers).where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"))),
+      this.db.select({ orgId: orgMembers.orgId, role: orgMembers.role }).from(orgMembers).where(and(eq(orgMembers.userId, otherId), eq(orgMembers.status, "active"))),
+    ]);
+    const myOrgs = new Set(mine.map((m) => m.orgId));
+    if (theirs.some((t) => myOrgs.has(t.orgId))) return true;
+    const staff = theirs.filter((t) => t.role === "admin" || t.role === "moderator").map((t) => t.orgId);
+    if (staff.length === 0) return false;
+    const [followed] = await this.db.select().from(follows).where(and(eq(follows.userId, userId), inArray(follows.orgId, staff))).limit(1);
+    return !!followed;
+  }
+
+  /** Personen, die der Nutzer anschreiben darf (mit Vereinsnamen als Kontext). */
+  async contactCandidates(userId: string): Promise<{ userId: string; context: string }[]> {
+    const mine = await this.db.select({ orgId: orgMembers.orgId }).from(orgMembers).where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active")));
+    const followed = await this.db.select({ orgId: follows.orgId }).from(follows).where(eq(follows.userId, userId));
+    const myOrgIds = mine.map((m) => m.orgId);
+    const followIds = followed.map((f) => f.orgId).filter((id) => !myOrgIds.includes(id));
+    const out = new Map<string, string>();
+    if (myOrgIds.length) {
+      const rows = await this.db
+        .select({ userId: orgMembers.userId, org: organizations.name })
+        .from(orgMembers)
+        .innerJoin(organizations, eq(organizations.id, orgMembers.orgId))
+        .where(and(inArray(orgMembers.orgId, myOrgIds), eq(orgMembers.status, "active")))
+        .limit(400);
+      rows.filter((r) => r.userId !== userId).forEach((r) => out.set(r.userId, r.org));
+    }
+    if (followIds.length) {
+      const rows = await this.db
+        .select({ userId: orgMembers.userId, org: organizations.name })
+        .from(orgMembers)
+        .innerJoin(organizations, eq(organizations.id, orgMembers.orgId))
+        .where(and(inArray(orgMembers.orgId, followIds), eq(orgMembers.status, "active"), inArray(orgMembers.role, ["admin", "moderator"])))
+        .limit(200);
+      rows.filter((r) => r.userId !== userId && !out.has(r.userId)).forEach((r) => out.set(r.userId, `${r.org} (Vorstand)`));
+    }
+    return [...out].map(([id, context]) => ({ userId: id, context }));
+  }
+
+  /** Aus den uebergebenen IDs nur die aktiven Mitglieder des Vereins. */
+  async activeMemberIds(orgId: string, ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active"), inArray(orgMembers.userId, ids)));
+    return rows.map((r) => r.userId);
+  }
+
+  async slugOf(orgId: string): Promise<string | null> {
+    const [o] = await this.db.select({ slug: organizations.slug }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    return o?.slug ?? null;
+  }
+
   async findBySlug(slug: string): Promise<OrgRow | undefined> {
     const [org] = await this.db.select().from(organizations).where(eq(organizations.slug, slug)).limit(1);
     return org;

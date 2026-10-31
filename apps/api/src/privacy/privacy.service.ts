@@ -9,6 +9,7 @@ import {
   type SetConsentInput,
 } from "@vereine/shared";
 import { AuthService } from "../auth/auth.service";
+import { ChatService } from "../chat/chat.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
 
@@ -17,6 +18,7 @@ export class PrivacyService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(ChatService) private readonly chat: ChatService,
   ) {}
 
   /** Neuester Eintrag je Zweck; Zwecke ohne Eintrag gelten als nicht erteilt. */
@@ -65,6 +67,7 @@ export class PrivacyService {
       this.db.select().from(follows).where(eq(follows.userId, user.id)),
       this.db.select().from(orgMembers).where(eq(orgMembers.userId, user.id)),
     ]);
+    const chatData = await this.chat.exportUser(user.id);
     return {
       exportedAt: new Date().toISOString(),
       profile: user,
@@ -82,6 +85,7 @@ export class PrivacyService {
       comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, at: c.createdAt.toISOString() })),
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
+      chat: chatData,
       activityLog: audit.map((a) => ({
         action: a.action,
         at: a.createdAt.toISOString(),
@@ -96,6 +100,7 @@ export class PrivacyService {
       throw new ForbiddenException("Passwort ist falsch.");
     }
     await this.auth.invalidateUserSessions(user.id);
+    await this.chat.eraseUser(user.id);
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, user.id));

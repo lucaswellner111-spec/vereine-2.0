@@ -25,13 +25,15 @@
     "ioredis": "^5.11.1",
     "postgres": "^4.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.0"
+    "rxjs": "^7.8.0",
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.13",
     "@nestjs/testing": "^11.2.8",
     "@swc/core": "^1.16.20",
     "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
     "ioredis-mock": "^8.13.1",
     "tsx": "^4.19.0",

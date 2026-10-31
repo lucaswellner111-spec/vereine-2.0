@@ -152,6 +152,7 @@ describe("Health: Ausfall", () => {
       get: async () => null,
       set: async () => undefined,
       del: async () => undefined,
+      incr: async () => 1,
       ping: async () => false,
     };
     const { app } = await boot({ cache: broken });
