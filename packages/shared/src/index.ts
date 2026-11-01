@@ -196,6 +196,8 @@ export const createEventSchema = z
     endsAt: z.string().datetime({ offset: true }).optional(),
     teamId: z.string().uuid().optional(),
     visibility: z.enum(EVENT_VISIBILITY).default("members"),
+    /** Serie: der Termin wird mehrfach angelegt (woechentlich, 14-taegig, monatlich). */
+    repeat: z.object({ freq: z.enum(["weekly", "biweekly", "monthly"]), count: z.number().int().min(2).max(52) }).optional(),
   })
   .refine((e) => !e.endsAt || new Date(e.endsAt) > new Date(e.startsAt), {
     message: "Das Ende muss nach dem Beginn liegen.",
@@ -220,6 +222,8 @@ export type EventItem = {
   endsAt: string | null;
   visibility: (typeof EVENT_VISIBILITY)[number];
   canceled: boolean;
+  /** Gemeinsame Kennung der Termine einer Serie (sonst null). */
+  seriesId: string | null;
   counts: { yes: number; maybe: number; no: number };
   myStatus: RsvpStatus | null;
   canManage: boolean;
@@ -424,6 +428,9 @@ export type InvoiceDetail = InvoiceSummary & {
   recipientAddress: string;
   issuerName: string;
   issuerCity: string;
+  issuerAddress: string;
+  issuerIban: string;
+  issuerTaxInfo: string;
   note: string;
   vatNote: string;
   netCents: number;
@@ -432,3 +439,74 @@ export type InvoiceDetail = InvoiceSummary & {
   voidReason: string | null;
 };
 export type InvoiceRecipient = { userId: string; name: string };
+
+// --- Vereinsstammdaten (Rechnungen) und Einladungslinks ------------------------
+
+/** IBAN-Pruefsumme (ISO 13616, mod 97). */
+export function isValidIban(value: string): boolean {
+  const iban = value.replace(/\s/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) return false;
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let rest = 0;
+  for (const ch of rearranged) {
+    const v = /\d/.test(ch) ? ch : String(ch.charCodeAt(0) - 55);
+    for (const d of v) rest = (rest * 10 + Number(d)) % 97;
+  }
+  return rest === 1;
+}
+
+export const orgBillingProfileSchema = z.object({
+  address: z.string().trim().max(300).default(""),
+  iban: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s/g, "").toUpperCase())
+    .refine((v) => v === "" || isValidIban(v), "Ungültige IBAN")
+    .default(""),
+  taxInfo: z.string().trim().max(300).default(""),
+});
+export type OrgBillingProfileInput = z.infer<typeof orgBillingProfileSchema>;
+export type OrgBillingProfile = { address: string; iban: string; taxInfo: string };
+
+export const createInviteSchema = z.object({
+  maxUses: z.number().int().min(1).max(500).default(50),
+  expiresInDays: z.number().int().min(1).max(90).default(14),
+});
+export type CreateInviteInput = z.infer<typeof createInviteSchema>;
+export type InviteItem = {
+  id: string;
+  maxUses: number;
+  uses: number;
+  expiresAt: string;
+  createdAt: string;
+  status: "active" | "expired" | "used_up" | "revoked";
+};
+/** Der Klartext-Token wird nur einmal bei der Erstellung geliefert. */
+export type CreatedInvite = InviteItem & { token: string };
+export type InviteInfo = { orgName: string; orgSlug: string; alreadyMember: boolean };
+
+export const cancelEventSchema = z.object({ scope: z.enum(["single", "series"]).default("single") });
+export type CalendarFeedStatus = { enabled: boolean; createdAt: string | null };
+/** Der Klartext-Token wird nur einmal geliefert. */
+export type CalendarFeedCreated = { token: string; createdAt: string };
+
+// --- Zwei-Faktor-Anmeldung (TOTP) ------------------------------------------------
+
+const twoFactorCode = z.string().trim().min(6).max(20);
+export const twoFactorCodeSchema = z.object({ code: twoFactorCode });
+export const twoFactorLoginSchema = z.object({ challenge: z.string().min(10).max(500), code: twoFactorCode });
+export const twoFactorConfirmSchema = z.object({ password: z.string().min(1).max(128), code: twoFactorCode });
+export type TwoFactorStatus = { enabled: boolean; recoveryCodesLeft: number };
+export type TwoFactorSetup = { secret: string; otpauthUrl: string; qrSvg: string };
+/** Antwort auf /auth/login: Nutzer (angemeldet) oder Herausforderung fuer den zweiten Faktor. */
+export type LoginResult = PublicUser | { twoFactorRequired: true; challenge: string };
+
+// --- Web-Push ----------------------------------------------------------------------
+
+const pushEndpoint = z.string().url().max(1000).refine((u) => u.startsWith("https://"), "Nur https-Endpunkte");
+export const pushSubscribeSchema = z.object({
+  endpoint: pushEndpoint,
+  keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(10).max(100) }),
+});
+export const pushUnsubscribeSchema = z.object({ endpoint: pushEndpoint });
+export type PrivatePushState = { publicKey: string | null; devices: number };

@@ -1,13 +1,15 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { LoginInput, PublicUser, RegisterInput } from "@vereine/shared";
+import type { LoginInput, LoginResult, PublicUser, RegisterInput } from "@vereine/shared";
 import { api, ApiError } from "./api";
 
 type AuthState = {
   user: PublicUser | null;
   loading: boolean;
-  login: (input: LoginInput) => Promise<void>;
+  /** Liefert eine Herausforderung, wenn noch ein zweiter Faktor noetig ist, sonst null (angemeldet). */
+  login: (input: LoginInput) => Promise<{ challenge: string } | null>;
+  loginTwoFactor: (challenge: string, code: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
   clear: () => void;
@@ -30,7 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
-    setUser(await api<PublicUser>("/auth/login", { method: "POST", body: input }));
+    const res = await api<LoginResult>("/auth/login", { method: "POST", body: input });
+    if ("twoFactorRequired" in res) return { challenge: res.challenge };
+    setUser(res);
+    return null;
+  }, []);
+
+  const loginTwoFactor = useCallback(async (challenge: string, code: string) => {
+    setUser(await api<PublicUser>("/auth/login/2fa", { method: "POST", body: { challenge, code } }));
   }, []);
 
   const register = useCallback(async (input: RegisterInput) => {
@@ -46,8 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clear = useCallback(() => setUser(null), []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, clear }),
-    [user, loading, login, register, logout, clear],
+    () => ({ user, loading, login, loginTwoFactor, register, logout, clear }),
+    [user, loading, login, loginTwoFactor, register, logout, clear],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

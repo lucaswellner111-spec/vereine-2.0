@@ -6,7 +6,7 @@ import { api, describeError } from "@/lib/api";
 import { Badge, Button, Card, Field } from "./ui";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const empty = { title: "", startsAt: "", endsAt: "", location: "", description: "", teamId: "", visibility: "members" };
+const empty = { title: "", startsAt: "", endsAt: "", location: "", description: "", teamId: "", visibility: "members", repeat: "none", count: "8" };
 
 export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const [form, setForm] = useState(empty);
@@ -55,6 +55,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                   endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : undefined,
                   teamId: form.teamId || undefined,
                   visibility: form.visibility,
+                  repeat: form.repeat === "none" ? undefined : { freq: form.repeat, count: Number(form.count) },
                 },
               });
               setForm(empty);
@@ -84,6 +85,16 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
               <option value="public">Öffentlich (auch Follower)</option>
             </select>
           </div>
+          <div className="space-y-1.5">
+            <label htmlFor="ev-repeat" className="text-sm font-medium">Wiederholung</label>
+            <select id="ev-repeat" value={form.repeat} onChange={set("repeat")} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
+              <option value="none">Einmalig</option>
+              <option value="weekly">Jede Woche</option>
+              <option value="biweekly">Alle 2 Wochen</option>
+              <option value="monthly">Jeden Monat</option>
+            </select>
+          </div>
+          {form.repeat !== "none" && <Field id="ev-count" label="Anzahl Termine (2–52)" type="number" min={2} max={52} required value={form.count} onChange={set("count")} />}
           <div className="space-y-1.5 sm:col-span-2">
             <label htmlFor="ev-desc" className="text-sm font-medium">Beschreibung</label>
             <textarea
@@ -120,6 +131,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                     <p className="mt-1 flex gap-1.5">
                       {ev.teamName && <Badge tone="brand">{ev.teamName}</Badge>}
                       {ev.visibility === "public" && <Badge>öffentlich</Badge>}
+                      {ev.seriesId && <Badge>Serie</Badge>}
                       {ev.canceled && <Badge tone="danger">abgesagt</Badge>}
                     </p>
                   </div>
@@ -148,6 +160,21 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                         }
                       >
                         Absagen
+                      </Button>
+                    )}
+                    {!ev.canceled && ev.seriesId && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          confirm("Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt.") &&
+                          run(async () => {
+                            await api(`/events/${ev.id}/cancel`, { method: "POST", body: { scope: "series" } });
+                            load();
+                          })
+                        }
+                      >
+                        Serie ab hier absagen
                       </Button>
                     )}
                   </div>

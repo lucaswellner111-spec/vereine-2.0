@@ -9,6 +9,11 @@
 		reverse_proxy chat-gateway:4100
 	}
 
+	# Messwerte nur intern (Prometheus), nie oeffentlich
+	handle /api/metrics {
+		respond 404
+	}
+
 	handle /api/* {
 		uri strip_prefix /api
 		reverse_proxy api:4000

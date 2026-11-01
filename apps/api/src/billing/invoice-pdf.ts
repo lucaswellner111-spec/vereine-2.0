@@ -33,8 +33,12 @@ export async function buildInvoicePdf(inv: InvoiceDetail): Promise<Uint8Array> {
   // Kopf: Aussteller
   text(page, inv.issuerName, MARGIN, y, 14, bold);
   y -= 16;
-  if (inv.issuerCity) text(page, inv.issuerCity, MARGIN, y, 10, regular, grey);
-  y -= 40;
+  const issuerLines = [...inv.issuerAddress.split(/\r?\n/).filter(Boolean).slice(0, 3), inv.issuerCity].filter(Boolean);
+  for (const line of issuerLines) {
+    text(page, line, MARGIN, y, 10, regular, grey);
+    y -= 12;
+  }
+  y -= 28;
 
   // Empfaenger
   text(page, inv.recipientName, MARGIN, y, 11, bold);
@@ -130,6 +134,20 @@ export async function buildInvoicePdf(inv: InvoiceDetail): Promise<Uint8Array> {
   }
   if (inv.status === "void" && inv.voidReason) {
     text(page, `Storniert: ${inv.voidReason}`, MARGIN, y, 9, regular, rgb(0.75, 0.1, 0.1));
+  }
+
+  // Zahlungs- und Steuerangaben des Vereins
+  const ibanSpaced = inv.issuerIban.replace(/(.{4})/g, "$1 ").trim();
+  const payLines = [
+    inv.issuerIban && `Bitte überweise auf IBAN ${ibanSpaced}${inv.number ? `, Verwendungszweck ${inv.number}` : ""}.`,
+    inv.issuerTaxInfo,
+  ].filter(Boolean) as string[];
+  if (payLines.length) y -= 10;
+  for (const n of payLines) {
+    for (const line of safe(n).match(/.{1,95}(\s|$)/g) ?? []) {
+      text(page, line.trim(), MARGIN, y, 9, regular, grey);
+      y -= 12;
+    }
   }
 
   // Fusszeile

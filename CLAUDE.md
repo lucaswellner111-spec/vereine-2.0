@@ -13,7 +13,7 @@ Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und D
 - `npm run typecheck` · `npm run build` · `npm test` (API-Tests nutzen PGlite, kein Docker nötig)
 - Lokal ohne Docker: `npm run dev:pglite -w @vereine/api` (API mit In-Memory-DB) + `npm run dev -w @vereine/web`; tsx erzeugt keine Decorator-Metadaten, daher immer `@Inject(Klasse)` im Konstruktor nutzen
 - DB: `npm run db:generate -w @vereine/api` (Migration erzeugen), `npm run db:migrate -w @vereine/api`
-- Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis), billing (Rechnungen Verein → Mitglied; Schema `billing`, nur eigene Tabellen)
+- Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis), billing (Rechnungen Verein → Mitglied; Schema `billing`, nur eigene Tabellen), metrics (/metrics, nur mit Token); auth enthält Zwei-Faktor (TOTP), notifications enthält Web-Push, orgs enthält Einladungen/Stammdaten, events enthält Serien und Kalender-Abo
 - Profile/Medien/Feed v2: siehe docs/ARCHITEKTUR.md. Bilder nur über MediaService (Typ am Inhalt, EXIF entfernt, Sichtbarkeit via ProfileAccess); Autoren-Profile über ProfileAccess.ensureMany.
 - Plattform-Moderation: Rolle `identity.users.platform_role` nur per CLI (`set-platform-admin`), Guard `PlatformAdminGuard`, Zugriffe auf Chat-Klartext über `AuditService` protokollieren.
 - Chat: Schema `chat` (keine FK auf andere Bereiche), Inhalte AES-256-GCM (`CHAT_MASTER_KEYS`), WebSocket-Gateway `src/chat-gateway.ts` (Container `chat-gateway`, ohne Schlüssel). Master-Schlüssel nie loggen/committen.

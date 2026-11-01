@@ -71,6 +71,34 @@
       "when": 1793543028934,
       "tag": "0009_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793545385042,
+      "tag": "0010_org_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793545813725,
+      "tag": "0011_event_series_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793546084458,
+      "tag": "0012_two_factor",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793546352209,
+      "tag": "0013_push",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import {
 } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { JobsService } from "../jobs/jobs.service";
+import { TwoFactorService } from "./two-factor.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, consents, sessions, users } from "../db/schema";
 
@@ -58,6 +59,7 @@ export class AuthService implements OnModuleInit {
     @Inject(DB) private readonly db: Database,
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(TwoFactorService) private readonly twoFactor: TwoFactorService,
   ) {}
 
   onModuleInit() {
@@ -109,7 +111,7 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(input: LoginInput, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
+  async login(input: LoginInput, userAgent?: string): Promise<{ user: PublicUser; token: string } | { challenge: string }> {
     // Fehlversuche je E-Mail zaehlen (auch fuer unbekannte Adressen: verraet nicht, ob ein Konto existiert).
     const fails = Number((await this.cache.get(failKey(input.email)).catch(() => null)) ?? 0);
     if (fails >= MAX_LOGIN_FAILS) {
@@ -128,6 +130,21 @@ export class AuthService implements OnModuleInit {
     }
     await this.cache.del(failKey(input.email)).catch(() => undefined);
 
+    // Zweiter Faktor aktiv: noch keine Sitzung, nur eine kurzlebige signierte Herausforderung.
+    if (await this.twoFactor.isEnabled(user.id)) return { challenge: this.twoFactor.challenge(user.id) };
+    return this.startSession(user, userAgent);
+  }
+
+  /** Zweiter Schritt der Anmeldung: Herausforderung + Code aus der Authenticator-App oder ein Notfallcode. */
+  async completeTwoFactorLogin(challenge: string, code: string, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
+    const userId = this.twoFactor.userFromChallenge(challenge);
+    if (!(await this.twoFactor.verifyCode(userId, code))) throw new UnauthorizedException("Der Code ist falsch.");
+    const [user] = await this.db.select().from(users).where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);
+    if (!user) throw new UnauthorizedException("Die Anmeldung ist abgelaufen. Bitte melde dich neu an.");
+    return this.startSession(user, userAgent);
+  }
+
+  private async startSession(user: typeof users.$inferSelect, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
     const token = randomBytes(32).toString("base64url");
     await this.db.insert(sessions).values({
       tokenHash: sha256(token),
@@ -201,6 +218,30 @@ export class AuthService implements OnModuleInit {
     await this.db.insert(auditLog).values({ userId: user.id, action: on ? "platform.admin.granted" : "platform.admin.revoked" });
     await this.invalidateUserSessions(user.id); // Rolle gilt sofort, nicht erst nach Cache-Ablauf
     return true;
+  }
+
+  // --- Zwei-Faktor (Einrichtung in den Einstellungen) ---------------------------------
+
+  twoFactorStatus(userId: string) {
+    return this.twoFactor.status(userId);
+  }
+
+  twoFactorSetup(user: PublicUser) {
+    return this.twoFactor.setup(user.id, user.email);
+  }
+
+  twoFactorEnable(userId: string, code: string) {
+    return this.twoFactor.enable(userId, code);
+  }
+
+  async twoFactorDisable(userId: string, password: string, code: string): Promise<void> {
+    if (!(await this.verifyPassword(userId, password))) throw new UnauthorizedException("Das Passwort ist falsch.");
+    await this.twoFactor.disable(userId, code);
+  }
+
+  async twoFactorRegenerate(userId: string, password: string, code: string): Promise<string[]> {
+    if (!(await this.verifyPassword(userId, password))) throw new UnauthorizedException("Das Passwort ist falsch.");
+    return this.twoFactor.regenerateRecoveryCodes(userId, code);
   }
 
   /** Prueft das Passwort eines bereits eingeloggten Nutzers (fuer sensible Aktionen). */

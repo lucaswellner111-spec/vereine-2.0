@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
+  cancelEventSchema,
   createEventSchema,
   createTeamSchema,
   rsvpSchema,
@@ -81,8 +82,8 @@ export class EventsController {
 
   @Post("events/:id/cancel")
   @HttpCode(204)
-  cancel(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
-    return this.events.cancel(user, id);
+  cancel(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    return this.events.cancel(user, id, parse(cancelEventSchema, body ?? {}).scope);
   }
 
   // --- Teams ---

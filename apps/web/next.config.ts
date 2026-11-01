@@ -12,6 +12,8 @@ const csp = [
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
   "object-src 'none'",
 ].join("; ");
 
@@ -25,6 +27,8 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // Der Service Worker darf nie veraltet aus dem Cache kommen (sonst bleiben Updates haengen).
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, max-age=0" }, { key: "Service-Worker-Allowed", value: "/" }] },
       {
         source: "/(.*)",
         headers: [

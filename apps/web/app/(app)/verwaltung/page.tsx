@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ORG_ROLES, type MemberItem, type OrgDetail, type OrgRole, type OrgSummary, type ReportItem } from "@vereine/shared";
 import { Alert, Badge, Button, Card, PageHeader } from "@/components/ui";
 import { InvoicesAdmin } from "@/components/invoices-admin";
+import { BillingProfileAdmin, InvitesAdmin } from "@/components/org-onboarding-admin";
 import { EventsAdmin } from "@/components/events-admin";
 import { TeamsAdmin } from "@/components/teams-admin";
 import { api, describeError } from "@/lib/api";
@@ -13,7 +14,7 @@ import { api, describeError } from "@/lib/api";
 const roleLabel: Record<OrgRole, string> = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" };
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
 
-type Tab = "Anträge" | "Mitglieder" | "Teams" | "Termine" | "Moderation" | "Rechnungen";
+type Tab = "Anträge" | "Mitglieder" | "Einladungen" | "Teams" | "Termine" | "Moderation" | "Rechnungen" | "Stammdaten";
 
 export default function AdminPage() {
   const [orgs, setOrgs] = useState<OrgSummary[] | null>(null);
@@ -44,9 +45,9 @@ export default function AdminPage() {
   const role = detail?.viewer.role;
   const tabs: Tab[] =
     role === "admin"
-      ? ["Anträge", "Mitglieder", "Teams", "Termine", "Moderation", "Rechnungen"]
+      ? ["Anträge", "Mitglieder", "Einladungen", "Teams", "Termine", "Moderation", "Rechnungen", "Stammdaten"]
       : role === "treasurer"
-        ? ["Rechnungen"]
+        ? ["Rechnungen", "Stammdaten"]
         : ["Termine", "Moderation"];
 
   useEffect(() => {
@@ -106,6 +107,8 @@ export default function AdminPage() {
 
       {detail && slug && tab === "Anträge" && <Members slug={slug} mode="pending" onError={setError} onChanged={refresh} />}
       {detail && slug && tab === "Mitglieder" && <Members slug={slug} mode="active" onError={setError} onChanged={refresh} />}
+      {detail && slug && tab === "Einladungen" && <InvitesAdmin slug={slug} onError={setError} />}
+      {detail && slug && tab === "Stammdaten" && <BillingProfileAdmin slug={slug} canEdit={role === "admin"} onError={setError} />}
       {detail && slug && tab === "Teams" && <TeamsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Termine" && <EventsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Moderation" && <Moderation slug={slug} onError={setError} />}

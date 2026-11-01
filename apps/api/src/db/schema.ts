@@ -72,6 +72,27 @@ export const auditLog = identity.table("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Zwei-Faktor (TOTP): Geheimnis verschluesselt; enabled_at = null bedeutet Einrichtung noch nicht bestaetigt. */
+export const userTotp = identity.table("user_totp", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  secretEnc: text("secret_enc").notNull(),
+  enabledAt: timestamp("enabled_at", { withTimezone: true }),
+  /** Letzter akzeptierter Zeitschritt (jeder Code gilt nur einmal). */
+  lastStep: integer("last_step").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const recoveryCodes = identity.table(
+  "recovery_codes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (t) => [index("recovery_codes_user_idx").on(t.userId)],
+);
+
 // --- Vereine, Beitraege, Feed ------------------------------------------------
 
 export const organizations = social.table("organizations", {
@@ -81,8 +102,29 @@ export const organizations = social.table("organizations", {
   category: text("category").notNull(),
   city: text("city").notNull(),
   about: text("about").notNull().default(""),
+  /** Stammdaten fuer Rechnungen (Anschrift, IBAN, Steuerhinweis); nur Vorstand/Kassenwart sehen und aendern sie. */
+  address: text("address").notNull().default(""),
+  iban: text("iban").notNull().default(""),
+  taxInfo: text("tax_info").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Einladungslinks: nur der SHA-256-Hash des Tokens wird gespeichert (wie bei Sessions). */
+export const orgInvites = social.table(
+  "org_invites",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    maxUses: integer("max_uses").notNull(),
+    uses: integer("uses").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("org_invites_org_idx").on(t.orgId, t.createdAt)],
+);
 
 export const orgMembers = social.table(
   "org_members",
@@ -212,13 +254,26 @@ export const events = social.table(
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }),
     visibility: text("visibility").notNull().default("members"), // public | members
+    /** Termine einer Wiederholungsserie teilen sich diese ID. */
+    seriesId: uuid("series_id"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     remindedAt: timestamp("reminded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("events_org_starts_idx").on(t.orgId, t.startsAt), index("events_starts_idx").on(t.startsAt)],
+  (t) => [
+    index("events_org_starts_idx").on(t.orgId, t.startsAt),
+    index("events_starts_idx").on(t.startsAt),
+    index("events_series_idx").on(t.seriesId),
+  ],
 );
+
+/** Kalender-Abo-Link je Nutzer (nur der Hash des Tokens wird gespeichert). */
+export const calendarTokens = social.table("calendar_tokens", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const eventRsvps = social.table(
   "event_rsvps",
@@ -389,6 +444,9 @@ export const invoices = billing.table(
     recipientAddress: text("recipient_address").notNull().default(""),
     issuerName: text("issuer_name").notNull(),
     issuerCity: text("issuer_city").notNull().default(""),
+    issuerAddress: text("issuer_address").notNull().default(""),
+    issuerIban: text("issuer_iban").notNull().default(""),
+    issuerTaxInfo: text("issuer_tax_info").notNull().default(""),
     issueDate: date("issue_date", { mode: "string" }),
     dueDate: date("due_date", { mode: "string" }).notNull(),
     note: text("note").notNull().default(""),
@@ -435,4 +493,19 @@ export const invoiceCounters = billing.table(
     lastNo: integer("last_no").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.year] })],
+);
+
+/** Web-Push-Abos der Geraete eines Nutzers (Endpunkt + Schluessel des Browsers). */
+export const pushSubscriptions = social.table(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );

@@ -4,6 +4,7 @@ import type { NotificationItem, NotificationsResponse } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { JobsService } from "../jobs/jobs.service";
 import { notifications } from "../db/schema";
+import { PushService, pushMessage } from "./push.service";
 
 type Type = NotificationItem["type"];
 
@@ -16,6 +17,7 @@ export class NotificationsService implements OnModuleInit {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   onModuleInit() {
@@ -25,7 +27,10 @@ export class NotificationsService implements OnModuleInit {
   }
 
   private async insert(userIds: string[], type: Type, data: Record<string, string>) {
-    if (userIds.length) await this.db.insert(notifications).values(userIds.map((userId) => ({ userId, type, data })));
+    if (!userIds.length) return;
+    await this.db.insert(notifications).values(userIds.map((userId) => ({ userId, type, data })));
+    // Push ist ein Zusatz: Fehler duerfen das Speichern der Benachrichtigung nie beeintraechtigen.
+    await this.push.sendToUsers(userIds, { ...pushMessage(type, data), tag: type }).catch(() => undefined);
   }
 
   /**

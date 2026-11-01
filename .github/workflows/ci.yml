@@ -18,3 +18,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Nur Laufzeit-Abhaengigkeiten; Funde in reinen Entwicklungswerkzeugen (drizzle-kit/esbuild) blockieren nicht.
+      - run: npm audit --omit=dev --audit-level=high

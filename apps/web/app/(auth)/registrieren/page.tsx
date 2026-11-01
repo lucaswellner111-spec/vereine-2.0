@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Checkbox, Field } from "@/components/ui";
 import { describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { safeNext, withNext } from "@/lib/next-url";
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
+  // Erst nach dem Laden gesetzt, damit Server- und Client-Ausgabe uebereinstimmen.
+  const [nextTarget, setNextTarget] = useState("");
+  useEffect(() => setNextTarget(safeNext(window.location.search, "")), []);
   const [form, setForm] = useState({ displayName: "", email: "", password: "" });
   const [age, setAge] = useState(false);
   const [terms, setTerms] = useState(false);
@@ -30,7 +34,7 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       await register({ ...form, confirmAge16: true, acceptTerms: true, acceptPrivacy: true });
-      router.replace("/feed");
+      router.replace(safeNext(window.location.search));
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -64,7 +68,7 @@ export default function RegisterPage() {
       </Button>
       <p className="text-center text-sm text-muted">
         Schon registriert?{" "}
-        <Link href="/login" className="font-medium text-brand hover:underline">Anmelden</Link>
+        <Link href={withNext("/login", nextTarget)} className="font-medium text-brand hover:underline">Anmelden</Link>
       </p>
     </form>
   );

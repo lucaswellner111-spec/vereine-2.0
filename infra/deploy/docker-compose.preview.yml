@@ -54,6 +54,14 @@ services:
       CHAT_DEFAULT_RETENTION_DAYS: ${CHAT_DEFAULT_RETENTION_DAYS:-365}
       COOKIE_SECURE: ${COOKIE_SECURE:-false} # true, sobald HTTPS aktiv ist
       WEB_ORIGIN: ${WEB_ORIGIN:-}
+      # Zwei-Faktor: 32 Byte base64 (openssl rand -base64 32). Verlust = 2FA-Geheimnisse unlesbar, Nutzer muessten 2FA neu einrichten.
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      # Web-Push (VAPID, npx web-push generate-vapid-keys); leer = Push aus
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-https://klubnest.de}
+      # Prometheus-Token fuer /metrics (leer = Route aus)
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - mediadata:/data/media
     healthcheck:
@@ -86,6 +94,9 @@ services:
       CHAT_ACTIVE_KEY_VERSION: ${CHAT_ACTIVE_KEY_VERSION:-1}
       CHAT_DEFAULT_RETENTION_DAYS: ${CHAT_DEFAULT_RETENTION_DAYS:-365}
       WORKER_CONCURRENCY: "5"
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-https://klubnest.de}
     volumes:
       - mediadata:/data/media
     depends_on:

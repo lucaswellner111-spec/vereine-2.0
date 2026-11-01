@@ -24,11 +24,11 @@ function describe(n: NotificationItem): { text: string; href: string } {
         href: `/vereine/${d.orgSlug}`,
       };
     case "event_created":
-      return { text: `Neuer Termin bei ${d.orgName}: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
+      return { text: `Neuer Termin${d.series ? `serie (${d.series}×)` : ""} bei ${d.orgName}: ${d.title} (ab ${fmt(d.startsAt)})`, href: "/kalender" };
     case "event_reminder":
       return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: "/kalender" };
     case "event_canceled":
-      return { text: `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
+      return { text: d.series ? `Abgesagt: ${d.title} – ${d.series} Termine ab ${fmt(d.startsAt)}` : `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
     case "new_follower":
       return { text: `${d.name} folgt dir jetzt.`, href: `/profil/${d.handle}` };
     case "follow_request":

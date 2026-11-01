@@ -6,7 +6,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 | Punkt | Warum | Blockiert durch |
 |---|---|---|
 | E-Mail-Bestätigung + Passwort-Reset | Schließt die Konto-Enumeration bei der Registrierung (409 verrät, ob eine E-Mail existiert) und erlaubt Wiederherstellung | Mailanbieter + SPF/DKIM/DMARC |
-| 2FA (TOTP) und Passkeys | Schutz bei gestohlenen Passwörtern; Pflicht für Vorstände empfohlen | – (kann sofort gebaut werden, nach Profil/Feed) |
+| Passkeys (WebAuthn); 2FA-Pflicht für Vorstände/Plattform-Admins | TOTP ist gebaut (freiwillig); Pflicht und Passkeys fehlen | – |
 | Datenbank-Rollen je Bereich (identity/social/chat/billing) | Least Privilege: ein SQL-Fehler im Chat soll keine Nutzerdaten lesen können | Refactor auf mehrere DB-Verbindungen; sinnvoll beim DB-Server-Umzug |
 | CSP mit Nonces statt 'unsafe-inline' | Härtung gegen XSS | Next.js-Middleware |
 | Monitoring + Alarme (Prometheus/Grafana/Loki) | Auslöser der Server-Aufteilung sichtbar machen, Worker-Ausfall erkennen | – |
@@ -39,7 +39,11 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Rechnungen (Verein → Mitglied) sind gebaut (Entwurf/final/bezahlt/Storno, PDF, CSV). Offen: SEPA-Lastschrift und Online-Zahlung, E-Rechnung (XRechnung/ZUGFeRD), echtes DATEV-Format, Mahnstufen, Serienrechnungen/Beitragsklassen, Vereinsanschrift/Steuernummer/IBAN auf der Rechnung (Vereinsstammdaten), Abo-Abrechnung Plattform → Verein.
 - Hinweis npm audit: 4 moderate Funde nur in der Entwicklungskette drizzle-kit → esbuild (Dev-Server); nicht im Betrieb, erledigt sich mit einem drizzle-kit-Update.
 - ML-Ranking (Phase 4): Ereignis-Erfassung (Impressionen/Klicks, nur mit Einwilligung), Modell, A/B-Tests. Voraussetzung: Feed-Algorithmus v2 und genügend Daten.
-- Kalender-Abo per Link (iCal-Feed), Wiederholungstermine.
+- Kalender: Termine einer Serie lassen sich nur gemeinsam absagen (ab einem Termin); Einzeländerungen/Verschieben von Serien fehlen.
+- Push: Chat-Nachrichten (Zustellweg über Realtime-Bus), Einstellungen je Mitteilungsart, Ruhezeiten; E-Mail-Benachrichtigungen (Mailanbieter).
+- Qualität: Ende-zu-Ende-Tests (Playwright) in CI, Lasttest mit k6 auf Staging ausführen, Barrierefreiheitsprüfung.
+- Monitoring: Prometheus/Grafana/Alertmanager auf dem Server aufsetzen (Messwerte unter /metrics sind vorbereitet).
+- Spenden-Grundgerüst (Datenmodell, Anbieter-Schnittstelle, Test-Anbieter) – bewusst noch nicht begonnen, hängt an der Wahl des Zahlungsanbieters (Mollie/Stripe Connect).
 - Mitgliederstammdaten (Adresse, Geburtstag) mit AVV, Beitragsklassen.
 - Vereins-Onboarding mit Gemeinnützigkeitsprüfung und Zahlungs-KYC.
 - Hashtags, Suche über Beiträge, Stories/Reels (nur falls gewünscht).

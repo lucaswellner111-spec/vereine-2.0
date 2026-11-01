@@ -5,12 +5,14 @@ const tabs = [
   { href: "/einstellungen/profil", label: "Profil" },
   { href: "/einstellungen/datenschutz", label: "Datenschutz" },
   { href: "/einstellungen/sicherheit", label: "Sicherheit" },
+  { href: "/einstellungen/mitteilungen", label: "Mitteilungen" },
+  { href: "/einstellungen/kalender", label: "Kalender" },
   { href: "/rechnungen", label: "Rechnungen" },
 ];
 
 export function SettingsTabs({ active }: { active: string }) {
   return (
-    <nav aria-label="Einstellungen" className="mb-5 inline-flex rounded-lg border border-border bg-surface p-1">
+    <nav aria-label="Einstellungen" className="mb-5 inline-flex max-w-full flex-wrap rounded-lg border border-border bg-surface p-1">
       {tabs.map((t) => (
         <Link
           key={t.href}

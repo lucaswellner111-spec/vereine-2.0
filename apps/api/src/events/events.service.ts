@@ -6,6 +6,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { CreateEventInput, EventItem, OrgRole, PublicUser, RsvpItem, RsvpStatus } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
@@ -14,7 +15,8 @@ import { JobsService } from "../jobs/jobs.service";
 import { eventRsvps, events, follows, orgMembers, organizations, teamMembers, teams } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
-import { buildIcs } from "./ics";
+import { buildIcs, buildIcsFeed } from "./ics";
+import { occurrences } from "./recurrence";
 
 const STAFF: OrgRole[] = ["admin", "moderator"];
 const REMINDER_LEAD_MS = 24 * 3600_000;
@@ -104,20 +106,28 @@ export class EventsService implements OnModuleInit {
       if (!team) throw new BadRequestException("Dieses Team gehoert nicht zum Verein.");
     }
 
-    const [row] = await this.db
+    const start = new Date(input.startsAt);
+    const duration = input.endsAt ? new Date(input.endsAt).getTime() - start.getTime() : null;
+    const starts = input.repeat ? occurrences(start, input.repeat) : [start];
+    const seriesId = input.repeat ? randomUUID() : null;
+    const created = await this.db
       .insert(events)
-      .values({
-        orgId: org.id,
-        teamId: input.teamId ?? null,
-        title: input.title,
-        description: input.description,
-        location: input.location,
-        startsAt: new Date(input.startsAt),
-        endsAt: input.endsAt ? new Date(input.endsAt) : null,
-        visibility: input.visibility,
-        createdBy: user.id,
-      })
+      .values(
+        starts.map((s) => ({
+          orgId: org.id,
+          teamId: input.teamId ?? null,
+          title: input.title,
+          description: input.description,
+          location: input.location,
+          startsAt: s,
+          endsAt: duration === null ? null : new Date(s.getTime() + duration),
+          visibility: input.visibility,
+          seriesId,
+          createdBy: user.id,
+        })),
+      )
       .returning();
+    const row = created[0];
 
     // Empfaenger: Teammitglieder bzw. alle aktiven Vereinsmitglieder (ohne den Ersteller).
     const recipients = input.teamId
@@ -129,24 +139,51 @@ export class EventsService implements OnModuleInit {
     await this.notifications.notify(
       recipients.map((r) => r.id).filter((id) => id !== user.id),
       "event_created",
-      { eventId: row.id, title: row.title, orgSlug: org.slug, orgName: org.name, startsAt: row.startsAt.toISOString() },
+      { eventId: row.id, title: row.title, orgSlug: org.slug, orgName: org.name, startsAt: row.startsAt.toISOString(), ...(input.repeat ? { series: String(created.length) } : {}) },
     );
     return this.get(user, row.id);
   }
 
-  async cancel(user: PublicUser, id: string): Promise<void> {
+  /** scope "series": dieser und alle spaeteren Termine der Serie. */
+  async cancel(user: PublicUser, id: string, scope: "single" | "series" = "single"): Promise<void> {
     const event = await this.get(user, id);
     if (!event.canManage) throw new ForbiddenException("Nur Vorstand und Moderation duerfen Termine absagen.");
-    if (event.canceled) return;
-    await this.db.update(events).set({ canceledAt: new Date() }).where(eq(events.id, id));
+    const wholeSeries = scope === "series" && !!event.seriesId;
+    if (event.canceled && !wholeSeries) return;
+    const target = wholeSeries
+      ? and(eq(events.seriesId, event.seriesId!), gte(events.startsAt, new Date(event.startsAt)), isNull(events.canceledAt))!
+      : eq(events.id, id);
+    const canceled = await this.db.update(events).set({ canceledAt: new Date() }).where(target).returning({ id: events.id });
     const attendees = await this.db
       .select({ userId: eventRsvps.userId })
       .from(eventRsvps)
-      .where(and(eq(eventRsvps.eventId, id), inArray(eventRsvps.status, ["yes", "maybe"])));
+      .where(and(inArray(eventRsvps.eventId, canceled.length ? canceled.map((c) => c.id) : [id]), inArray(eventRsvps.status, ["yes", "maybe"])));
     await this.notifications.notify(
       attendees.map((a) => a.userId).filter((u) => u !== user.id),
       "event_canceled",
-      { eventId: id, title: event.title, orgSlug: event.orgSlug, orgName: event.orgName, startsAt: event.startsAt },
+      { eventId: id, title: event.title, orgSlug: event.orgSlug, orgName: event.orgName, startsAt: event.startsAt, ...(wholeSeries ? { series: String(canceled.length) } : {}) },
+    );
+  }
+
+  /** Abo-Kalender eines Nutzers: sichtbare Termine der letzten 30 und naechsten 180 Tage (max. 500). */
+  async icsFeed(userId: string): Promise<string> {
+    const items = await this.query(
+      { id: userId } as PublicUser,
+      undefined,
+      { from: new Date(Date.now() - 30 * 86400_000).toISOString(), to: new Date(Date.now() + 180 * 86400_000).toISOString() },
+      500,
+    );
+    return buildIcsFeed(
+      items.map((e) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        location: e.location,
+        startsAt: new Date(e.startsAt),
+        endsAt: e.endsAt ? new Date(e.endsAt) : null,
+        canceled: e.canceled,
+        orgName: e.orgName,
+      })),
     );
   }
 
@@ -223,7 +260,7 @@ export class EventsService implements OnModuleInit {
     return parts.length ? or(...parts)! : sql`false`;
   }
 
-  private async query(user: PublicUser, extra: SQL | undefined, range: { from?: string; to?: string }): Promise<EventItem[]> {
+  private async query(user: PublicUser, extra: SQL | undefined, range: { from?: string; to?: string }, limit = 100): Promise<EventItem[]> {
     const v = await this.viewer(user.id);
     const from = range.from ? new Date(range.from) : new Date(Date.now() - 2 * 3600_000);
     if (Number.isNaN(from.getTime()) || (range.to && Number.isNaN(new Date(range.to).getTime()))) {
@@ -248,7 +285,7 @@ export class EventsService implements OnModuleInit {
         ),
       )
       .orderBy(asc(events.startsAt), asc(events.id))
-      .limit(100);
+      .limit(limit);
     if (rows.length === 0) return [];
 
     const ids = rows.map((r) => r.e.id);
@@ -282,6 +319,7 @@ export class EventsService implements OnModuleInit {
         endsAt: e.endsAt?.toISOString() ?? null,
         visibility: e.visibility as EventItem["visibility"],
         canceled: !!e.canceledAt,
+        seriesId: e.seriesId,
         counts: c,
         myStatus: mineBy.get(e.id) ?? null,
         canManage: !!role && STAFF.includes(role),

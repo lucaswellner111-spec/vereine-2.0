@@ -5,6 +5,7 @@ import { HttpException } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type Redis from "ioredis";
 import { REDIS } from "./cache/cache.module";
+import { recordRequest } from "./metrics/http-metrics";
 
 const isAuthRoute = (url: string) => url.startsWith("/auth/");
 
@@ -33,6 +34,11 @@ export async function configureApp(
       keyGenerator: (req) => `${req.ip}:${isAuthRoute(req.url) ? "auth" : "gen"}`,
     });
   }
+
+  // Messwerte (Anzahl und Dauer je Statusklasse), siehe /metrics
+  fastify.addHook("onResponse", async (req, reply) => {
+    recordRequest(req.method, reply.statusCode, reply.elapsedTime / 1000);
+  });
 
   // CSRF-Schutz zusaetzlich zu SameSite=Lax: Origin eines schreibenden Requests muss passen.
   const allowedOrigin = process.env.WEB_ORIGIN;

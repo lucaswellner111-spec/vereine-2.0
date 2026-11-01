@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { SessionInfo } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { Alert, Badge, Button, Card, Field, PageHeader } from "@/components/ui";
+import { TwoFactorCard } from "@/components/two-factor-card";
 import { api, describeError } from "@/lib/api";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -52,6 +53,8 @@ export default function SecurityPage() {
       <SettingsTabs active="/einstellungen/sicherheit" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
+
+      <TwoFactorCard onError={setError} />
 
       <h2 className="mb-2 font-semibold">Passwort ändern</h2>
       <Card className="mb-6">
