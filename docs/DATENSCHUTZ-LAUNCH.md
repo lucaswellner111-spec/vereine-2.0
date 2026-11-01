@@ -59,3 +59,7 @@ Hosting Hetzner DE (AVV mit Hetzner **abschließen**), TLS überall + HSTS, stre
 3. Was passiert bei Austritt, Konto- und Vereinslöschung? Test dafür schreiben.
 4. Neue Unterauftragsverarbeiter oder Drittland? → Abschnitt 5.
 5. Offene Rechtsfrage? → Abschnitt 5 und `docs/OFFENE-PUNKTE.md`.
+
+## 7. Demo-Daten (Stand 2026-11-01)
+Auf klubnest.de liegen Demo-Konten und -Beiträge mit Fotos echter Personen (Lizenz/Einwilligung der Abgebildeten nicht geklärt, Kinder erkennbar). Sie dürfen nur zum internen Test dienen und müssen **vor dem Start mit echten Nutzern** gelöscht werden (`infra/demo/README.md`). Nie solche Bilder in Marketing oder öffentliche Seiten übernehmen, ohne Rechteklärung (Recht am eigenen Bild, KUG/DSGVO).
+

@@ -14,3 +14,7 @@ infra/**/*.tfvars
 *.tsbuildinfo
 infra/ansible/inventory.ini
 apps/api/data/
+
+# Demo-Daten: Bilder (Lizenz beim Nutzer) und lokale Ausgaben nie einchecken
+infra/demo/images/
+infra/demo/out/

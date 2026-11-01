@@ -61,3 +61,6 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Fristen festlegen: Benachrichtigungen (Vorschlag 90 Tage), Zugriffsprotokoll (12 Monate, Finanzaktionen länger), Server-Logs (14 Tage), Backups (14 Tage) → in Löschkonzept aufnehmen.
 - AVV-Vorlage für Vereine und digitale Akzeptanz beim Onboarding fehlen (Pflicht, weil die Plattform bei Mitgliederdaten Auftragsverarbeiter ist).
 
+## Demo-Daten auf klubnest.de (angelegt 2026-11-01) – VOR DEM LAUNCH LÖSCHEN
+12 Demo-Konten (`@demo.klubnest.invalid`), 2 Vereine (Freiwillige Feuerwehr Wesenberg, FC Blau-Weiß Lindenau), 14 Beiträge mit Fotos echter Personen (auch Kinder), Konto lucaswellner111@gmail.com als Mitglied beider Vereine eingetragen. Anleitung zum Löschen: `infra/demo/README.md`. Datenschutz: Fotos nur nach Anmeldung abrufbar; vor echten Nutzern entfernen (siehe `docs/DATENSCHUTZ-LAUNCH.md`).
+
