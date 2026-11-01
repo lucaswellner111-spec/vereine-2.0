@@ -5,9 +5,9 @@ export function Logo({ className }: { className?: string }) {
   return (
     <Link href="/" className={`inline-flex items-center gap-2 font-semibold tracking-tight ${className ?? ""}`}>
       <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-contrast">
-        V
+        K
       </span>
-      <span>Vereine 2.0</span>
+      <span>Klubnest</span>
     </Link>
   );
 }
@@ -34,7 +34,7 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-border py-8 text-sm text-muted">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4">
-        <p>© {new Date().getFullYear()} Vereine 2.0 · Gehostet in Deutschland</p>
+        <p>© {new Date().getFullYear()} Klubnest · Gehostet in Deutschland</p>
         <nav className="flex gap-4">
           <Link href="/datenschutz" className="hover:text-text">Datenschutz</Link>
           <Link href="/impressum" className="hover:text-text">Impressum</Link>

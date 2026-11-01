@@ -36,7 +36,8 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 
 ## Produkt
 - Spenden (Mollie/Stripe Connect, Zuwendungsbestätigungen) – braucht Zahlungsanbieter + Testschlüssel.
-- Beitragsrechnungen, SEPA, E-Rechnung (XRechnung/ZUGFeRD), DATEV – danach Abo-Abrechnung der Vereine.
+- Rechnungen (Verein → Mitglied) sind gebaut (Entwurf/final/bezahlt/Storno, PDF, CSV). Offen: SEPA-Lastschrift und Online-Zahlung, E-Rechnung (XRechnung/ZUGFeRD), echtes DATEV-Format, Mahnstufen, Serienrechnungen/Beitragsklassen, Vereinsanschrift/Steuernummer/IBAN auf der Rechnung (Vereinsstammdaten), Abo-Abrechnung Plattform → Verein.
+- Hinweis npm audit: 4 moderate Funde nur in der Entwicklungskette drizzle-kit → esbuild (Dev-Server); nicht im Betrieb, erledigt sich mit einem drizzle-kit-Update.
 - ML-Ranking (Phase 4): Ereignis-Erfassung (Impressionen/Klicks, nur mit Einwilligung), Modell, A/B-Tests. Voraussetzung: Feed-Algorithmus v2 und genügend Daten.
 - Kalender-Abo per Link (iCal-Feed), Wiederholungstermine.
 - Mitgliederstammdaten (Adresse, Geburtstag) mit AVV, Beitragsklassen.

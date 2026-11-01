@@ -23,18 +23,18 @@ export default function HomePage() {
       <main>
         <section className="relative overflow-hidden">
           <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_20%_-10%,color-mix(in_srgb,var(--brand)_22%,transparent),transparent),radial-gradient(40rem_25rem_at_90%_10%,color-mix(in_srgb,var(--brand)_12%,transparent),transparent)]" />
-          <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:py-24 lg:grid-cols-2">
-            <div className="text-center lg:text-left">
+          <div className="mx-auto flex max-w-4xl flex-col items-center gap-14 px-4 py-16 sm:py-24">
+            <div className="text-center">
               <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
                 <span className="size-1.5 rounded-full bg-brand" /> DSGVO-konform · Gehostet in Deutschland
               </p>
               <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
                 Das Social Media für <span className="text-brand">Vereine, Mitglieder und Fans.</span>
               </h1>
-              <p className="mx-auto mt-6 max-w-xl text-lg text-muted lg:mx-0">
+              <p className="mx-auto mt-6 max-w-xl text-lg text-muted">
                 Vernetzen, informieren, spenden und verwalten – ohne Tracking und ohne Werbeprofile.
               </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3 lg:justify-start">
+              <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Link href="/registrieren" className="rounded-xl bg-brand px-6 py-3.5 font-semibold text-brand-contrast shadow-lg shadow-brand/25 transition hover:-translate-y-0.5 hover:bg-brand-hover">
                   Kostenlos registrieren
                 </Link>
@@ -42,7 +42,7 @@ export default function HomePage() {
                   Anmelden
                 </Link>
               </div>
-              <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted lg:justify-start">
+              <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted">
                 <li>✓ Keine Werbung</li>
                 <li>✓ Kein Tracking</li>
                 <li>✓ Daten exportieren &amp; löschen</li>

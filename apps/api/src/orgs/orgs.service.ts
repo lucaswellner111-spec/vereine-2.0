@@ -73,6 +73,17 @@ export class OrgsService {
     return this.summaries(rows.map((r) => r.org));
   }
 
+  /** Vereine, in denen der Nutzer eine Verwaltungsrolle hat (Vorstand, Kassenwart, Moderation). */
+  async managedBy(userId: string): Promise<OrgSummary[]> {
+    const rows = await this.db
+      .select({ org: organizations })
+      .from(orgMembers)
+      .innerJoin(organizations, eq(organizations.id, orgMembers.orgId))
+      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"), inArray(orgMembers.role, ["admin", "treasurer", "moderator"])))
+      .orderBy(organizations.name);
+    return this.summaries(rows.map((r) => r.org));
+  }
+
   async detail(slug: string, userId: string): Promise<OrgDetail> {
     const org = await this.requireBySlug(slug);
     const [summary] = await this.summaries([org]);
@@ -289,6 +300,24 @@ export class OrgsService {
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId), eq(orgMembers.status, "active")))
       .limit(1);
     return (m?.role as OrgRole) ?? null;
+  }
+
+  /** IDs aller aktiven Mitglieder (fuer Rechnungsempfaenger), begrenzt auf 2000. */
+  async allActiveMemberIds(orgId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))
+      .limit(2000);
+    return rows.map((r) => r.userId);
+  }
+
+  /** Slug und Name zu Verein-IDs (Lesezugang fuer andere Bereiche, z. B. billing). */
+  async lookupByIds(ids: string[]): Promise<Map<string, { slug: string; name: string; city: string }>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+    const rows = await this.db.select().from(organizations).where(inArray(organizations.id, unique));
+    return new Map(rows.map((o) => [o.id, { slug: o.slug, name: o.name, city: o.city }]));
   }
 
   private async summaries(rows: OrgRow[]): Promise<OrgSummary[]> {

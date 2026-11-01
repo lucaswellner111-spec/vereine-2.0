@@ -48,3 +48,18 @@ describe("Chat-Bereich", () => {
     }
   });
 });
+
+/** Der Abrechnungs-Bereich kennt nur seine eigenen Tabellen; Vereins-/Nutzerdaten kommen ueber OrgsService/UsersDirectory. */
+describe("Billing-Bereich", () => {
+  const BILLING_TABLES = ["billing", "invoices", "invoiceItems", "invoiceCounters"];
+  it("importiert nur billing-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "billing"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !BILLING_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

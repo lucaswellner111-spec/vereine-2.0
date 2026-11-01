@@ -5,6 +5,7 @@ const tabs = [
   { href: "/einstellungen/profil", label: "Profil" },
   { href: "/einstellungen/datenschutz", label: "Datenschutz" },
   { href: "/einstellungen/sicherheit", label: "Sicherheit" },
+  { href: "/rechnungen", label: "Rechnungen" },
 ];
 
 export function SettingsTabs({ active }: { active: string }) {

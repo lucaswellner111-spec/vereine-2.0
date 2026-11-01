@@ -35,6 +35,10 @@ function describe(n: NotificationItem): { text: string; href: string } {
       return { text: `${d.name} möchte dir folgen.`, href: "/einstellungen/profil" };
     case "follow_accepted":
       return { text: `${d.name} hat deine Folgeanfrage angenommen.`, href: `/profil/${d.handle}` };
+    case "invoice_new":
+      return { text: `Neue Rechnung ${d.number} von ${d.orgName}: ${d.amount}`, href: "/rechnungen" };
+    case "invoice_overdue":
+      return { text: `Rechnung ${d.number} von ${d.orgName} ist überfällig.`, href: "/rechnungen" };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }

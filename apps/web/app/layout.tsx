@@ -4,7 +4,7 @@ import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Vereine 2.0", template: "%s · Vereine 2.0" },
+  title: { default: "Klubnest", template: "%s · Klubnest" },
   description: "Die datenschutzfreundliche Plattform für Vereine, Mitglieder und Fans – gehostet in Deutschland.",
 };
 

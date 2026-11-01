@@ -40,6 +40,12 @@ export class OrgsController {
     return this.orgs.publishable(user.id);
   }
 
+  /** Vereine mit Verwaltungsrolle (Vorstand, Kassenwart, Moderation) - fuer die Verwaltungsseite. */
+  @Get("managed")
+  managed(@CurrentUser() user: PublicUser): Promise<OrgSummary[]> {
+    return this.orgs.managedBy(user.id);
+  }
+
   @Post()
   create(@CurrentUser() user: PublicUser, @Body() body: unknown): Promise<OrgDetail> {
     return this.orgs.create(user, parse(createOrgSchema, body));

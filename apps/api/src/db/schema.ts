@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -366,4 +367,72 @@ export const feedFeedback = social.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.targetKind, t.targetId] })],
+);
+
+// --- Abrechnung (eigener Bereich, KEINE Fremdschluessel auf identity/social) ---------
+// Personen und Vereine sind einfache UUID-Spalten; Name/Anschrift werden als Kopie gespeichert
+// (GoBD: Rechnungen bleiben unveraendert, auch wenn Konto oder Verein sich aendern).
+
+export const billing = pgSchema("billing");
+
+export const invoices = billing.table(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull(),
+    /** Lueckenloser Nummernkreis je Verein und Jahr ("2026-0001"); erst beim Finalisieren gesetzt. */
+    number: text("number"),
+    status: text("status").notNull().default("draft"), // draft | open | paid | void
+    /** Null nach Loeschung des Empfaengerkontos (Name wird dann anonymisiert). */
+    recipientUserId: uuid("recipient_user_id"),
+    recipientName: text("recipient_name").notNull(),
+    recipientAddress: text("recipient_address").notNull().default(""),
+    issuerName: text("issuer_name").notNull(),
+    issuerCity: text("issuer_city").notNull().default(""),
+    issueDate: date("issue_date", { mode: "string" }),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    note: text("note").notNull().default(""),
+    vatNote: text("vat_note").notNull().default(""),
+    currency: text("currency").notNull().default("EUR"),
+    netCents: integer("net_cents").notNull().default(0),
+    vatCents: integer("vat_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    overdueNotifiedAt: timestamp("overdue_notified_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("invoices_org_number_unique").on(t.orgId, t.number),
+    index("invoices_org_created_idx").on(t.orgId, t.createdAt),
+    index("invoices_recipient_idx").on(t.recipientUserId),
+    index("invoices_open_due_idx").on(t.status, t.dueDate),
+  ],
+);
+
+export const invoiceItems = billing.table(
+  "invoice_items",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    description: text("description").notNull(),
+    quantity: integer("quantity").notNull(),
+    unitCents: integer("unit_cents").notNull(),
+    vatRate: integer("vat_rate").notNull(),
+  },
+  (t) => [index("invoice_items_invoice_idx").on(t.invoiceId, t.position)],
+);
+
+export const invoiceCounters = billing.table(
+  "invoice_counters",
+  {
+    orgId: uuid("org_id").notNull(),
+    year: integer("year").notNull(),
+    lastNo: integer("last_no").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.year] })],
 );

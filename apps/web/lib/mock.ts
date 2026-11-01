@@ -170,11 +170,5 @@ export const members = [
   { id: "m5", name: "Sabine Koch", role: "Mitglied", fee: "Familie", status: "ruhend", since: "2008" },
 ];
 
-export const invoices = [
-  { id: "RE-2026-0042", to: "Jonas Weber", item: "Jahresbeitrag 2026", amount: 84, status: "bezahlt", due: "31.01.2026" },
-  { id: "RE-2026-0043", to: "Paul Hoffmann", item: "Jahresbeitrag 2026 (Jugend)", amount: 36, status: "offen", due: "31.01.2026" },
-  { id: "RE-2026-0044", to: "Sabine Koch", item: "Jahresbeitrag 2026 (Familie)", amount: 120, status: "überfällig", due: "31.01.2026" },
-];
-
 export const eur = (n: number) =>
   new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);

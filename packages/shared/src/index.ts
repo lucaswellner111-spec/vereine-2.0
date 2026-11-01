@@ -240,7 +240,9 @@ export type NotificationItem = {
     | "event_canceled"
     | "new_follower"
     | "follow_request"
-    | "follow_accepted";
+    | "follow_accepted"
+    | "invoice_new"
+    | "invoice_overdue";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
@@ -372,3 +374,61 @@ export type FollowRequest = { userId: string; handle: string; displayName: strin
 export const followDecisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
 export const feedbackSchema = z.object({ kind: z.enum(["hide", "mute_author", "mute_org"]) });
 export type MutedItem = { kind: "post" | "user" | "org"; id: string; label: string };
+
+// --- Rechnungen (Verein -> Mitglied) -----------------------------------------
+
+export const INVOICE_STATUS = ["draft", "open", "paid", "void"] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUS)[number];
+export const VAT_RATES = [0, 7, 19] as const;
+
+export const invoiceItemSchema = z.object({
+  description: z.string().trim().min(2).max(200),
+  quantity: z.number().int().min(1).max(10_000),
+  /** Einzelpreis netto in Cent. */
+  unitCents: z.number().int().min(0).max(100_000_000),
+  vatRate: z.number().int().refine((v) => (VAT_RATES as readonly number[]).includes(v), "USt-Satz: 0, 7 oder 19"),
+});
+export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;
+
+export const createInvoiceSchema = z.object({
+  recipientUserId: z.string().uuid(),
+  /** Optionale Anschrift des Empfaengers (wird als Kopie in der Rechnung gespeichert). */
+  recipientAddress: z.string().trim().max(300).default(""),
+  /** Faelligkeit als Datum (JJJJ-MM-TT). */
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT"),
+  note: z.string().trim().max(500).default(""),
+  items: z.array(invoiceItemSchema).min(1).max(30),
+});
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
+
+export const voidInvoiceSchema = z.object({ reason: z.string().trim().min(5).max(300) });
+
+export type InvoiceItemView = { description: string; quantity: number; unitCents: number; vatRate: number };
+export type InvoiceSummary = {
+  id: string;
+  orgSlug: string;
+  orgName: string;
+  /** Null solange die Rechnung ein Entwurf ist. */
+  number: string | null;
+  status: InvoiceStatus;
+  /** Anzeigestatus: offene Rechnungen nach Faelligkeit sind "overdue". */
+  displayStatus: InvoiceStatus | "overdue";
+  recipientName: string;
+  recipientUserId: string | null;
+  issueDate: string | null;
+  dueDate: string;
+  totalCents: number;
+  paidAt: string | null;
+};
+export type InvoiceDetail = InvoiceSummary & {
+  recipientAddress: string;
+  issuerName: string;
+  issuerCity: string;
+  note: string;
+  vatNote: string;
+  netCents: number;
+  vatCents: number;
+  items: InvoiceItemView[];
+  voidReason: string | null;
+};
+export type InvoiceRecipient = { userId: string; name: string };

@@ -4,15 +4,14 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ORG_ROLES, type MemberItem, type OrgDetail, type OrgRole, type OrgSummary, type ReportItem } from "@vereine/shared";
-import { Alert, Badge, Button, Card, ConceptNote, PageHeader } from "@/components/ui";
+import { Alert, Badge, Button, Card, PageHeader } from "@/components/ui";
+import { InvoicesAdmin } from "@/components/invoices-admin";
 import { EventsAdmin } from "@/components/events-admin";
 import { TeamsAdmin } from "@/components/teams-admin";
 import { api, describeError } from "@/lib/api";
-import { eur, invoices } from "@/lib/mock";
 
 const roleLabel: Record<OrgRole, string> = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" };
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
-const statusTone = { bezahlt: "brand", offen: "accent", überfällig: "danger" } as const;
 
 type Tab = "Anträge" | "Mitglieder" | "Teams" | "Termine" | "Moderation" | "Rechnungen";
 
@@ -24,7 +23,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api<OrgSummary[]>("/orgs/mine")
+    api<OrgSummary[]>("/orgs/managed")
       .then((o) => {
         setOrgs(o);
         if (o[0]) setSlug(o[0].slug);
@@ -42,10 +41,13 @@ export default function AdminPage() {
     refresh();
   }, [refresh]);
 
-  const isAdmin = detail?.viewer.role === "admin";
-  const tabs: Tab[] = isAdmin
-    ? ["Anträge", "Mitglieder", "Teams", "Termine", "Moderation", "Rechnungen"]
-    : ["Termine", "Moderation"];
+  const role = detail?.viewer.role;
+  const tabs: Tab[] =
+    role === "admin"
+      ? ["Anträge", "Mitglieder", "Teams", "Termine", "Moderation", "Rechnungen"]
+      : role === "treasurer"
+        ? ["Rechnungen"]
+        : ["Termine", "Moderation"];
 
   useEffect(() => {
     if (detail && !tabs.includes(tab)) setTab(tabs[0]);
@@ -107,27 +109,7 @@ export default function AdminPage() {
       {detail && slug && tab === "Teams" && <TeamsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Termine" && <EventsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Moderation" && <Moderation slug={slug} onError={setError} />}
-      {tab === "Rechnungen" && (
-        <>
-          <ConceptNote>Rechnungen, SEPA, E-Rechnung (XRechnung/ZUGFeRD) und DATEV-Export folgen im Modul „Abrechnung“. Aktuell Beispieldaten.</ConceptNote>
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border text-xs text-muted">
-                <tr><th className="p-3 font-medium">Nr.</th><th className="p-3 font-medium">An</th><th className="p-3 font-medium">Leistung</th><th className="p-3 font-medium">Betrag</th><th className="p-3 font-medium">Status</th></tr>
-              </thead>
-              <tbody>
-                {invoices.map((i) => (
-                  <tr key={i.id} className="border-b border-border last:border-0">
-                    <td className="p-3 font-mono text-xs">{i.id}</td><td className="p-3">{i.to}</td><td className="p-3">{i.item}</td>
-                    <td className="p-3">{eur(i.amount)}</td>
-                    <td className="p-3"><Badge tone={statusTone[i.status as keyof typeof statusTone]}>{i.status}</Badge></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </>
-      )}
+      {detail && slug && tab === "Rechnungen" && <InvoicesAdmin slug={slug} onError={setError} />}
     </>
   );
 }

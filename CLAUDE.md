@@ -13,7 +13,7 @@ Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und D
 - `npm run typecheck` · `npm run build` · `npm test` (API-Tests nutzen PGlite, kein Docker nötig)
 - Lokal ohne Docker: `npm run dev:pglite -w @vereine/api` (API mit In-Memory-DB) + `npm run dev -w @vereine/web`; tsx erzeugt keine Decorator-Metadaten, daher immer `@Inject(Klasse)` im Konstruktor nutzen
 - DB: `npm run db:generate -w @vereine/api` (Migration erzeugen), `npm run db:migrate -w @vereine/api`
-- Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis)
+- Module (apps/api/src): auth, privacy, orgs, posts (+Moderation), notifications, events (Termine/Teams), cache (Redis), billing (Rechnungen Verein → Mitglied; Schema `billing`, nur eigene Tabellen)
 - Profile/Medien/Feed v2: siehe docs/ARCHITEKTUR.md. Bilder nur über MediaService (Typ am Inhalt, EXIF entfernt, Sichtbarkeit via ProfileAccess); Autoren-Profile über ProfileAccess.ensureMany.
 - Plattform-Moderation: Rolle `identity.users.platform_role` nur per CLI (`set-platform-admin`), Guard `PlatformAdminGuard`, Zugriffe auf Chat-Klartext über `AuditService` protokollieren.
 - Chat: Schema `chat` (keine FK auf andere Bereiche), Inhalte AES-256-GCM (`CHAT_MASTER_KEYS`), WebSocket-Gateway `src/chat-gateway.ts` (Container `chat-gateway`, ohne Schlüssel). Master-Schlüssel nie loggen/committen.
@@ -29,5 +29,5 @@ Konzept/Plan: `~/.claude/plans/starry-brewing-lollipop.md`. Sprache der UI und D
 - Keine Geheimnisse einchecken (`.env*`, `*.tfvars`, `inventory.ini` sind ignoriert). Passwörter/Tokens nie in den Chat.
 - API-Eingaben immer mit Zod aus `packages/shared` validieren; Auth-Fehler generisch halten.
 - Schema-Änderungen nur per Drizzle-Migration; neue Endpunkte brauchen Tests in `apps/api/src/**/*.spec.ts`.
-- Frontend: Seiten sind bewusst Konzept-Shells mit Mock-Daten (`apps/web/lib/mock.ts`), die schrittweise an echte Funktionen/Dienste angebunden werden.
+- Frontend: Seiten sind teils noch Konzept-Shells mit Mock-Daten (`apps/web/lib/mock.ts`), die schrittweise an echte Funktionen/Dienste angebunden werden.
 - Vorschau-Server (Hetzner, nur HTTP, Testdaten): Deploy per `tar` über SSH nach `/opt/vereine`, siehe `infra/README.md`. Kein Commit/Push ohne Auftrag.

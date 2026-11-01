@@ -9,6 +9,7 @@ import {
   type SetConsentInput,
 } from "@vereine/shared";
 import { AuthService } from "../auth/auth.service";
+import { BillingService } from "../billing/billing.service";
 import { ChatService } from "../chat/chat.service";
 import { MediaService } from "../media/media.service";
 import { DB, type Database } from "../db/db.module";
@@ -21,6 +22,7 @@ export class PrivacyService {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(ChatService) private readonly chat: ChatService,
     @Inject(MediaService) private readonly mediaSvc: MediaService,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   /** Neuester Eintrag je Zweck; Zwecke ohne Eintrag gelten als nicht erteilt. */
@@ -89,6 +91,7 @@ export class PrivacyService {
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
       chat: chatData,
       media: await this.mediaSvc.countFor(user.id),
+      invoices: await this.billing.exportFor(user.id),
       activityLog: audit.map((a) => ({
         action: a.action,
         at: a.createdAt.toISOString(),
@@ -105,6 +108,7 @@ export class PrivacyService {
     await this.auth.invalidateUserSessions(user.id);
     await this.chat.eraseUser(user.id);
     await this.mediaSvc.eraseUser(user.id); // Bilddateien (Zeilen folgen per Kaskade)
+    await this.billing.anonymizeRecipient(user.id); // Rechnungen bleiben (GoBD), aber ohne Personenbezug
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, user.id));
