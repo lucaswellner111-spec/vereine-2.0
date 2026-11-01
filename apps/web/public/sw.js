@@ -27,15 +27,20 @@ self.addEventListener("push", (event) => {
     data = {};
   }
   const url = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/feed";
-  event.waitUntil(
+  const show = () =>
     self.registration.showNotification(data.title || "Klubnest", {
       body: data.body || "",
       tag: data.tag || "klubnest",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       data: { url },
-    }),
-  );
+    });
+  // Chat-Mitteilungen nicht anzeigen, solange die App im Vordergrund offen ist (dort kommt die Nachricht live an).
+  const skip =
+    typeof data.tag === "string" && data.tag.startsWith("chat-")
+      ? self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => list.some((c) => c.visibilityState === "visible"))
+      : Promise.resolve(false);
+  event.waitUntil(skip.then((hidden) => (hidden ? undefined : show())));
 });
 
 self.addEventListener("notificationclick", (event) => {

@@ -1,3 +1,4 @@
+import { PushService } from "../notifications/push.service";
 import {
   BadRequestException,
   ForbiddenException,
@@ -70,6 +71,7 @@ export class ChatService implements OnModuleInit {
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   onModuleInit() {
@@ -300,6 +302,11 @@ export class ChatService implements OnModuleInit {
       .set({ lastReadAt: row.createdAt })
       .where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, user.id)));
     await this.publish(members.map((m) => m.userId), { type: "message", conversationId: id, messageId });
+    // Push ans Handy: bewusst OHNE Absender und Inhalt (Sperrbildschirm, Datenschutz). Der Service Worker zeigt sie
+    // nicht an, solange die App im Vordergrund offen ist. Fehler duerfen das Senden nie beeintraechtigen.
+    void this.push
+      .sendToUsers(members.map((m) => m.userId).filter((u) => u !== user.id), { title: "Neue Nachricht", body: "Öffne Klubnest, um sie zu lesen.", url: "/chat", tag: `chat-${id}` })
+      .catch(() => undefined);
     return this.toMessage(row, key, id, user.id, new Map([[user.id, user.displayName]]));
   }
 

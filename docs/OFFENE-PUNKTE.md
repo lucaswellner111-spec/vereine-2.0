@@ -40,7 +40,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Hinweis npm audit: 4 moderate Funde nur in der Entwicklungskette drizzle-kit → esbuild (Dev-Server); nicht im Betrieb, erledigt sich mit einem drizzle-kit-Update.
 - ML-Ranking (Phase 4): Ereignis-Erfassung (Impressionen/Klicks, nur mit Einwilligung), Modell, A/B-Tests. Voraussetzung: Feed-Algorithmus v2 und genügend Daten.
 - Kalender: Termine einer Serie lassen sich nur gemeinsam absagen (ab einem Termin); Einzeländerungen/Verschieben von Serien fehlen.
-- Push: Chat-Nachrichten (Zustellweg über Realtime-Bus), Einstellungen je Mitteilungsart, Ruhezeiten; E-Mail-Benachrichtigungen (Mailanbieter).
+- Push: Einstellungen je Mitteilungsart und je Unterhaltung (stumm schalten), Absendername optional, Ruhezeiten; E-Mail-Benachrichtigungen (Mailanbieter).
 - Qualität: Ende-zu-Ende-Tests (Playwright) in CI, Lasttest mit k6 auf Staging ausführen, Barrierefreiheitsprüfung.
 - Monitoring: Prometheus/Grafana/Alertmanager auf dem Server aufsetzen (Messwerte unter /metrics sind vorbereitet).
 - Spenden-Grundgerüst (Datenmodell, Anbieter-Schnittstelle, Test-Anbieter) – bewusst noch nicht begonnen, hängt an der Wahl des Zahlungsanbieters (Mollie/Stripe Connect).
