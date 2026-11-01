@@ -268,6 +268,25 @@ export class BillingService implements OnModuleInit {
     return this.detail(updated);
   }
 
+  /** Kennzahlen fuer das Dashboard (Anzahl offen/ueberfaellig, Summen), nur Vorstand/Kassenwart. */
+  async dashboard(orgId: string) {
+    const rows = await this.db
+      .select({ status: invoices.status, due: invoices.dueDate, total: invoices.totalCents, paidAt: invoices.paidAt })
+      .from(invoices)
+      .where(eq(invoices.orgId, orgId))
+      .limit(10000);
+    const year = new Date().getFullYear();
+    let open = 0, overdue = 0, openCents = 0, paidThisYearCents = 0;
+    for (const r of rows) {
+      if (r.status === "open") {
+        open += 1;
+        openCents += r.total;
+        if (r.due < today()) overdue += 1;
+      } else if (r.status === "paid" && r.paidAt && r.paidAt.getFullYear() === year) paidThisYearCents += r.total;
+    }
+    return { open, overdue, openCents, paidThisYearCents };
+  }
+
   // --- Datenschutz --------------------------------------------------------------
 
   /**

@@ -5,6 +5,7 @@ const tabs = [
   { href: "/einstellungen/profil", label: "Profil" },
   { href: "/einstellungen/datenschutz", label: "Datenschutz" },
   { href: "/einstellungen/sicherheit", label: "Sicherheit" },
+  { href: "/einstellungen/vereinsdaten", label: "Vereinsdaten" },
   { href: "/einstellungen/mitteilungen", label: "Mitteilungen" },
   { href: "/einstellungen/kalender", label: "Kalender" },
   { href: "/rechnungen", label: "Rechnungen" },

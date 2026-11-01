@@ -509,3 +509,56 @@ export const pushSubscriptions = social.table(
   },
   (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );
+
+// --- Mitgliederverwaltung (eigener Bereich `members`, KEINE Fremdschluessel auf identity/social) ---
+// Personen und Vereine nur als UUID. Personenbezogene Felder werden bei Austritt/Kontoloeschung geloescht,
+// siehe docs/DATENSCHUTZ-LAUNCH.md (Abschnitt 4).
+
+export const membersArea = pgSchema("members");
+
+export const feeClasses = membersArea.table(
+  "fee_classes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull(),
+    name: text("name").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    interval: text("interval").notNull(), // monthly | quarterly | halfyearly | yearly
+    description: text("description").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("fee_classes_org_name_unique").on(t.orgId, t.name), index("fee_classes_org_idx").on(t.orgId)],
+);
+
+export const memberProfiles = membersArea.table(
+  "member_profiles",
+  {
+    orgId: uuid("org_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    /** Fortlaufende Mitgliedsnummer je Verein (atomarer Zaehler), bleibt auch nach Austritt als Vereinsunterlage. */
+    memberNo: integer("member_no").notNull(),
+    street: text("street").notNull().default(""),
+    zip: text("zip").notNull().default(""),
+    city: text("city").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    birthDate: date("birth_date", { mode: "string" }),
+    guardianName: text("guardian_name").notNull().default(""),
+    guardianEmail: text("guardian_email").notNull().default(""),
+    feeClassId: uuid("fee_class_id").references(() => feeClasses.id, { onDelete: "set null" }),
+    joinedOn: date("joined_on", { mode: "string" }).notNull(),
+    /** Gesetzt beim Austritt; dann sind alle personenbezogenen Felder geleert. */
+    leftOn: date("left_on", { mode: "string" }),
+    notes: text("notes").notNull().default(""),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.userId] }),
+    unique("member_profiles_no_unique").on(t.orgId, t.memberNo),
+    index("member_profiles_user_idx").on(t.userId),
+  ],
+);
+
+export const memberCounters = membersArea.table("member_counters", {
+  orgId: uuid("org_id").primaryKey(),
+  lastNo: integer("last_no").notNull().default(0),
+});

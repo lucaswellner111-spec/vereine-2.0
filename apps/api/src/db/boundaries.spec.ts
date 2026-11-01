@@ -63,3 +63,18 @@ describe("Billing-Bereich", () => {
     }
   });
 });
+
+/** Die Mitgliederverwaltung kennt nur eigene Tabellen (plus das Zugriffsprotokoll ueber AuditService, nicht direkt). */
+describe("Mitglieder-Bereich", () => {
+  const MEMBER_TABLES = ["membersArea", "feeClasses", "memberProfiles", "memberCounters"];
+  it("importiert nur members-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "members"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !MEMBER_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

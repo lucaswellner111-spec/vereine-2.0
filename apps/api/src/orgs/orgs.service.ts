@@ -12,6 +12,7 @@ import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { follows, orgMembers, organizations } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OrgEvents } from "./org-events";
 
 type OrgRow = typeof organizations.$inferSelect;
 
@@ -30,6 +31,7 @@ export class OrgsService {
     @Inject(DB) private readonly db: Database,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(OrgEvents) private readonly events: OrgEvents,
   ) {}
 
   async create(user: PublicUser, input: CreateOrgInput): Promise<OrgDetail> {
@@ -216,6 +218,7 @@ export class OrgsService {
       throw new BadRequestException("Der letzte Vorstand kann den Verein nicht verlassen.");
     }
     await this.db.delete(orgMembers).where(key);
+    await this.events.emitLeave(org.id, targetId); // z. B. Stammdaten loeschen (Datenschutz)
   }
 
   // --- Kontakte (fuer den Chat) ---------------------------------------------------
@@ -310,6 +313,26 @@ export class OrgsService {
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))
       .limit(2000);
     return rows.map((r) => r.userId);
+  }
+
+  /** Anzahl offener Mitgliedsantraege (fuer das Dashboard). */
+  async pendingCount(orgId: string): Promise<number> {
+    const [{ n }] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "pending")));
+    return n;
+  }
+
+  /** Aktive Mitglieder mit Rolle und Beitrittszeit (Lesezugang fuer die Mitgliederverwaltung), max. 2000. */
+  async activeMembersWithRole(orgId: string): Promise<{ userId: string; role: OrgRole; since: Date }[]> {
+    const rows = await this.db
+      .select({ userId: orgMembers.userId, role: orgMembers.role, since: orgMembers.createdAt })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))
+      .orderBy(orgMembers.createdAt)
+      .limit(2000);
+    return rows.map((r) => ({ userId: r.userId, role: r.role as OrgRole, since: r.since }));
   }
 
   /** Slug und Name zu Verein-IDs (Lesezugang fuer andere Bereiche, z. B. billing). */

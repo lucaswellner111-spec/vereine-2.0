@@ -510,3 +510,80 @@ export const pushSubscribeSchema = z.object({
 });
 export const pushUnsubscribeSchema = z.object({ endpoint: pushEndpoint });
 export type PrivatePushState = { publicKey: string | null; devices: number };
+
+// --- Mitgliederverwaltung (Stammdaten, Beitragsklassen) -------------------------------
+
+export const FEE_INTERVALS = ["monthly", "quarterly", "halfyearly", "yearly"] as const;
+export type FeeInterval = (typeof FEE_INTERVALS)[number];
+
+export const feeClassSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  /** Beitrag in Cent je Intervall. */
+  amountCents: z.number().int().min(0).max(10_000_000),
+  interval: z.enum(FEE_INTERVALS),
+  description: z.string().trim().max(200).default(""),
+});
+export type FeeClassInput = z.infer<typeof feeClassSchema>;
+export type FeeClassItem = FeeClassInput & { id: string; members: number };
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT")
+  .refine((d) => !Number.isNaN(Date.parse(d)), "Ungültiges Datum");
+const birthDate = isoDate.refine((d) => d >= "1900-01-01" && d <= new Date().toISOString().slice(0, 10), "Geburtsdatum nicht plausibel");
+
+/** Angaben, die ein Mitglied selbst pflegt. */
+export const selfMemberProfileSchema = z.object({
+  street: z.string().trim().max(120).default(""),
+  zip: z.string().trim().max(10).default(""),
+  city: z.string().trim().max(60).default(""),
+  phone: z.string().trim().max(30).default(""),
+  birthDate: z.union([birthDate, z.literal("")]).default(""),
+  guardianName: z.string().trim().max(100).default(""),
+  guardianEmail: z.union([z.string().trim().toLowerCase().email().max(254), z.literal("")]).default(""),
+});
+export type SelfMemberProfileInput = z.infer<typeof selfMemberProfileSchema>;
+
+/** Zusaetzlich vom Vorstand pflegbar. */
+export const adminMemberProfileSchema = selfMemberProfileSchema.extend({
+  feeClassId: z.string().uuid().nullable().default(null),
+  joinedOn: isoDate,
+  notes: z.string().trim().max(500).default(""),
+});
+export type AdminMemberProfileInput = z.infer<typeof adminMemberProfileSchema>;
+
+export type MemberRegistryItem = {
+  userId: string;
+  name: string;
+  memberNo: number;
+  role: OrgRole;
+  joinedOn: string;
+  feeClassId: string | null;
+  feeClassName: string | null;
+  city: string;
+  /** Null, solange kein Geburtsdatum hinterlegt ist. */
+  minor: boolean | null;
+};
+export type MemberRegistryPage = { total: number; items: MemberRegistryItem[] };
+export type MemberRecord = Required<SelfMemberProfileInput> & {
+  userId: string;
+  name: string;
+  memberNo: number;
+  role: OrgRole;
+  joinedOn: string;
+  feeClassId: string | null;
+  notes: string;
+  minor: boolean | null;
+};
+export type MyMembership = { orgSlug: string; orgName: string; memberNo: number; profile: Required<SelfMemberProfileInput>; joinedOn: string; feeClassName: string | null };
+
+export type OrgDashboard = {
+  members: number;
+  pendingRequests: number;
+  newMembers30d: number;
+  minors: number | null;
+  invoices: { open: number; overdue: number; openCents: number; paidThisYearCents: number } | null;
+  upcomingEvents: { id: string; title: string; startsAt: string; yes: number }[];
+  byFeeClass: { name: string; members: number }[];
+  joinsByMonth: { month: string; joins: number }[];
+};

@@ -82,3 +82,12 @@ Vor jedem neuen Modul: Bereich festlegen (identity/social/chat/billing), eigenes
 - **Messwerte**: `GET /metrics` (Prometheus-Text, nur mit `METRICS_TOKEN`, von Caddy nach außen mit 404 blockiert): Anfragen je Statusklasse, Dauer-Histogramm, Speicher, Event-Loop-Verzögerung, DB-Status, Job-Warteschlange. Lasttest-Skript: `infra/loadtest/k6-smoke.js`.
 - **Neue Server-Variablen** (`.env.preview`): `AUTH_SECRET_KEY` (`openssl rand -base64 32`, wie der Chat-Schlüssel sichern!), `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`, `METRICS_TOKEN`.
 
+## Mitgliederverwaltung und Dashboard (Etappe 1 des Funktionsplans v2, 2026-11-01)
+- Neuer Bereich **`members`** (Migration 0014, `members.fee_classes`, `member_profiles`, `member_counters`), **keine Fremdschlüssel** auf identity/social, nur UUIDs; Test `boundaries.spec.ts` erzwingt, dass `members/` nur eigene Tabellen importiert. Namen kommen über `UsersDirectory`, Vereinsdaten über `OrgsService` (`activeMembersWithRole`, `lookupByIds`).
+- **Mitgliedsnummern** lückenlos je Verein per atomarem Zähler; Profile werden bei Bedarf angelegt (`ensureProfiles`, idempotent, parallelsicher). Wiedereintritt behält die Nummer.
+- **Rechte:** Vorstand + Kassenwart lesen; nur Vorstand ändert, exportiert (CSV mit Formel-Schutz, protokolliert) und verwaltet Beitragsklassen; jedes Mitglied pflegt seine eigenen Daten (`/einstellungen/vereinsdaten`). Keine E-Mail-Adressen in der Liste.
+- **Austritt:** `OrgEvents.emitLeave` (kleiner Ereignis-Verteiler in `orgs`) → Mitgliederverwaltung löscht alle personenbezogenen Felder, Nummer/Daten/Klasse bleiben. **Kontolöschung:** Zeilen werden entfernt (`MembersService.eraseUser`), Auskunft enthält `memberData` inkl. interner Notiz.
+- **Dashboard** (`/orgs/:slug/dashboard`, Vorstand/Kassenwart): Kennzahlen aus Mitgliedern, Rechnungen, Terminen über deren Dienste.
+- **Skalierung:** Mitgliederliste lädt bis 2.000 Mitglieder je Verein und filtert im Speicher (Namen liegen im Bereich identity). Darüber: Seitenweise Abfrage in der Datenbank plus Suche über `UsersDirectory.search`. Der Beitragslauf (Etappe 3) läuft als Worker-Job.
+- Details und offene Rechtsfragen: `docs/DATENSCHUTZ-LAUNCH.md` (Abschnitte 2, 4, 5).
+

@@ -44,7 +44,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Qualität: Ende-zu-Ende-Tests (Playwright) in CI, Lasttest mit k6 auf Staging ausführen, Barrierefreiheitsprüfung.
 - Monitoring: Prometheus/Grafana/Alertmanager auf dem Server aufsetzen (Messwerte unter /metrics sind vorbereitet).
 - Spenden-Grundgerüst (Datenmodell, Anbieter-Schnittstelle, Test-Anbieter) – bewusst noch nicht begonnen, hängt an der Wahl des Zahlungsanbieters (Mollie/Stripe Connect).
-- Mitgliederstammdaten (Adresse, Geburtstag) mit AVV, Beitragsklassen.
+- Mitgliederstammdaten und Beitragsklassen sind gebaut (Etappe 1). Offen: Aufnahmeformular mit Einwilligungen/Eltern, Beitragslauf aus Beitragsklassen, Import (nur per Einladung), Abteilungen = Teams (Zuordnung in der Liste fehlt), AVV-Akzeptanz beim Vereins-Onboarding, Row-Level-Security vor weiteren Verwaltungsmodulen.
 - Vereins-Onboarding mit Gemeinnützigkeitsprüfung und Zahlungs-KYC.
 - Hashtags, Suche über Beiträge, Stories/Reels (nur falls gewünscht).
 - Row-Level-Security (Mandantentrennung) vor dem Verwaltungsmodul.
@@ -54,3 +54,10 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - AVV-Vorlage für Vereine, DSFA, Verarbeitungsverzeichnis, ZAG-Abgrenzung Zahlungsfluss, DSA-Kontaktstelle/Transparenzbericht.
 - Marken-/Namensprüfung „Klubnest“ (DPMA/EUIPO).
 - Barrierefreiheitsprüfung (BFSG, WCAG 2.1 AA).
+
+## Datenschutz/Rechtliches aus Etappe 1 (Details: docs/DATENSCHUTZ-LAUNCH.md)
+- **Mindestalter 16 vs. Jugendvereine:** Mitglieder unter 16 brauchen Elternkonto/Zustimmung (Art. 8 DSGVO) – Lösung vor dem Launch festlegen (Elternkonto, das Kinder-Mitgliedschaften verwaltet, oder Mitglied ohne eigenes Konto nur mit Stammdaten).
+- Aufbewahrung der pseudonymen Austrittsdaten (Nummer, Eintritt/Austritt, Beitragsklasse) und Namens-Aufbewahrung für Vereinsunterlagen: Anwalt/DSB.
+- Fristen festlegen: Benachrichtigungen (Vorschlag 90 Tage), Zugriffsprotokoll (12 Monate, Finanzaktionen länger), Server-Logs (14 Tage), Backups (14 Tage) → in Löschkonzept aufnehmen.
+- AVV-Vorlage für Vereine und digitale Akzeptanz beim Onboarding fehlen (Pflicht, weil die Plattform bei Mitgliederdaten Auftragsverarbeiter ist).
+

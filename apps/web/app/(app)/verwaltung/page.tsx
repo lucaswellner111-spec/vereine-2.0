@@ -7,6 +7,7 @@ import { ORG_ROLES, type MemberItem, type OrgDetail, type OrgRole, type OrgSumma
 import { Alert, Badge, Button, Card, PageHeader } from "@/components/ui";
 import { InvoicesAdmin } from "@/components/invoices-admin";
 import { BillingProfileAdmin, InvitesAdmin } from "@/components/org-onboarding-admin";
+import { DashboardPanel, FeeClassesAdmin, MemberRegistry } from "@/components/members-admin";
 import { EventsAdmin } from "@/components/events-admin";
 import { TeamsAdmin } from "@/components/teams-admin";
 import { api, describeError } from "@/lib/api";
@@ -14,13 +15,13 @@ import { api, describeError } from "@/lib/api";
 const roleLabel: Record<OrgRole, string> = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" };
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
 
-type Tab = "Anträge" | "Mitglieder" | "Einladungen" | "Teams" | "Termine" | "Moderation" | "Rechnungen" | "Stammdaten";
+type Tab = "Übersicht" | "Anträge" | "Mitglieder" | "Mitgliederliste" | "Beiträge" | "Einladungen" | "Teams" | "Termine" | "Moderation" | "Rechnungen" | "Vereinsdaten";
 
 export default function AdminPage() {
   const [orgs, setOrgs] = useState<OrgSummary[] | null>(null);
   const [slug, setSlug] = useState<string>("");
   const [detail, setDetail] = useState<OrgDetail | null>(null);
-  const [tab, setTab] = useState<Tab>("Anträge");
+  const [tab, setTab] = useState<Tab>("Übersicht");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,9 +46,9 @@ export default function AdminPage() {
   const role = detail?.viewer.role;
   const tabs: Tab[] =
     role === "admin"
-      ? ["Anträge", "Mitglieder", "Einladungen", "Teams", "Termine", "Moderation", "Rechnungen", "Stammdaten"]
+      ? ["Übersicht", "Anträge", "Mitglieder", "Mitgliederliste", "Beiträge", "Einladungen", "Teams", "Termine", "Moderation", "Rechnungen", "Vereinsdaten"]
       : role === "treasurer"
-        ? ["Rechnungen", "Stammdaten"]
+        ? ["Übersicht", "Mitgliederliste", "Beiträge", "Rechnungen", "Vereinsdaten"]
         : ["Termine", "Moderation"];
 
   useEffect(() => {
@@ -105,10 +106,13 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {detail && slug && tab === "Übersicht" && <DashboardPanel slug={slug} onError={setError} />}
+      {detail && slug && tab === "Mitgliederliste" && <MemberRegistry slug={slug} isAdmin={role === "admin"} onError={setError} />}
+      {detail && slug && tab === "Beiträge" && <FeeClassesAdmin slug={slug} canEdit={role === "admin"} onError={setError} />}
       {detail && slug && tab === "Anträge" && <Members slug={slug} mode="pending" onError={setError} onChanged={refresh} />}
       {detail && slug && tab === "Mitglieder" && <Members slug={slug} mode="active" onError={setError} onChanged={refresh} />}
       {detail && slug && tab === "Einladungen" && <InvitesAdmin slug={slug} onError={setError} />}
-      {detail && slug && tab === "Stammdaten" && <BillingProfileAdmin slug={slug} canEdit={role === "admin"} onError={setError} />}
+      {detail && slug && tab === "Vereinsdaten" && <BillingProfileAdmin slug={slug} canEdit={role === "admin"} onError={setError} />}
       {detail && slug && tab === "Teams" && <TeamsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Termine" && <EventsAdmin slug={slug} onError={setError} />}
       {detail && slug && tab === "Moderation" && <Moderation slug={slug} onError={setError} />}
