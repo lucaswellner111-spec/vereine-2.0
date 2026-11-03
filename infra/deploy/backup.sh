@@ -14,7 +14,8 @@ FILE="$DIR/vereine-$(date +%Y%m%d-%H%M%S).sql.gz"
 
 $COMPOSE exec -T postgres pg_dump -U vereine --no-owner vereine | gzip > "$FILE.tmp"
 # Plausibilitaet: Dump darf nicht leer sein und muss unsere Tabellen (Schema identity) enthalten
-gunzip -c "$FILE.tmp" | grep -q 'CREATE TABLE identity.users' || { rm -f "$FILE.tmp"; echo "Backup ungueltig" >&2; exit 1; }
+# (grep -c liest den ganzen Strom: grep -q bricht frueh ab und loest bei grossen Dumps mit pipefail einen falschen Fehler aus)
+[ "$(gunzip -c "$FILE.tmp" | grep -c 'CREATE TABLE identity.users')" -ge 1 ] || { rm -f "$FILE.tmp"; echo "Backup ungueltig" >&2; exit 1; }
 mv "$FILE.tmp" "$FILE"
 
 # Medien (Bilder) liegen im Docker-Volume, nicht in der Datenbank: ebenfalls sichern
