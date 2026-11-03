@@ -16,7 +16,7 @@ export function Button({ variant = "primary", size = "md", className, ...props }
         variant === "primary" && "bg-brand text-brand-contrast hover:bg-brand-hover",
         variant === "secondary" && "border border-border bg-surface text-text hover:bg-surface-2",
         variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
-        variant === "danger" && "bg-danger text-white hover:opacity-90",
+        variant === "danger" && "bg-danger text-on-danger hover:opacity-90",
         className,
       )}
     />
@@ -104,7 +104,7 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "bran
 
 export function Avatar({ name, size = 36, mediaId }: { name: string; size?: number; mediaId?: string | null }) {
   const initials = name
-    .split(/s+/)
+    .split(/\s+/)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase())
     .join("");
@@ -176,7 +176,7 @@ export function Toggle({
     >
       <span
         className={clsx(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+          "absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-all",
           checked ? "left-[22px]" : "left-0.5",
         )}
       />

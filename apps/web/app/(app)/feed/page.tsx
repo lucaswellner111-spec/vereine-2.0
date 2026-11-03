@@ -2,9 +2,12 @@
 
 import clsx from "clsx";
 import Link from "next/link";
+import { Camera, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedPost, FeedResponse, MediaRef, OrgSummary } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
+import { MAX_POST_TAGS, tagLabel } from "@vereine/shared";
+import { TagPicker } from "@/components/tag-picker";
 import { Alert, Button, Card, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl, uploadImage } from "@/lib/media";
@@ -24,15 +27,22 @@ export default function FeedPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tags, setTags] = useState<string[]>([]); // Tags des neuen Beitrags
+  const [filterTag, setFilterTag] = useState(""); // aktiver Tag-Filter (?tag=)
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async (m: "ranked" | "chrono", cursor?: string) => {
+  const load = useCallback(async (m: "ranked" | "chrono", cursor?: string, tag = filterTag) => {
     try {
-      const res = await api<FeedResponse>(`/feed?mode=${m}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      const res = await api<FeedResponse>(`/feed?mode=${m}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
       setFeed((prev) => (cursor && prev ? { ...res, posts: [...prev.posts, ...res.posts] } : res));
     } catch (e) {
       setError(describeError(e));
     }
+  }, [filterTag]);
+
+  // Tag aus dem Link (/feed?tag=fussball) uebernehmen
+  useEffect(() => {
+    setFilterTag(new URLSearchParams(window.location.search).get("tag") ?? "");
   }, []);
 
   useEffect(() => {
@@ -67,10 +77,11 @@ export default function FeedPage() {
     try {
       await api<FeedPost>("/posts", {
         method: "POST",
-        body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id) },
+        body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id), tags },
       });
       setDraft("");
       setImages([]);
+      setTags([]);
       await load(mode);
     } catch (e) {
       setError(describeError(e));
@@ -92,6 +103,17 @@ export default function FeedPage() {
         subtitle={hints[effective]}
         action={<Link href="/personen" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-2">Personen finden</Link>}
       />
+
+      {filterTag && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-muted">Gefiltert nach</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand">
+            {tagLabel(filterTag)}
+            <Link href="/feed" aria-label="Filter entfernen" onClick={() => setFilterTag("")}><X size={12} aria-hidden /></Link>
+          </span>
+          <Link href={`/vereine?tag=${encodeURIComponent(filterTag)}`} className="text-brand hover:underline">Vereine dazu</Link>
+        </div>
+      )}
 
       <div role="tablist" aria-label="Feed-Sortierung" className="mb-4 inline-flex rounded-lg border border-border bg-surface p-1">
         {([["ranked", "Für dich"], ["chrono", "Neueste"]] as const).map(([id, label]) => (
@@ -138,7 +160,7 @@ export default function FeedPage() {
                   type="button"
                   aria-label="Bild entfernen"
                   onClick={() => setImages((l) => l.filter((x) => x.id !== img.id))}
-                  className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-danger text-xs leading-5 text-white"
+                  className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-danger text-xs leading-5 text-on-danger"
                 >
                   ×
                 </button>
@@ -156,7 +178,8 @@ export default function FeedPage() {
                 (uploading || images.length >= 4) && "pointer-events-none opacity-50",
               )}
             >
-              {uploading ? "Lädt hoch …" : `📷 Bild${images.length ? ` (${images.length}/4)` : ""}`}
+              <Camera size={14} aria-hidden className="mr-1.5" />
+              {uploading ? "Lädt hoch …" : `Bild${images.length ? ` (${images.length}/4)` : ""}`}
             </label>
             <label htmlFor="target" className="text-xs text-muted">Posten als</label>
             <select id="target" value={target} onChange={(e) => setTarget(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs">
@@ -167,6 +190,7 @@ export default function FeedPage() {
             </select>
             <span className="text-xs text-muted">{draft.length}/1000</span>
           </div>
+          <TagPicker label="Tags (optional)" value={tags} onChange={setTags} max={MAX_POST_TAGS} hint={target ? "Ohne Auswahl übernimmt der Beitrag die Tags des Vereins." : undefined} />
           <Button size="sm" onClick={publish} disabled={(!draft.trim() && images.length === 0) || busy || uploading}>Veröffentlichen</Button>
         </div>
       </Card>

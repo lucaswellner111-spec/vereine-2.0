@@ -30,8 +30,9 @@ export class PostsController {
     @CurrentUser() user: PublicUser,
     @Query("mode") mode?: string,
     @Query("cursor") cursor?: string,
+    @Query("tag") tag?: string,
   ): Promise<FeedResponse> {
-    return this.posts.feed(user, mode === "chrono" ? "chrono" : "ranked", cursor);
+    return this.posts.feed(user, mode === "chrono" ? "chrono" : "ranked", cursor, tag);
   }
 
   @Get("orgs/:slug/posts")

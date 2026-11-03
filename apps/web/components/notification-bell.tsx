@@ -17,7 +17,7 @@ function describe(n: NotificationItem): { text: string; href: string } {
     case "comment":
       return { text: `${d.commenter} hat kommentiert: „${d.excerpt}“`, href: "/feed" };
     case "membership_request":
-      return { text: `Neuer Mitgliedsantrag bei ${d.orgName}`, href: "/verwaltung" };
+      return { text: `Neuer Mitgliedsantrag bei ${d.orgName}`, href: "/verwaltung/antraege" };
     case "membership_decision":
       return {
         text: d.decision === "approve" ? `Du bist jetzt Mitglied bei ${d.orgName}.` : `Dein Antrag bei ${d.orgName} wurde abgelehnt.`,
@@ -94,7 +94,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
       >
         <span aria-hidden>🔔</span>
         {data.unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-on-danger">
             {data.unread > 9 ? "9+" : data.unread}
           </span>
         )}

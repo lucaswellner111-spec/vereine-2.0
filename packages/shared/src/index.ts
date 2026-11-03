@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { MAX_ORG_TAGS, MAX_POST_TAGS, TAG_IDS } from "./tags";
+export * from "./tags";
 
 export const ROLES = [
   "platform_admin",
@@ -82,8 +84,17 @@ export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 
 export const ORG_CATEGORIES = ["Sport", "Kultur", "Feuerwehr", "Umwelt", "Soziales", "Bildung", "Sonstiges"] as const;
 
+/** Tags aus dem festen Katalog (src/tags.ts), ohne Duplikate. */
+const tagList = (max: number) =>
+  z
+    .array(z.enum(TAG_IDS))
+    .max(max, `Höchstens ${max} Tags`)
+    .transform((tags) => [...new Set(tags)]);
+export const orgTagsSchema = z.object({ tags: tagList(MAX_ORG_TAGS) });
+
 export const createOrgSchema = z.object({
   name: z.string().trim().min(3).max(80),
+  tags: tagList(MAX_ORG_TAGS).default([]),
   category: z.enum(ORG_CATEGORIES),
   city: z.string().trim().min(2).max(60),
   about: z.string().trim().max(600).default(""),
@@ -97,6 +108,7 @@ export type OrgSummary = {
   slug: string;
   name: string;
   category: string;
+  tags: string[];
   city: string;
   about: string;
   followers: number;
@@ -113,6 +125,8 @@ export const createPostSchema = z
     orgSlug: z.string().trim().min(1).max(100).optional(),
     kind: z.enum(POST_KINDS).default("update"),
     mediaIds: z.array(z.string().uuid()).max(4).default([]),
+    /** Leer + Vereinsbeitrag: Tags des Vereins werden uebernommen. */
+    tags: tagList(MAX_POST_TAGS).default([]),
   })
   .refine((p) => p.body.length > 0 || p.mediaIds.length > 0, { message: "Text oder Bild erforderlich.", path: ["body"] });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
@@ -130,6 +144,7 @@ export type FeedPost = {
   id: string;
   body: string;
   kind: (typeof POST_KINDS)[number];
+  tags: string[];
   createdAt: string;
   author: { id: string; name: string; handle: string | null; avatarId: string | null };
   org: { slug: string; name: string } | null;

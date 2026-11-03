@@ -1,12 +1,14 @@
 "use client";
 
 import clsx from "clsx";
+import { Heart, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { CommentItem, FeedPost } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl } from "@/lib/media";
 import { Lightbox } from "./lightbox";
+import { TagChips } from "./tag-chips";
 import { Alert, Avatar, Badge, Button, Card } from "./ui";
 
 const timeAgo = (iso: string) => {
@@ -143,11 +145,15 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
             </div>
           )}
 
+          <TagChips tags={post.tags} to="/feed" className="mt-3" />
+
           <div className="mt-3 flex flex-wrap items-center gap-1 text-sm text-muted">
-            <Button variant="ghost" size="sm" aria-pressed={post.likedByMe} onClick={like}>
-              {post.likedByMe ? "♥" : "♡"} {post.likes}
+            <Button variant="ghost" size="sm" aria-pressed={post.likedByMe} aria-label={`Gefällt mir, ${post.likes}`} onClick={like}>
+              <Heart size={15} aria-hidden className={clsx(post.likedByMe && "fill-current text-danger")} /> {post.likes}
             </Button>
-            <Button variant="ghost" size="sm" aria-expanded={open} onClick={toggleComments}>💬 {post.comments}</Button>
+            <Button variant="ghost" size="sm" aria-expanded={open} aria-label={`Kommentare, ${post.comments}`} onClick={toggleComments}>
+              <MessageCircle size={15} aria-hidden /> {post.comments}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setWhy((w) => !w)}>Warum sehe ich das?</Button>
             <span className="ml-auto flex gap-1">
               {post.canDelete && <Button variant="ghost" size="sm" onClick={remove}>Löschen</Button>}

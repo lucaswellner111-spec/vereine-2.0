@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { FollowRequest, MutedItem, ProfileView } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, Avatar, Button, Card, Checkbox, Field, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { removeAvatar, uploadImage } from "@/lib/media";
@@ -85,6 +86,12 @@ export default function ProfileSettingsPage() {
                 <p className="text-xs text-muted">JPEG, PNG oder WebP, bis 8 MB. Standortdaten (EXIF) werden entfernt.</p>
               </div>
             </div>
+          </Card>
+
+          <h2 className="mb-2 font-semibold">Darstellung</h2>
+          <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted">Automatisch folgt der Einstellung deines Geräts. Die Wahl gilt nur in diesem Browser.</p>
+            <ThemeToggle />
           </Card>
 
           <Card className="mb-6">

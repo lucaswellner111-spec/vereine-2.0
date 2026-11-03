@@ -37,8 +37,8 @@ const PEOPLE = {
 const email = (k) => `${k}@${D}`;
 
 const ORGS = [
-  { key: "ffw", slug: "freiwillige-feuerwehr-wesenberg", name: "Freiwillige Feuerwehr Wesenberg", category: "Feuerwehr", city: "Wesenberg", about: "Seit 1904 für die Sicherheit in Wesenberg: Brandschutz, Hilfeleistung und eine starke Jugendfeuerwehr. Mitmachen kann jede und jeder ab 10 Jahren.", members: ["jens", "marlene", "tobias", "svenja", "dieter"], treasurer: "tobias" },
-  { key: "fcl", slug: "fc-blau-weiss-lindenau", name: "FC Blau-Weiß Lindenau", category: "Sport", city: "Lindenau", about: "Fußball für Groß und Klein: drei Herren-, zwei Damen- und acht Jugendmannschaften. Training dienstags und donnerstags auf dem Sportplatz am Weinberg.", members: ["paul", "lea", "emre", "hannah", "max"], treasurer: "hannah" },
+  { key: "ffw", slug: "freiwillige-feuerwehr-wesenberg", name: "Freiwillige Feuerwehr Wesenberg", category: "Feuerwehr", tags: ["feuerwehr", "jugendarbeit"], city: "Wesenberg", about: "Seit 1904 für die Sicherheit in Wesenberg: Brandschutz, Hilfeleistung und eine starke Jugendfeuerwehr. Mitmachen kann jede und jeder ab 10 Jahren.", members: ["jens", "marlene", "tobias", "svenja", "dieter"], treasurer: "tobias" },
+  { key: "fcl", slug: "fc-blau-weiss-lindenau", name: "FC Blau-Weiß Lindenau", category: "Sport", tags: ["fussball", "jugendarbeit"], city: "Lindenau", about: "Fußball für Groß und Klein: drei Herren-, zwei Damen- und acht Jugendmannschaften. Training dienstags und donnerstags auf dem Sportplatz am Weinberg.", members: ["paul", "lea", "emre", "hannah", "max"], treasurer: "hannah" },
 ];
 
 // ageH = Alter in Stunden (spaeter per SQL zurueckdatiert), as = Autor ("org" = als Verein), img = Dateinamen
@@ -130,7 +130,8 @@ async function seed() {
     console.log("Verein", o.name);
     const admin = S[o.key];
     const existing = await admin.req("GET", `/orgs/${o.slug}`);
-    const slug = existing.status === 200 ? o.slug : (await admin.ok("POST", "/orgs", { name: o.name, category: o.category, city: o.city, about: o.about })).slug;
+    const slug = existing.status === 200 ? o.slug : (await admin.ok("POST", "/orgs", { name: o.name, category: o.category, city: o.city, about: o.about, tags: o.tags })).slug;
+    if (existing.status === 200) await admin.req("PUT", `/orgs/${slug}/tags`, { tags: o.tags });
     orgSlugs[o.key] = slug;
     for (const m of o.members) {
       await S[m].req("POST", `/orgs/${slug}/membership`);

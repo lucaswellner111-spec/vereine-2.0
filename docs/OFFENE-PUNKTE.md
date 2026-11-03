@@ -64,3 +64,9 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Demo-Daten auf klubnest.de (angelegt 2026-11-01) – VOR DEM LAUNCH LÖSCHEN
 12 Demo-Konten (`@demo.klubnest.invalid`), 2 Vereine (Freiwillige Feuerwehr Wesenberg, FC Blau-Weiß Lindenau), 14 Beiträge mit Fotos echter Personen (auch Kinder), Konto lucaswellner111@gmail.com als Mitglied beider Vereine eingetragen. Anleitung zum Löschen: `infra/demo/README.md`. Datenschutz: Fotos nur nach Anmeldung abrufbar; vor echten Nutzern entfernen (siehe `docs/DATENSCHUTZ-LAUNCH.md`).
 
+## Erscheinungsbild/Tags: offen (Stand 2026-11-03)
+- Interessen-Tags je Nutzer (`social.user_tags`) mit „Vereine für dich“, danach Ranking-Bonus **nur mit Einwilligung**; Datenschutz-Eintrag in `docs/DATENSCHUTZ-LAUNCH.md` vorher anlegen (Profildaten, nicht öffentlich, mit Konto löschbar).
+- Termine mit Typ-Tags (Training, Spiel, Versammlung), Suche über Vereine/Personen/Tags, Tag-Seiten `/tags/<id>`, „Vereine in deiner Nähe“ (Geodaten, Datenschutz prüfen).
+- Design: `Dialog` statt `confirm()`, `Skeleton` statt „Lade …“, Leerzustände mit Handlungsaufforderung, restliche Seiten (Profile, Chat, Spenden) auf die neuen Komponenten, Tab-Leisten innerhalb von Seiten vereinheitlichen, Barrierefreiheitsprüfung (axe), Mobil-Test auf echten Geräten.
+- Demo-Daten auf der Domain haben noch keine Tags (Skript `infra/demo/seed.mjs` setzt sie bei neuem Lauf; bestehende Vereine: `PUT /orgs/<slug>/tags`).
+

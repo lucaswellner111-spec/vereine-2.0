@@ -1,13 +1,15 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
-import type {
-  CommentItem,
-  CreatePostInput,
-  FeedPost,
-  FeedResponse,
-  MutedItem,
-  PublicUser,
-  ReportInput,
+import {
+  isTagId,
+  MAX_POST_TAGS,
+  type CommentItem,
+  type CreatePostInput,
+  type FeedPost,
+  type FeedResponse,
+  type MutedItem,
+  type PublicUser,
+  type ReportInput,
 } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
@@ -62,6 +64,7 @@ export class PostsService {
 
   async create(user: PublicUser, input: CreatePostInput): Promise<FeedPost> {
     let orgId: string | null = null;
+    let orgTags: string[] = [];
     if (input.orgSlug) {
       const org = await this.orgs.requireBySlug(input.orgSlug);
       const role = await this.orgs.activeRole(org.id, user.id);
@@ -69,10 +72,11 @@ export class PostsService {
         throw new ForbiddenException("Nur Vorstand und Moderation duerfen fuer den Verein posten.");
       }
       orgId = org.id;
+      orgTags = org.tags;
     }
     const [row] = await this.db
       .insert(posts)
-      .values({ authorId: user.id, orgId, body: input.body, kind: input.kind })
+      .values({ authorId: user.id, orgId, body: input.body, kind: input.kind, tags: input.tags.length ? input.tags : orgTags.slice(0, MAX_POST_TAGS) })
       .returning();
     try {
       await this.mediaSvc.attach(user.id, row.id, input.mediaIds);
@@ -86,7 +90,7 @@ export class PostsService {
 
   // --- Feed ---------------------------------------------------------------------------------
 
-  async feed(user: PublicUser, requested: "ranked" | "chrono", cursor?: string): Promise<FeedResponse> {
+  async feed(user: PublicUser, requested: "ranked" | "chrono", cursor?: string, tag?: string): Promise<FeedResponse> {
     const personalized = requested === "ranked" && (await this.hasConsent(user.id));
     const ctx = await this.context(user.id);
     const orgIds = [...ctx.orgs.keys()];
@@ -101,6 +105,19 @@ export class PostsService {
         friendIds.length ? and(isNull(posts.orgId), inArray(posts.authorId, friendIds)) : undefined,
       ),
     );
+
+    // Tag-Filter: alle sichtbaren Vereinsbeitraege mit diesem Tag (auch von nicht gefolgten Vereinen) plus eigene/Freunde.
+    if (tag && isTagId(tag)) {
+      const where = and(
+        isNull(posts.deletedAt),
+        isNull(posts.hiddenAt),
+        this.mutedFilter(ctx.muted),
+        sql`${posts.tags} @> ARRAY[${tag}]::text[]`,
+        or(sql`${posts.orgId} is not null`, eq(posts.authorId, user.id), friendIds.length ? inArray(posts.authorId, friendIds) : undefined),
+      );
+      const page = await this.chronoPage(where, decode(cursor));
+      return { mode: "chrono", personalized: false, posts: await this.hydrate(page.ids, user.id, ctx), nextCursor: page.nextCursor };
+    }
 
     if (!personalized) {
       const page = await this.chronoPage(relevant, decode(cursor));
@@ -401,7 +418,7 @@ export class PostsService {
     const [rows, likeCounts, commentCounts, mine, mediaMap] = await Promise.all([
       this.db
         .select({
-          id: posts.id, body: posts.body, kind: posts.kind, createdAt: posts.createdAt, authorId: posts.authorId,
+          id: posts.id, body: posts.body, kind: posts.kind, tags: posts.tags, createdAt: posts.createdAt, authorId: posts.authorId,
           orgId: organizations.id, orgSlug: organizations.slug, orgName: organizations.name,
         })
         .from(posts)
@@ -445,6 +462,7 @@ export class PostsService {
             id: r.id,
             body: r.body,
             kind: r.kind as FeedPost["kind"],
+            tags: r.tags,
             createdAt: r.createdAt.toISOString(),
             author: { id: r.authorId, name: authorName, handle: prof?.handle ?? null, avatarId: prof?.avatarMediaId ?? null },
             org: r.orgSlug ? { slug: r.orgSlug, name: r.orgName! } : null,

@@ -15,6 +15,7 @@ import {
 import {
   createOrgSchema,
   decisionSchema,
+  orgTagsSchema,
   setRoleSchema,
   type MemberItem,
   type OrgDetail,
@@ -31,8 +32,8 @@ export class OrgsController {
   constructor(@Inject(OrgsService) private readonly orgs: OrgsService) {}
 
   @Get()
-  list(@CurrentUser() user: PublicUser, @Query("q") q?: string): Promise<OrgSummary[]> {
-    return this.orgs.list(user.id, q);
+  list(@CurrentUser() user: PublicUser, @Query("q") q?: string, @Query("tag") tag?: string): Promise<OrgSummary[]> {
+    return this.orgs.list(user.id, q, tag);
   }
 
   @Get("mine")
@@ -54,6 +55,11 @@ export class OrgsController {
   @Get(":slug")
   detail(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgDetail> {
     return this.orgs.detail(slug, user.id);
+  }
+
+  @Put(":slug/tags")
+  setTags(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
+    return this.orgs.setTags(slug, user, parse(orgTagsSchema, body).tags);
   }
 
   @Post(":slug/follow")

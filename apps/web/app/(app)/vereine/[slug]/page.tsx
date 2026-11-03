@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import type { FeedPost, OrgDetail } from "@vereine/shared";
+import { MAX_ORG_TAGS, type FeedPost, type OrgDetail } from "@vereine/shared";
+import { TagChips } from "@/components/tag-chips";
+import { TagPicker } from "@/components/tag-picker";
 import { PostCard } from "@/components/post-card";
 import { Alert, Avatar, Badge, Button, Card } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
@@ -18,6 +20,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [editTags, setEditTags] = useState<string[] | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -115,6 +118,24 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           </div>
         </div>
         {org.about && <p className="mt-4 text-sm">{org.about}</p>}
+        {editTags === null ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <TagChips tags={org.tags} to="/vereine" />
+            {viewer.role === "admin" && (
+              <button type="button" onClick={() => setEditTags(org.tags)} className="text-xs font-medium text-brand hover:underline">
+                {org.tags.length ? "Tags bearbeiten" : "Sportarten und Themen festlegen"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            <TagPicker label="Sportarten und Themen" value={editTags} onChange={setEditTags} max={MAX_ORG_TAGS} />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => act(async () => { const o = await api<OrgDetail>(`/orgs/${slug}/tags`, { method: "PUT", body: { tags: editTags } }); setEditTags(null); return o; })}>Speichern</Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditTags(null)}>Abbrechen</Button>
+            </div>
+          </div>
+        )}
         <p className="mt-2 text-xs text-muted">{org.members} {org.members === 1 ? "Mitglied" : "Mitglieder"} · {org.followers} Follower</p>
       </Card>
 

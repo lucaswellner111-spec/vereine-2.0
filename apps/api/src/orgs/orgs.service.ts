@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import type { CreateOrgInput, MemberItem, OrgDetail, OrgRole, OrgSummary, PublicUser } from "@vereine/shared";
+import { isTagId, type CreateOrgInput, type MemberItem, type OrgDetail, type OrgRole, type OrgSummary, type PublicUser } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { follows, orgMembers, organizations } from "../db/schema";
@@ -48,15 +48,18 @@ export class OrgsService {
     return this.detail(org.slug, user.id);
   }
 
-  async list(userId: string, q?: string): Promise<OrgSummary[]> {
+  async list(userId: string, q?: string, tag?: string): Promise<OrgSummary[]> {
     const term = q?.trim();
     const rows = await this.db
       .select()
       .from(organizations)
       .where(
-        term
-          ? or(ilike(organizations.name, `%${term}%`), ilike(organizations.city, `%${term}%`), ilike(organizations.category, `%${term}%`))
-          : undefined,
+        and(
+          term
+            ? or(ilike(organizations.name, `%${term}%`), ilike(organizations.city, `%${term}%`), ilike(organizations.category, `%${term}%`))
+            : undefined,
+          tag && isTagId(tag) ? sql`${organizations.tags} @> ARRAY[${tag}]::text[]` : undefined,
+        ),
       )
       .orderBy(organizations.name)
       .limit(100);
@@ -73,6 +76,14 @@ export class OrgsService {
       .where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"), inArray(orgMembers.role, ["admin", "moderator"])))
       .orderBy(organizations.name);
     return this.summaries(rows.map((r) => r.org));
+  }
+
+  /** Tags (Sportarten/Themen) des Vereins setzen; nur Vorstand. Werte sind per Zod auf den Katalog begrenzt. */
+  async setTags(slug: string, actor: PublicUser, tags: string[]): Promise<OrgDetail> {
+    const org = await this.requireBySlug(slug);
+    if ((await this.activeRole(org.id, actor.id)) !== "admin") throw new ForbiddenException("Nur der Vorstand ändert die Tags des Vereins.");
+    await this.db.update(organizations).set({ tags }).where(eq(organizations.id, org.id));
+    return this.detail(slug, actor.id);
   }
 
   /** Vereine, in denen der Nutzer eine Verwaltungsrolle hat (Vorstand, Kassenwart, Moderation). */
@@ -364,6 +375,7 @@ export class OrgsService {
       slug: r.slug,
       name: r.name,
       category: r.category,
+      tags: r.tags,
       city: r.city,
       about: r.about,
       followers: f.get(r.id) ?? 0,

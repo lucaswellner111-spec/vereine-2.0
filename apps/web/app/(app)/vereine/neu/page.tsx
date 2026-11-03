@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { ORG_CATEGORIES, type OrgDetail } from "@vereine/shared";
+import { MAX_ORG_TAGS, ORG_CATEGORIES, type OrgDetail } from "@vereine/shared";
+import { TagPicker } from "@/components/tag-picker";
 import { Alert, Button, Card, Field, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 
 export default function NewOrgPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", category: ORG_CATEGORIES[0] as string, city: "", about: "" });
+  const [form, setForm] = useState({ name: "", category: ORG_CATEGORIES[0] as string, city: "", about: "", tags: [] as string[] });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -47,6 +48,7 @@ export default function NewOrgPage() {
               ))}
             </select>
           </div>
+          <TagPicker label="Sportarten und Themen" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} max={MAX_ORG_TAGS} hint="Damit Mitglieder und Fans deinen Verein finden, z. B. Fußball, Jugendarbeit." />
           <Field id="city" label="Ort" required minLength={2} maxLength={60} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           <div className="space-y-1.5">
             <label htmlFor="about" className="text-sm font-medium">Kurzbeschreibung</label>

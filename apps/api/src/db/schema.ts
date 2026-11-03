@@ -102,6 +102,8 @@ export const organizations = social.table("organizations", {
   category: text("category").notNull(),
   city: text("city").notNull(),
   about: text("about").notNull().default(""),
+  /** Sportarten/Themen aus dem festen Katalog (packages/shared/src/tags.ts), max. 5. */
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
   /** Stammdaten fuer Rechnungen (Anschrift, IBAN, Steuerhinweis); nur Vorstand/Kassenwart sehen und aendern sie. */
   address: text("address").notNull().default(""),
   iban: text("iban").notNull().default(""),
@@ -156,6 +158,8 @@ export const posts = social.table(
     orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
     kind: text("kind").notNull().default("update"),
+    /** Tags aus dem festen Katalog, max. 3 (bei Vereinsbeitraegen standardmaessig die des Vereins). */
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     // Moderation (DSA): ausgeblendete Beitraege bleiben mit Begruendung gespeichert.
@@ -166,6 +170,7 @@ export const posts = social.table(
     index("posts_created_idx").on(t.createdAt),
     index("posts_org_created_idx").on(t.orgId, t.createdAt),
     index("posts_author_created_idx").on(t.authorId, t.createdAt),
+    index("posts_tags_idx").using("gin", t.tags),
   ],
 );
 

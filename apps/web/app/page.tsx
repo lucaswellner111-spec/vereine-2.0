@@ -1,115 +1,112 @@
+import { Building2, CalendarDays, Check, FileText, Heart, Link2, Lock, MessageCircle, MessageSquare, Newspaper, Tags, Users } from "lucide-react";
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/site";
+import { TagChips } from "@/components/tag-chips";
 
 const features = [
-  { icon: "📰", title: "Feed für deine Vereine", text: "Neuigkeiten, Termine und Aufrufe – transparent sortiert, auf Wunsch rein chronologisch." },
-  { icon: "💬", title: "Datenschutz-Chat", text: "Nachrichten an Mitglieder und Gruppen, verschlüsselt gespeichert, mit Löschfristen." },
-  { icon: "📅", title: "Termine & Teams", text: "Zu- und Absagen, Erinnerungen und Kalender-Export für jede Mannschaft." },
-  { icon: "💚", title: "Spenden", text: "Direkt an den Verein, mit automatischer Zuwendungsbestätigung." },
-  { icon: "🗂️", title: "Verwaltung", text: "Mitglieder, Beiträge, Rechnungen und Rundmails an einem Ort." },
-  { icon: "🔒", title: "Datenschutz ernst genommen", text: "Gehostet in Deutschland, ohne Tracking und ohne Werbeprofile." },
+  { icon: Newspaper, title: "Feed und Profile", text: "Neuigkeiten deiner Vereine und Menschen, die du kennst. Die Sortierung ist nachvollziehbar, auf Wunsch rein chronologisch." },
+  { icon: MessageSquare, title: "Chat für Mitglieder", text: "Einzel- und Gruppenchats, verschlüsselt gespeichert, mit einstellbaren Löschfristen. Kein Ende-zu-Ende-Chat." },
+  { icon: CalendarDays, title: "Termine und Teams", text: "Zu- und Absagen, Erinnerungen, Wiederholungen und Kalender-Abo für Google, Apple und Outlook." },
+  { icon: Users, title: "Mitglieder und Beiträge", text: "Mitgliederliste mit Nummern, Beitragsklassen, Rechnungen als PDF und Export für die Buchhaltung." },
+  { icon: Link2, title: "Einladungen per Link", text: "Neue Mitglieder treten über einen Link bei, ohne dass du Listen abtippen musst." },
+  { icon: Tags, title: "Sportarten und Themen", text: "Vereine und Beiträge tragen Tags wie Fußball, Chor oder Feuerwehr. So findet man, was passt." },
 ];
 
-const steps = [
-  { n: "1", title: "Verein gründen oder finden", text: "Lege deinen Verein in Minuten an oder tritt einem bestehenden bei." },
-  { n: "2", title: "Mitglieder einladen", text: "Teams, Rollen und Termine – alle wissen, was ansteht." },
-  { n: "3", title: "Gemeinsam wachsen", text: "Fans folgen, Familien bleiben informiert, Spenden kommen an." },
+const privacy = [
+  "Gehostet in Deutschland",
+  "Keine Werbung und keine Tracker von Drittanbietern",
+  "Einwilligungen nachweisbar und jederzeit widerrufbar",
+  "Datenexport und Konto löschen mit wenigen Klicks",
+  "Personalisierter Feed nur, wenn du es erlaubst",
 ];
+
+const planned = ["Spenden mit Zuwendungsbestätigung", "E-Mail-Benachrichtigungen", "Beitragseinzug per Lastschrift"];
 
 export default function HomePage() {
   return (
     <div className="min-h-dvh">
       <SiteHeader />
       <main>
-        <section className="relative overflow-hidden">
-          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_20%_-10%,color-mix(in_srgb,var(--brand)_22%,transparent),transparent),radial-gradient(40rem_25rem_at_90%_10%,color-mix(in_srgb,var(--brand)_12%,transparent),transparent)]" />
-          <div className="mx-auto flex max-w-4xl flex-col items-center gap-14 px-4 py-16 sm:py-24">
-            <div className="text-center">
-              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-                <span className="size-1.5 rounded-full bg-brand" /> DSGVO-konform · Gehostet in Deutschland
-              </p>
-              <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-                Das Social Media für <span className="text-brand">Vereine, Mitglieder und Fans.</span>
-              </h1>
-              <p className="mx-auto mt-6 max-w-xl text-lg text-muted">
-                Vernetzen, informieren, spenden und verwalten – ohne Tracking und ohne Werbeprofile.
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link href="/registrieren" className="rounded-xl bg-brand px-6 py-3.5 font-semibold text-brand-contrast shadow-lg shadow-brand/25 transition hover:-translate-y-0.5 hover:bg-brand-hover">
-                  Kostenlos registrieren
-                </Link>
-                <Link href="/login" className="rounded-xl border border-border bg-surface px-6 py-3.5 font-semibold transition hover:bg-surface-2">
-                  Anmelden
-                </Link>
-              </div>
-              <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted">
-                <li>✓ Keine Werbung</li>
-                <li>✓ Kein Tracking</li>
-                <li>✓ Daten exportieren &amp; löschen</li>
-              </ul>
-            </div>
-
-            <div aria-hidden className="relative mx-auto w-full max-w-md">
-              <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-br from-brand/25 to-transparent blur-2xl" />
-              <div className="space-y-3 rounded-3xl border border-border bg-surface p-4 shadow-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="grid size-10 place-items-center rounded-full bg-brand text-sm font-bold text-brand-contrast">TS</div>
-                  <div>
-                    <p className="text-sm font-semibold">TSV Beispielstadt</p>
-                    <p className="text-xs text-muted">vor 12 Min. · Verein</p>
-                  </div>
-                </div>
-                <p className="text-sm">Heimspiel am Samstag, 15 Uhr! Wer ist dabei? Kuchenspenden willkommen 🎉</p>
-                <div className="h-36 rounded-2xl bg-gradient-to-br from-brand/40 via-brand/15 to-surface-2" />
-                <div className="flex gap-2 text-xs">
-                  <span className="rounded-full bg-brand/15 px-3 py-1 font-medium text-brand">✓ Zugesagt (18)</span>
-                  <span className="rounded-full bg-surface-2 px-3 py-1 text-muted">♥ 42</span>
-                  <span className="rounded-full bg-surface-2 px-3 py-1 text-muted">💬 7</span>
-                </div>
-              </div>
-              <div className="absolute -bottom-5 -left-3 rounded-2xl border border-border bg-surface px-4 py-3 text-xs shadow-xl sm:-left-8">
-                <p className="font-semibold">🔒 Chat verschlüsselt gespeichert</p>
-                <p className="text-muted">Löschfrist: 365 Tage</p>
-              </div>
-            </div>
+        <section className="mx-auto max-w-4xl px-4 pb-12 pt-16 text-center sm:pt-24">
+          <p className="text-sm font-medium text-brand">Für Vereine, Mitglieder und Fans</p>
+          <h1 className="mx-auto mt-3 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">Das Social Media für Vereine, Mitglieder und Fans.</h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">
+            Termine, Chat, Mitglieder und ein Feed an einem Ort. Gehostet in Deutschland, ohne Werbung und ohne Tracking.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Link href="/registrieren" className="inline-flex h-11 items-center rounded-lg bg-brand px-6 text-sm font-semibold text-brand-contrast hover:bg-brand-hover">
+              Kostenlos registrieren
+            </Link>
+            <Link href="/login" className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-6 text-sm font-semibold hover:bg-surface-2">
+              Anmelden
+            </Link>
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-16">
-          <h2 className="text-center text-3xl font-bold tracking-tight">Alles, was dein Verein braucht</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-center text-muted">Ein Ort statt vieler Gruppen, Listen und Tools.</p>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((f) => (
-              <div key={f.title} className="group rounded-2xl border border-border bg-surface p-6 transition hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
-                <div className="mb-4 grid size-11 place-items-center rounded-xl bg-brand/12 text-xl">{f.icon}</div>
-                <h3 className="font-semibold">{f.title}</h3>
-                <p className="mt-1.5 text-sm text-muted">{f.text}</p>
+        <section aria-label="Vorschau des Feeds" className="mx-auto max-w-xl px-4 pb-20">
+          <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand/15 text-sm font-semibold text-brand">FC</span>
+              <div>
+                <p className="text-sm font-medium">FC Blau-Weiß Lindenau</p>
+                <p className="text-xs text-muted">vor 2 Std. · Verein</p>
               </div>
-            ))}
+            </div>
+            <p className="mt-3 text-sm">Spieltag! Heimspiel gegen den Tabellenzweiten, Anstoß 15:00 Uhr am Sportplatz. Kuchenspenden sind willkommen.</p>
+            <TagChips tags={["fussball", "jugendarbeit"]} className="mt-3" />
+            <div className="mt-3 flex items-center gap-4 border-t border-border pt-3 text-sm text-muted" aria-hidden>
+              <span className="inline-flex items-center gap-1.5"><Heart size={15} /> 24</span>
+              <span className="inline-flex items-center gap-1.5"><MessageCircle size={15} /> 6</span>
+              <span className="ml-auto inline-flex items-center gap-1.5 text-brand"><Check size={15} /> 18 Zusagen</span>
+            </div>
           </div>
+          <p className="mt-2 text-center text-xs text-muted">Beispielansicht</p>
         </section>
 
-        <section className="bg-surface-2/60">
+        <section className="border-y border-border bg-surface">
           <div className="mx-auto max-w-6xl px-4 py-16">
-            <h2 className="text-center text-3xl font-bold tracking-tight">So startest du</h2>
-            <div className="mt-10 grid gap-6 md:grid-cols-3">
-              {steps.map((s) => (
-                <div key={s.n} className="rounded-2xl bg-surface p-6 shadow-sm">
-                  <div className="mb-4 grid size-10 place-items-center rounded-full bg-brand text-lg font-bold text-brand-contrast">{s.n}</div>
-                  <h3 className="font-semibold">{s.title}</h3>
-                  <p className="mt-1.5 text-sm text-muted">{s.text}</p>
-                </div>
+            <h2 className="text-2xl font-semibold tracking-tight">Was Klubnest heute kann</h2>
+            <p className="mt-2 max-w-2xl text-muted">Weniger WhatsApp-Chaos und Excel-Listen, mehr Zeit für den Verein.</p>
+            <ul className="mt-10 grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+              {features.map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex gap-4">
+                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand"><Icon size={18} aria-hidden /></span>
+                  <div>
+                    <h3 className="font-semibold">{title}</h3>
+                    <p className="mt-1 text-sm text-muted">{text}</p>
+                  </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-16">
-          <div className="rounded-3xl bg-gradient-to-br from-brand to-brand-hover px-6 py-14 text-center text-brand-contrast">
-            <h2 className="text-3xl font-bold tracking-tight">Bereit für dein Vereinsnest?</h2>
-            <p className="mx-auto mt-3 max-w-xl opacity-90">Starte kostenlos – in wenigen Minuten ist dein Verein online.</p>
-            <Link href="/registrieren" className="mt-8 inline-block rounded-xl bg-white px-6 py-3.5 font-semibold text-neutral-900 transition hover:-translate-y-0.5">
-              Jetzt kostenlos registrieren
+        <section className="mx-auto grid max-w-6xl gap-12 px-4 py-16 md:grid-cols-2">
+          <div>
+            <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><Lock size={20} aria-hidden className="text-brand" /> Datenschutz als Grundlage</h2>
+            <ul className="mt-5 space-y-2.5 text-sm">
+              {privacy.map((p) => (
+                <li key={p} className="flex gap-2.5"><Check size={16} aria-hidden className="mt-0.5 shrink-0 text-brand" />{p}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><FileText size={20} aria-hidden className="text-brand" /> In Entwicklung</h2>
+            <p className="mt-2 text-sm text-muted">Diese Funktionen sind geplant, aber noch nicht verfügbar:</p>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {planned.map((p) => (
+                <li key={p} className="flex gap-2.5"><Building2 size={16} aria-hidden className="mt-0.5 shrink-0 text-muted" />{p}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-4 pb-20">
+          <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight">Verein anlegen und loslegen</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">Gründe deinen Verein in wenigen Minuten, lade Mitglieder per Link ein und plane den ersten Termin.</p>
+            <Link href="/registrieren" className="mt-6 inline-flex h-11 items-center rounded-lg bg-brand px-6 text-sm font-semibold text-brand-contrast hover:bg-brand-hover">
+              Kostenlos registrieren
             </Link>
           </div>
         </section>
