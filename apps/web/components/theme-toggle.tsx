@@ -15,7 +15,7 @@ const OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Sun }[] = [
  * Umschalter fuer Automatisch / Hell / Dunkel (Radiogruppe, per Tastatur bedienbar).
  * compact: nur Icons (Kopfleisten); sonst mit Beschriftung (Einstellungen).
  */
-export function ThemeToggle({ compact = false, className }: { compact?: boolean; className?: string }) {
+export function ThemeToggle({ compact = false, fullWidth = false, className }: { compact?: boolean; fullWidth?: boolean; className?: string }) {
   // Erst nach dem Laden bekannt (localStorage); bis dahin neutral, damit Server und Client uebereinstimmen.
   const [mode, setMode] = useState<ThemeMode | null>(null);
   useEffect(() => setMode(readTheme()), []);
@@ -34,7 +34,7 @@ export function ThemeToggle({ compact = false, className }: { compact?: boolean;
   };
 
   return (
-    <div role="radiogroup" aria-label="Darstellung" className={clsx("inline-flex rounded-lg border border-border bg-surface p-0.5", className)}>
+    <div role="radiogroup" aria-label="Darstellung" className={clsx("rounded-lg border border-border bg-surface p-0.5", fullWidth ? "flex w-full" : "inline-flex", className)}>
       {OPTIONS.map(({ mode: m, label, Icon }, i) => {
         const selected = mode === m;
         return (
@@ -51,7 +51,7 @@ export function ThemeToggle({ compact = false, className }: { compact?: boolean;
             onKeyDown={(e) => onKey(e, i)}
             className={clsx(
               "inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors",
-              compact ? "h-8 w-8" : "h-8 px-3",
+              compact ? "h-8 w-8" : "h-10 px-3 text-[13px] sm:h-8 sm:text-sm", fullWidth && !compact && "flex-1",
               selected ? "bg-brand text-brand-contrast" : "text-muted hover:bg-surface-2 hover:text-text",
             )}
           >
@@ -61,5 +61,33 @@ export function ThemeToggle({ compact = false, className }: { compact?: boolean;
         );
       })}
     </div>
+  );
+}
+
+const NEXT: Record<ThemeMode, ThemeMode> = { system: "light", light: "dark", dark: "system" };
+
+/**
+ * Ein einzelner Knopf, der Automatisch -> Hell -> Dunkel durchschaltet (44 px Touch-Ziel, ideal fuer Kopfleisten am Handy).
+ * Der aktuelle Zustand steht im Namen fuer Screenreader; die volle Auswahl gibt es unter Einstellungen.
+ */
+export function ThemeCycleButton({ className }: { className?: string }) {
+  const [mode, setMode] = useState<ThemeMode | null>(null);
+  useEffect(() => setMode(readTheme()), []);
+  const current = OPTIONS.find((o) => o.mode === (mode ?? "system"))!;
+  const Icon = current.Icon;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const next = NEXT[mode ?? "system"];
+        setMode(next);
+        applyTheme(next);
+      }}
+      aria-label={`Darstellung: ${current.label}. Tippen zum Wechseln`}
+      title={`Darstellung: ${current.label}`}
+      className={clsx("inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text", className)}
+    >
+      <Icon size={20} aria-hidden />
+    </button>
   );
 }

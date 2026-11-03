@@ -34,7 +34,9 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
     <Card className={clsx(event.canceled && "opacity-60")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className={clsx("font-semibold", event.canceled && "line-through")}>{event.title}</p>
+          <p className={clsx("font-semibold", event.canceled && "line-through")}>
+            <Link href={`/kalender/${event.id}`} className="hover:text-brand hover:underline">{event.title}</Link>
+          </p>
           <p className="mt-0.5 text-sm text-muted">
             {timeFmt.format(start)}
             {end && ` – ${timeFmt.format(end)}`} Uhr
@@ -47,6 +49,9 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
             {event.canceled && <Badge tone="danger">abgesagt</Badge>}
           </p>
         </div>
+        <Link href={`/kalender/${event.id}`} className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text">
+          Details
+        </Link>
         <a
           href={`/api/events/${event.id}/ics`}
           className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text"

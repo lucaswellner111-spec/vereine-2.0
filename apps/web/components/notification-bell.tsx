@@ -26,9 +26,9 @@ function describe(n: NotificationItem): { text: string; href: string } {
     case "event_created":
       return { text: `Neuer Termin${d.series ? `serie (${d.series}×)` : ""} bei ${d.orgName}: ${d.title} (ab ${fmt(d.startsAt)})`, href: "/kalender" };
     case "event_reminder":
-      return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: "/kalender" };
+      return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
     case "event_canceled":
-      return { text: d.series ? `Abgesagt: ${d.title} – ${d.series} Termine ab ${fmt(d.startsAt)}` : `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: "/kalender" };
+      return { text: d.series ? `Abgesagt: ${d.title} – ${d.series} Termine ab ${fmt(d.startsAt)}` : `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
     case "new_follower":
       return { text: `${d.name} folgt dir jetzt.`, href: `/profil/${d.handle}` };
     case "follow_request":
@@ -90,7 +90,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
         }}
         aria-label={`Benachrichtigungen${data.unread ? `, ${data.unread} ungelesen` : ""}`}
         aria-expanded={open}
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+        className="relative inline-flex h-11 w-11 items-center justify-center rounded-lg md:h-9 md:w-9 text-muted hover:bg-surface-2 hover:text-text"
       >
         <span aria-hidden>🔔</span>
         {data.unread > 0 && (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -19,7 +19,8 @@ export function SiteHeader() {
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
         <Logo />
         <nav className="flex items-center gap-2 text-sm">
-          <ThemeToggle compact className="mr-1" />
+          <ThemeToggle compact className="mr-1 hidden sm:inline-flex" />
+          <ThemeCycleButton className="sm:hidden" />
           <Link href="/login" className="rounded-lg px-3 py-2 text-muted hover:bg-surface-2 hover:text-text">
             Anmelden
           </Link>

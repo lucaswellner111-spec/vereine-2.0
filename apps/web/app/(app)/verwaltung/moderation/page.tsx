@@ -1,8 +1,8 @@
 "use client";
 
-import { ModerationQueue } from "@/components/moderation-queue";
+import { ModerationTool } from "@/components/moderation-tool";
 import { VerwaltungPage } from "@/components/verwaltung-page";
 
 export default function ModerationPage() {
-  return <VerwaltungPage id="moderation">{(c) => <ModerationQueue slug={c.slug} onError={c.onError} />}</VerwaltungPage>;
+  return <VerwaltungPage id="moderation">{(c) => <ModerationTool slug={c.slug} onError={c.onError} />}</VerwaltungPage>;
 }

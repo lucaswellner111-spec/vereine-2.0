@@ -11,7 +11,7 @@ import { ChatProvider, useChat } from "@/lib/chat";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
 import { itemsForRole, useVerwaltung, VerwaltungProvider } from "@/lib/verwaltung";
 import { NotificationBell } from "./notification-bell";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
 import { Avatar, Button } from "./ui";
 
@@ -227,17 +227,14 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-4 md:hidden">
+      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-3 md:hidden">
         <Logo />
-        <div className="flex items-center gap-1">
-          <ThemeToggle compact className="mr-1" />
+        <div className="flex items-center">
+          <ThemeCycleButton />
           <NotificationBell />
-          <Link href="/einstellungen/profil" aria-label="Profil und Konto" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
-            <Settings size={18} aria-hidden />
+          <Link href="/einstellungen" aria-label="Einstellungen und Konto" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+            <Avatar name={user.displayName} size={30} />
           </Link>
-          <Button variant="ghost" size="sm" aria-label="Abmelden" onClick={() => logout().then(() => router.replace("/login"))}>
-            <LogOut size={16} aria-hidden />
-          </Button>
         </div>
       </header>
 
@@ -248,14 +245,14 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
       <nav
         aria-label="Hauptnavigation"
         style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-        className="fixed inset-x-0 bottom-0 z-10 grid border-t border-border bg-surface md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 grid border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             aria-current={isActive(item.href) ? "page" : undefined}
-            className={clsx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium", isActive(item.href) ? "text-brand" : "text-muted")}
+            className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium", isActive(item.href) ? "text-brand" : "text-muted")}
           >
             <span className="relative">
               <item.icon size={20} aria-hidden />

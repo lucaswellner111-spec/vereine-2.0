@@ -5,8 +5,12 @@ import {
   feedbackSchema,
   type MutedItem,
   reportSchema,
+  deleteCommentSchema,
+  moderatePostSchema,
   resolveReportSchema,
   type ReportItem,
+  type ModerationCommentItem,
+  type ModerationPostItem,
   type CommentItem,
   type FeedPost,
   type FeedResponse,
@@ -51,6 +55,34 @@ export class PostsController {
     @Query("status") status?: string,
   ): Promise<ReportItem[]> {
     return this.moderation.list(user, slug, status === "dismissed" || status === "actioned" ? status : "open");
+  }
+
+  @Get("orgs/:slug/moderation/posts")
+  moderationPosts(
+    @CurrentUser() user: PublicUser,
+    @Param("slug") slug: string,
+    @Query("filter") filter?: string,
+    @Query("offset") offset?: string,
+  ): Promise<ModerationPostItem[]> {
+    return this.moderation.posts(user, slug, filter === "hidden" || filter === "reported" ? filter : "all", Number(offset) || 0);
+  }
+
+  @Post("posts/:id/moderation")
+  @HttpCode(204)
+  moderatePost(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    return this.moderation.moderatePost(user, id, parse(moderatePostSchema, body));
+  }
+
+  @Get("orgs/:slug/moderation/comments")
+  moderationComments(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<ModerationCommentItem[]> {
+    return this.moderation.comments(user, slug);
+  }
+
+  @Delete("moderation/comments/:id")
+  @HttpCode(204)
+  deleteComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    parse(deleteCommentSchema, body ?? {});
+    return this.moderation.deleteComment(user, id);
   }
 
   @Post("reports/:id/resolve")

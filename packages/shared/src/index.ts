@@ -602,3 +602,25 @@ export type OrgDashboard = {
   byFeeClass: { name: string; members: number }[];
   joinsByMonth: { month: string; joins: number }[];
 };
+
+// --- Moderations-Werkzeug (Vereinsebene) ----------------------------------------------
+
+export const moderatePostSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("hide"), reason: z.string().trim().min(10).max(500) }),
+  z.object({ action: z.literal("unhide") }),
+]);
+export type ModeratePostInput = z.infer<typeof moderatePostSchema>;
+export const deleteCommentSchema = z.object({ reason: z.string().trim().max(300).default("") });
+
+export type ModerationPostItem = {
+  id: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+  tags: string[];
+  hidden: boolean;
+  hiddenReason: string | null;
+  comments: number;
+  openReports: number;
+};
+export type ModerationCommentItem = { id: string; body: string; authorName: string; createdAt: string; postId: string; postExcerpt: string };

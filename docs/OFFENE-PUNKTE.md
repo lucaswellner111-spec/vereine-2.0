@@ -69,4 +69,5 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Termine mit Typ-Tags (Training, Spiel, Versammlung), Suche über Vereine/Personen/Tags, Tag-Seiten `/tags/<id>`, „Vereine in deiner Nähe“ (Geodaten, Datenschutz prüfen).
 - Design: `Dialog` statt `confirm()`, `Skeleton` statt „Lade …“, Leerzustände mit Handlungsaufforderung, restliche Seiten (Profile, Chat, Spenden) auf die neuen Komponenten, Tab-Leisten innerhalb von Seiten vereinheitlichen, Barrierefreiheitsprüfung (axe), Mobil-Test auf echten Geräten.
 - Demo-Daten auf der Domain haben noch keine Tags (Skript `infra/demo/seed.mjs` setzt sie bei neuem Lauf; bestehende Vereine: `PUT /orgs/<slug>/tags`).
+- Moderation: Sperren/Verwarnungen von Nutzern im Verein, Einspruchsverfahren (DSA Art. 20), Transparenzbericht, automatische Spam-Hinweise, Moderationsprotokoll als Ansicht für den Vorstand, Moderation von Chat-Gruppen eines Vereins.
 

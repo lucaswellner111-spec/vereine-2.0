@@ -89,9 +89,9 @@ export default function ProfileSettingsPage() {
           </Card>
 
           <h2 className="mb-2 font-semibold">Darstellung</h2>
-          <Card className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <Card className="mb-6 space-y-3">
             <p className="text-sm text-muted">Automatisch folgt der Einstellung deines Geräts. Die Wahl gilt nur in diesem Browser.</p>
-            <ThemeToggle />
+            <ThemeToggle fullWidth className="sm:w-auto" />
           </Card>
 
           <Card className="mb-6">
