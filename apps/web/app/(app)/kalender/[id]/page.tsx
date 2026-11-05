@@ -1,12 +1,15 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, CalendarPlus, Clock, MapPin, Users } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Clock, MapPin, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
 import { Alert, Badge, Button, Card } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
+import { withRsvp } from "@/lib/events";
+import { shareLink } from "@/lib/share";
+import { ask } from "@/components/ui-hosts";
 
 const rsvpOptions: { id: RsvpStatus; label: string }[] = [
   { id: "yes", label: "Zusagen" },
@@ -40,17 +43,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   async function rsvp(status: RsvpStatus) {
     setError(null);
+    const before = event;
+    if (event) setEvent(withRsvp(event, status)); // sofort sichtbar
     try {
       setEvent(await api<EventItem>(`/events/${id}/rsvp`, { method: "PUT", body: { status } }));
       if (event?.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`));
     } catch (e) {
+      setEvent(before);
       setError(describeError(e));
     }
   }
 
   async function cancel(scope: "single" | "series") {
     const msg = scope === "series" ? "Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt." : "Termin absagen? Alle Zusagen werden benachrichtigt.";
-    if (!confirm(msg)) return;
+    if (!(await ask(msg, { confirmLabel: "Ja" }))) return;
     setError(null);
     try {
       await api(`/events/${id}/cancel`, { method: "POST", body: { scope } });
@@ -137,6 +143,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <a href={`/api/events/${event.id}/ics`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-2">
             <CalendarPlus size={16} aria-hidden /> In Kalender übernehmen
           </a>
+          <Button variant="secondary" onClick={() => shareLink(event.title, `/kalender/${event.id}`)}>
+            <Share2 size={16} aria-hidden /> Teilen
+          </Button>
           {event.canManage && !event.canceled && (
             <>
               <Button variant="secondary" onClick={() => cancel("single")}>Termin absagen</Button>

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { InvoiceDetail, InvoiceSummary } from "@vereine/shared";
 import { InvoiceStatusBadge } from "@/components/invoice-status";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, PageHeader } from "@/components/ui";
+import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents } from "@/lib/money";
 
@@ -33,7 +33,7 @@ export default function MyInvoicesPage() {
       <SettingsTabs active="/rechnungen" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {rows === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
         <Card><p className="text-sm text-muted">Du hast keine Rechnungen. <Link href="/vereine" className="text-brand hover:underline">Vereine entdecken →</Link></p></Card>
       ) : (

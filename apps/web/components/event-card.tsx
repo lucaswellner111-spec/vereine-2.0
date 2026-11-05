@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { EventItem, RsvpStatus } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
+import { withRsvp } from "@/lib/events";
 import { Alert, Badge, Button, Card } from "./ui";
 
 const rsvpOptions: { id: RsvpStatus; label: string }[] = [
@@ -20,9 +21,12 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
 
   async function rsvp(status: RsvpStatus) {
     setError(null);
+    const before = event;
+    onChange(withRsvp(event, status)); // sofort sichtbar
     try {
       onChange(await api<EventItem>(`/events/${event.id}/rsvp`, { method: "PUT", body: { status } }));
     } catch (e) {
+      onChange(before);
       setError(describeError(e));
     }
   }

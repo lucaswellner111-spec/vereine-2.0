@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { FeeClassItem, FeeInterval, MemberRecord, MemberRegistryPage, OrgDashboard } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
-import { Alert, Badge, Button, Card, ConceptNote, Field } from "./ui";
+import { Alert, Badge, Button, Card, ConceptNote, Field, CardSkeletons } from "./ui";
+import { ask } from "./ui-hosts";
 
 const intervalLabel: Record<FeeInterval, string> = { monthly: "monatlich", quarterly: "vierteljährlich", halfyearly: "halbjährlich", yearly: "jährlich" };
 const roleLabel = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" } as const;
@@ -18,7 +19,7 @@ export function DashboardPanel({ slug, onError }: { slug: string; onError: (m: s
     setD(null);
     api<OrgDashboard>(`/orgs/${slug}/dashboard`).then(setD).catch((e) => onError(describeError(e)));
   }, [slug, onError]);
-  if (!d) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (!d) return <CardSkeletons count={2} />;
   const maxJoins = Math.max(1, ...d.joinsByMonth.map((m) => m.joins));
   const stat = (label: string, value: string, hint?: string) => (
     <Card key={label}>
@@ -105,7 +106,7 @@ export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canE
   }
 
   async function remove(c: FeeClassItem) {
-    if (!confirm(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`)) return;
+    if (!(await ask(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`, { confirmLabel: "Ja" }))) return;
     onError(null);
     try {
       await api(`/orgs/${slug}/fee-classes/${c.id}`, { method: "DELETE" });
@@ -134,7 +135,7 @@ export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canE
         </Card>
       )}
       {rows === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
         <Card><p className="text-sm text-muted">Noch keine Beitragsklassen.</p></Card>
       ) : (
@@ -202,7 +203,7 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
       {isAdmin && <p className="text-xs text-muted">Der Export wird protokolliert. Gib Mitgliederdaten nur an Personen weiter, die sie für Vereinszwecke brauchen.</p>}
 
       {page === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : page.items.length === 0 ? (
         <Card><p className="text-sm text-muted">Keine Mitglieder gefunden.</p></Card>
       ) : (

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { RegisterServiceWorker } from "@/components/pwa";
+import { UiHosts } from "@/components/ui-hosts";
 import { AuthProvider } from "@/lib/auth";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "@fontsource-variable/inter";
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-dvh antialiased">
         <RegisterServiceWorker />
+        <UiHosts />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

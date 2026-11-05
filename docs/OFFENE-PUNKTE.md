@@ -70,4 +70,5 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Design: `Dialog` statt `confirm()`, `Skeleton` statt „Lade …“, Leerzustände mit Handlungsaufforderung, restliche Seiten (Profile, Chat, Spenden) auf die neuen Komponenten, Tab-Leisten innerhalb von Seiten vereinheitlichen, Barrierefreiheitsprüfung (axe), Mobil-Test auf echten Geräten.
 - Demo-Daten auf der Domain haben noch keine Tags (Skript `infra/demo/seed.mjs` setzt sie bei neuem Lauf; bestehende Vereine: `PUT /orgs/<slug>/tags`).
 - Moderation: Sperren/Verwarnungen von Nutzern im Verein, Einspruchsverfahren (DSA Art. 20), Transparenzbericht, automatische Spam-Hinweise, Moderationsprotokoll als Ansicht für den Vorstand, Moderation von Chat-Gruppen eines Vereins.
+- Bedienkomfort offen: Kurzprofil-Karte beim Antippen von Namen, Wochenansicht im Kalender, Terminen Typen (Training/Spiel) geben, Tastaturkürzel-Übersicht, Skeletons je Seite feiner abstimmen. Recherche-Ideen Block 2 (Anwesenheit, Warteliste, Umfragen, Helferlisten, Fahrgemeinschaften): siehe `docs/RESEARCH-MARKT-UND-UI.md`.
 

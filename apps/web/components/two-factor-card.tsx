@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { TwoFactorSetup, TwoFactorStatus } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Alert, Badge, Button, Card, Field } from "./ui";
+import { Alert, Badge, Button, Card, Field, CardSkeletons } from "./ui";
 
 type Mode = "idle" | "setup" | "codes" | "manage";
 
@@ -86,7 +86,7 @@ export function TwoFactorCard({ onError }: { onError: (m: string | null) => void
         </p>
 
         {status === null ? (
-          <p className="text-sm text-muted" role="status">Lade …</p>
+          <CardSkeletons count={2} />
         ) : mode === "codes" && codes ? (
           <div className="space-y-3">
             <Alert tone="success">Notfallcodes – jetzt sicher aufbewahren (z. B. Passwortmanager oder Ausdruck). Jeder Code funktioniert einmal und wird nicht noch einmal angezeigt.</Alert>

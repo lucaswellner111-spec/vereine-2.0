@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { FollowRequest, MutedItem, ProfileView } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Alert, Avatar, Button, Card, Checkbox, Field, PageHeader } from "@/components/ui";
+import { Alert, Avatar, Button, Card, Checkbox, Field, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { removeAvatar, uploadImage } from "@/lib/media";
 import { useAuth } from "@/lib/auth";
@@ -71,7 +71,7 @@ export default function ProfileSettingsPage() {
       {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
       {!profile ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : (
         <>
           <Card className="mb-6">

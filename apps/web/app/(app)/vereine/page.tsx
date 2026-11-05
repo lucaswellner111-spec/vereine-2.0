@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { TAGS, TAG_GROUPS, type OrgSummary } from "@vereine/shared";
 import { TagChips } from "@/components/tag-chips";
-import { Alert, Avatar, Badge, Card, LinkButton, PageHeader } from "@/components/ui";
+import { Alert, Avatar, Badge, Card, LinkButton, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 
 export default function OrgsPage() {
@@ -61,7 +61,7 @@ export default function OrgsPage() {
       </div>
       {error && <Alert>{error}</Alert>}
       {orgs === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : orgs.length === 0 ? (
         <Card>
           <p className="text-sm">{q ? "Nichts gefunden." : "Noch keine Vereine."} Gründe den ersten Verein deiner Region!</p>

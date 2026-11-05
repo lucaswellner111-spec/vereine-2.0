@@ -8,7 +8,7 @@ import type { FeedPost, FeedResponse, MediaRef, OrgSummary } from "@vereine/shar
 import { PostCard } from "@/components/post-card";
 import { MAX_POST_TAGS, tagLabel } from "@vereine/shared";
 import { TagPicker } from "@/components/tag-picker";
-import { Alert, Button, Card, PageHeader } from "@/components/ui";
+import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl, uploadImage } from "@/lib/media";
 
@@ -196,7 +196,7 @@ export default function FeedPage() {
       </Card>
 
       {feed === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : feed.posts.length === 0 ? (
         <Card>
           <p className="text-sm">Hier ist noch nichts. Folge Vereinen oder Personen oder schreibe den ersten Beitrag.</p>

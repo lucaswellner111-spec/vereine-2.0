@@ -47,10 +47,18 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
     }
   };
 
+  // Optimistisch: Herz und Zahl aendern sich sofort, bei Fehler wird zurueckgesetzt.
   const like = () =>
     run(async () => {
-      const r = await api<{ liked: boolean; likes: number }>(`/posts/${post.id}/like`, { method: "POST", body: {} });
-      setPost((p) => ({ ...p, likedByMe: r.liked, likes: r.likes }));
+      const before = post;
+      setPost((p) => ({ ...p, likedByMe: !p.likedByMe, likes: p.likes + (p.likedByMe ? -1 : 1) }));
+      try {
+        const r = await api<{ liked: boolean; likes: number }>(`/posts/${post.id}/like`, { method: "POST", body: {} });
+        setPost((p) => ({ ...p, likedByMe: r.liked, likes: r.likes }));
+      } catch (e) {
+        setPost(before);
+        throw e;
+      }
     });
 
   const toggleComments = () =>

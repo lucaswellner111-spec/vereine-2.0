@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { InviteInfo } from "@vereine/shared";
-import { Alert, Button, Card } from "@/components/ui";
+import { Alert, Button, Card, CardSkeletons } from "@/components/ui";
 import { Logo } from "@/components/site";
 import { api, ApiError, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -47,7 +47,7 @@ export default function InvitePage() {
       <Card className="w-full max-w-md space-y-4 p-6">
         <h1 className="text-xl font-semibold">Einladung zu einem Verein</h1>
         {loading ? (
-          <p className="text-sm text-muted" role="status">Lade …</p>
+          <CardSkeletons count={2} />
         ) : !user ? (
           <>
             <p className="text-sm text-muted">Melde dich an oder erstelle ein Konto, um der Einladung zu folgen.</p>

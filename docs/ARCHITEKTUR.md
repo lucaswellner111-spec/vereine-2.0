@@ -101,3 +101,9 @@ Vor jedem neuen Modul: Bereich festlegen (identity/social/chat/billing), eigenes
 - **Termin-Detailseite** `/kalender/<id>`: Datum, Ort, Beschreibung, Zusage, Kalender-Übernahme, für Vorstand/Moderation Teilnehmerliste und Absagen (einzeln/Serie). Benachrichtigungen führen direkt dorthin.
 - **Moderations-Werkzeug (Verein):** Verwaltung → Moderation mit Meldungen, Beiträgen (Filter alle/gemeldet/ausgeblendet; ausblenden nur mit Begründung ≥ 10 Zeichen, Autor wird benachrichtigt, einblenden) und Kommentaren (löschen). API `GET /orgs/:slug/moderation/posts|comments`, `POST /posts/:id/moderation`, `DELETE /moderation/comments/:id`; Rollen Vorstand/Moderation; Protokoll (`post.hidden`, `post.unhidden`, `comment.deleted`) ohne Inhalte. Plattform-Moderation (Beiträge ohne Verein, Chat-Meldungen) bleibt unter `/plattform`.
 
+## Bedienkomfort-Block (2026-11-05)
+- **Befehlspalette** (`components/command-palette.tsx`): Strg/Cmd+K oder „/“, Suche über Seiten, Verwaltungs-/Einstellungsbereiche (rollenabhängig), Vereine und Personen, Aktionen (Darstellung, Abmelden); nur Frontend, nutzt `/orgs?q=` und `/profiles/search`.
+- **Dialoge und Rückmeldungen** (`components/ui-hosts.tsx`): `ask()` ersetzt alle `window.confirm`, `toast.success/error/info` für Rückmeldungen; Host einmal im Root-Layout, Esc/Fokusfalle/ARIA.
+- **Skeleton-Platzhalter** (`Skeleton`, `CardSkeletons` in `ui.tsx`) statt „Lade …“. **Optimistische Oberfläche:** Likes und Zusagen (`lib/events.ts: withRsvp`) mit Rücksetzen bei Fehler.
+- **Onboarding-Assistent** „Erste Schritte“ auf der Verwaltungs-Übersicht (Vorstand; Tags, Einladung, Termin, Beitrag, Vereinsdaten, Beitragsklassen; ausblendbar). **Kalender-Filter** (Zeitraum, Verein), **Teilen** (`lib/share.ts`, Web-Share bzw. Link kopieren), **QR-Code** zur Einladung (`qrcode`, nur im Browser erzeugt, nie extern).
+

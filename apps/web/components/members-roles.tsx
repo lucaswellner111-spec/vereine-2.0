@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ORG_ROLES, type MemberItem, type OrgRole } from "@vereine/shared";
-import { Button, Card } from "./ui";
+import { Button, Card, CardSkeletons } from "./ui";
 import { api, describeError } from "@/lib/api";
+import { ask } from "./ui-hosts";
 
 const roleLabel: Record<OrgRole, string> = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" };
 
@@ -40,7 +41,7 @@ export function MembersManager({
     }
   };
 
-  if (rows === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (rows === null) return <CardSkeletons count={2} />;
   if (rows.length === 0) return <Card><p className="text-sm text-muted">{mode === "pending" ? "Keine offenen Anträge." : "Noch keine Mitglieder."}</p></Card>;
 
   return (
@@ -72,7 +73,7 @@ export function MembersManager({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => confirm(`${m.name} aus dem Verein entfernen?`) && run(() => api(`/orgs/${slug}/members/${m.userId}`, { method: "DELETE" }))}
+                onClick={async () => await ask(`${m.name} aus dem Verein entfernen?`) && run(() => api(`/orgs/${slug}/members/${m.userId}`, { method: "DELETE" }))}
               >
                 Entfernen
               </Button>

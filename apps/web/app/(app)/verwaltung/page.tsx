@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ChevronRight } from "lucide-react";
-import { Card, PageHeader } from "@/components/ui";
+import { Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
 
 export default function VerwaltungIndexPage() {
@@ -17,7 +17,7 @@ export default function VerwaltungIndexPage() {
     if (items.length > 0 && window.matchMedia("(min-width: 768px)").matches) router.replace(`/verwaltung/${items[0].id}`);
   }, [items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (orgs === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (orgs === null) return <CardSkeletons count={2} />;
   if (orgs.length === 0) {
     return (
       <>

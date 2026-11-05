@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type { ComponentPropsWithRef, InputHTMLAttributes, ReactNode } from "react";
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentPropsWithRef<"button"> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
   size?: "sm" | "md";
 };
@@ -200,6 +200,36 @@ export function ConceptNote({ children }: { children: ReactNode }) {
   return (
     <div className="mb-4 rounded-lg border border-dashed border-accent/60 bg-accent/10 px-3 py-2 text-xs text-muted">
       <strong className="text-text">Konzept-Ansicht:</strong> {children}
+    </div>
+  );
+}
+
+/** Platzhalter beim Laden: behaelt das Layout stabil und kuendigt sich Screenreadern als "Lade" an. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={clsx("animate-pulse rounded-md bg-surface-2", className)} />;
+}
+
+/** Liste von Karten-Platzhaltern (Feed, Vereine, Termine). */
+export function CardSkeletons({ count = 3, media = false }: { count?: number; media?: boolean }) {
+  return (
+    <div role="status" aria-label="Lade" className="space-y-4">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="rounded-xl border border-border bg-surface p-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-3 w-1/5" />
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+          {media && <Skeleton className="mt-4 h-48 w-full rounded-xl" />}
+        </div>
+      ))}
+      <span className="sr-only">Lade …</span>
     </div>
   );
 }

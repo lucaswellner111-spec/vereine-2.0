@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { OrgRole } from "@vereine/shared";
 import { itemsForRole, VERWALTUNG_ITEMS, useVerwaltung } from "@/lib/verwaltung";
-import { Alert, Card, PageHeader } from "./ui";
+import { Alert, Card, PageHeader, CardSkeletons } from "./ui";
 
 export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; onError: (m: string | null) => void };
 
@@ -17,7 +17,7 @@ export function VerwaltungPage({ id, children }: { id: string; children: (ctx: V
   const item = VERWALTUNG_ITEMS.find((i) => i.id === id);
   const title = item?.label ?? "Verwaltung";
 
-  if (orgs === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (orgs === null) return <CardSkeletons count={2} />;
   if (orgs.length === 0) {
     return (
       <>

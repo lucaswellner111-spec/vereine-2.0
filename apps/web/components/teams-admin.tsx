@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MemberItem, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Button, Card, Field } from "./ui";
+import { Button, Card, Field, CardSkeletons } from "./ui";
+import { ask } from "./ui-hosts";
 
 export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const [teams, setTeams] = useState<TeamItem[] | null>(null);
@@ -71,7 +72,7 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
       </Card>
 
       {teams === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : teams.length === 0 ? (
         <Card><p className="text-sm text-muted">Noch keine Teams.</p></Card>
       ) : (
@@ -89,8 +90,8 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() =>
-                        confirm(`Team „${t.name}“ samt Terminen löschen?`) &&
+                      onClick={async () =>
+                        await ask(`Team „${t.name}“ samt Terminen löschen?`) &&
                         run(async () => {
                           await api(`/orgs/${slug}/teams/${t.id}`, { method: "DELETE" });
                           load();

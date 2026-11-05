@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import type { MyMembership, SelfMemberProfileInput } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, Field, PageHeader } from "@/components/ui";
+import { Alert, Button, Card, Field, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { dateDe } from "@/lib/money";
 
@@ -22,7 +22,7 @@ export default function MyClubDataPage() {
       <SettingsTabs active="/einstellungen/vereinsdaten" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {list === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : list.length === 0 ? (
         <Card><p className="text-sm text-muted">Du bist in keinem Verein Mitglied. Hier erscheinen deine Vereinsdaten, sobald du beigetreten bist. <Link href="/vereine" className="text-brand hover:underline">Vereine entdecken →</Link></p></Card>
       ) : (

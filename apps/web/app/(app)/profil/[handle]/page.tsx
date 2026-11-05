@@ -5,7 +5,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { FeedPost, PersonItem, ProfileView } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
-import { Alert, Avatar, Badge, Button, Card } from "@/components/ui";
+import { Alert, Avatar, Badge, Button, Card, CardSkeletons } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
 import { mediaUrl } from "@/lib/media";
 
@@ -139,7 +139,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
       {!v.canView && (tab === "Fotos" || tab === "Beiträge") ? (
         <Card><p className="text-sm">🔒 Dieses Profil ist privat. Folge {profile.displayName}, um die Beiträge zu sehen.</p></Card>
       ) : tab === "Fotos" ? (
-        posts === null ? <p className="text-sm text-muted" role="status">Lade …</p> : withMedia.length === 0 ? (
+        posts === null ? <CardSkeletons count={2} /> : withMedia.length === 0 ? (
           <Card><p className="text-sm text-muted">Noch keine Fotos.</p></Card>
         ) : (
           <ul className="grid grid-cols-3 gap-1 sm:gap-2">
@@ -155,7 +155,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
           </ul>
         )
       ) : tab === "Beiträge" ? (
-        posts === null ? <p className="text-sm text-muted" role="status">Lade …</p> : posts.length === 0 ? (
+        posts === null ? <CardSkeletons count={2} /> : posts.length === 0 ? (
           <Card><p className="text-sm text-muted">Noch keine Beiträge.</p></Card>
         ) : (
           <ul className="space-y-4">
@@ -165,7 +165,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
           </ul>
         )
       ) : people === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : people.length === 0 ? (
         <Card><p className="text-sm text-muted">{v.canView ? "Noch niemand." : "🔒 Die Liste ist nur für Follower sichtbar."}</p></Card>
       ) : (

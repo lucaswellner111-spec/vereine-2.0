@@ -9,6 +9,7 @@ import { PostCard } from "@/components/post-card";
 import { Alert, Avatar, Badge, Button, Card } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ask } from "@/components/ui-hosts";
 
 const roleLabel = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" } as const;
 
@@ -103,7 +104,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  if (!confirm("Mitgliedschaft wirklich beenden?")) return;
+                  if (!(await ask("Mitgliedschaft wirklich beenden?", { confirmLabel: "Ja" }))) return;
                   try {
                     await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
                     await load();

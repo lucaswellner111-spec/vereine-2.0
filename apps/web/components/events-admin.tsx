@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import type { EventItem, RsvpItem, TeamItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Badge, Button, Card, Field } from "./ui";
+import { Badge, Button, Card, Field, CardSkeletons } from "./ui";
+import { ask } from "./ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const empty = { title: "", startsAt: "", endsAt: "", location: "", description: "", teamId: "", visibility: "members", repeat: "none", count: "8" };
@@ -113,7 +114,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
       </Card>
 
       {events === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : events.length === 0 ? (
         <Card><p className="text-sm text-muted">Keine kommenden Termine.</p></Card>
       ) : (
@@ -151,8 +152,8 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() =>
-                          confirm("Termin absagen? Alle Zusagen werden benachrichtigt.") &&
+                        onClick={async () =>
+                          await ask("Termin absagen? Alle Zusagen werden benachrichtigt.") &&
                           run(async () => {
                             await api(`/events/${ev.id}/cancel`, { method: "POST", body: {} });
                             load();
@@ -166,8 +167,8 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() =>
-                          confirm("Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt.") &&
+                        onClick={async () =>
+                          await ask("Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt.") &&
                           run(async () => {
                             await api(`/events/${ev.id}/cancel`, { method: "POST", body: { scope: "series" } });
                             load();

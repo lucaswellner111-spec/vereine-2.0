@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, ChevronDown, Flag, Heart, LayoutDashboard, LogOut, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, ChevronDown, Flag, Search, Heart, LayoutDashboard, LogOut, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { ChatProvider, useChat } from "@/lib/chat";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
 import { itemsForRole, useVerwaltung, VerwaltungProvider } from "@/lib/verwaltung";
+import { CommandPalette, openCommandPalette } from "./command-palette";
 import { NotificationBell } from "./notification-bell";
 import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
@@ -69,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ChatProvider>
       <VerwaltungProvider>
         <Shell user={user}>{children}</Shell>
+        <CommandPalette />
       </VerwaltungProvider>
     </ChatProvider>
   );
@@ -198,6 +200,15 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           <Logo className="text-lg" />
           <NotificationBell align="left" />
         </div>
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          className="mb-3 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg px-3 text-sm text-muted hover:text-text"
+        >
+          <Search size={15} aria-hidden />
+          <span className="flex-1 text-left">Suchen …</span>
+          <kbd className="rounded border border-border px-1.5 text-[10px]">Strg K</kbd>
+        </button>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Hauptnavigation">
           {items.map((item) =>
             item.href === "/verwaltung" ? (
@@ -230,6 +241,9 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
       <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-3 md:hidden">
         <Logo />
         <div className="flex items-center">
+          <button type="button" onClick={openCommandPalette} aria-label="Suchen" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
+            <Search size={20} aria-hidden />
+          </button>
           <ThemeCycleButton />
           <NotificationBell />
           <Link href="/einstellungen" aria-label="Einstellungen und Konto" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">

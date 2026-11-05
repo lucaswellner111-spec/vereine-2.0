@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { CreatedInvite, InviteItem, OrgBillingProfile } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Alert, Badge, Button, Card, Field } from "./ui";
+import { toast } from "./ui-hosts";
+import { Alert, Badge, Button, Card, Field, CardSkeletons } from "./ui";
 
 const statusLabel = { active: "Aktiv", expired: "Abgelaufen", used_up: "Aufgebraucht", revoked: "Widerrufen" } as const;
 const statusTone = { active: "brand", expired: "neutral", used_up: "neutral", revoked: "neutral" } as const;
 
 export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const [rows, setRows] = useState<InviteItem[] | null>(null);
-  const [created, setCreated] = useState<{ url: string } | null>(null);
+  const [created, setCreated] = useState<{ url: string; qr: string } | null>(null);
   const [maxUses, setMaxUses] = useState("50");
   const [days, setDays] = useState("14");
   const [copied, setCopied] = useState(false);
@@ -29,7 +30,9 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
     onError(null);
     try {
       const inv = await api<CreatedInvite>(`/orgs/${slug}/invites`, { method: "POST", body: { maxUses: Number(maxUses), expiresInDays: Number(days) } });
-      setCreated({ url: `${window.location.origin}/einladung/${inv.token}` });
+      const url = `${window.location.origin}/einladung/${inv.token}`;
+      const QRCode = (await import("qrcode")).default;
+      setCreated({ url, qr: await QRCode.toDataURL(url, { margin: 2, width: 360, errorCorrectionLevel: "M" }) });
       setCopied(false);
       load();
     } catch (err) {
@@ -75,12 +78,22 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
                 {copied ? "Kopiert ✓" : "Kopieren"}
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={created.qr} alt="QR-Code des Einladungslinks" width={140} height={140} className="rounded bg-white" />
+              <div className="space-y-2 text-sm">
+                <p className="text-muted">Für den Aushang im Vereinsheim: ausdrucken oder als Bild speichern. Wer den QR-Code scannt, landet direkt bei der Einladung.</p>
+                <a href={created.qr} download="einladung-qr.png" onClick={() => toast.success("QR-Code gespeichert")} className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium hover:bg-surface-2">
+                  QR-Code als Bild speichern
+                </a>
+              </div>
+            </div>
           </div>
         )}
       </Card>
 
       {rows === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
         <Card><p className="text-sm text-muted">Noch keine Einladungen.</p></Card>
       ) : (
@@ -121,7 +134,7 @@ export function BillingProfileAdmin({ slug, canEdit, onError }: { slug: string; 
     }
   }
 
-  if (!form) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (!form) return <CardSkeletons count={2} />;
   return (
     <Card>
       <p className="mb-3 text-sm text-muted">Diese Angaben erscheinen auf Rechnungen. Bereits finalisierte Rechnungen bleiben unverändert.</p>

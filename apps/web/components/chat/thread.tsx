@@ -7,6 +7,7 @@ import { CHAT_MAX_BODY } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useChat, useChatEvents } from "@/lib/chat";
 import { Alert, Avatar, Badge, Button } from "../ui";
+import { ask } from "@/components/ui-hosts";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -192,8 +193,8 @@ export function Thread({
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() =>
-                  confirm("Gruppe verlassen?") &&
+                onClick={async () =>
+                  await ask("Gruppe verlassen?") &&
                   run(async () => {
                     await api(`/chat/conversations/${id}/members/${me.id}`, { method: "DELETE" });
                     onChanged();

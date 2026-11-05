@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CalendarFeedCreated, CalendarFeedStatus } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, PageHeader } from "@/components/ui";
+import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 
 export default function CalendarSettingsPage() {
@@ -49,7 +49,7 @@ export default function CalendarSettingsPage() {
           Mit dem Abo-Link erscheinen alle Termine deiner Vereine und Teams automatisch in deinem Kalenderprogramm und bleiben aktuell. Wer den Link kennt, kann deine Termine sehen – gib ihn nicht weiter. Ein neuer Link macht den alten ungültig.
         </p>
         {status === null ? (
-          <p className="text-sm text-muted" role="status">Lade …</p>
+          <CardSkeletons count={2} />
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button onClick={create}>{status.enabled ? "Neuen Link erzeugen" : "Abo-Link erzeugen"}</Button>

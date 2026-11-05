@@ -4,9 +4,10 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { ChatReportItem, ReportItem } from "@vereine/shared";
-import { Alert, Badge, Button, Card, PageHeader } from "@/components/ui";
+import { Alert, Badge, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { ask } from "@/components/ui-hosts";
 
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
 type Tab = "Beiträge" | "Chat-Meldungen";
@@ -64,7 +65,7 @@ function PostReports({ onError }: { onError: (m: string | null) => void }) {
     }
   }
 
-  if (items === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (items === null) return <CardSkeletons count={2} />;
   if (items.length === 0) return <Card><p className="text-sm text-muted">Keine offenen Meldungen zu persönlichen Beiträgen.</p></Card>;
 
   return (
@@ -120,7 +121,7 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
     }
   }
 
-  if (items === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (items === null) return <CardSkeletons count={2} />;
   if (items.length === 0) return <Card><p className="text-sm text-muted">Keine offenen Chat-Meldungen.</p></Card>;
 
   return (
@@ -139,7 +140,7 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
               <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-surface-2 p-3 text-sm">{r.text ?? "Nachricht bereits gelöscht."}</p>
               {r.note && <p className="mt-1 text-xs text-muted">Hinweis: {r.note}</p>}
               <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="danger" disabled={!r.text} onClick={() => confirm("Nachricht endgültig löschen?") && resolve(r.id, "delete")}>Nachricht löschen</Button>
+                <Button size="sm" variant="danger" disabled={!r.text} onClick={async () => await ask("Nachricht endgültig löschen?") && resolve(r.id, "delete")}>Nachricht löschen</Button>
                 <Button size="sm" variant="secondary" onClick={() => resolve(r.id, "dismiss")}>Meldung ablehnen</Button>
               </div>
             </Card>

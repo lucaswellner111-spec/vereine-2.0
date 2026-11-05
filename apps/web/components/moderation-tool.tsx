@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import { tagLabel, type ModerationCommentItem, type ModerationPostItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { ModerationQueue } from "./moderation-queue";
-import { Badge, Button, Card } from "./ui";
+import { Badge, Button, Card, CardSkeletons } from "./ui";
+import { ask, toast } from "./ui-hosts";
 
 type Section = "reports" | "posts" | "comments";
 const SECTIONS: { id: Section; label: string }[] = [
@@ -64,6 +65,7 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
       await api(`/posts/${id}/moderation`, { method: "POST", body });
       setHiding(null);
       setReason("");
+      toast.success("Gespeichert");
       load();
     } catch (e) {
       onError(describeError(e));
@@ -78,7 +80,7 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
         ))}
       </div>
       {rows === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
         <Card><p className="text-sm text-muted">Keine Beiträge in dieser Ansicht.</p></Card>
       ) : (
@@ -142,17 +144,18 @@ function CommentsPanel({ slug, onError }: { slug: string; onError: (m: string | 
   }, [load]);
 
   async function remove(id: string) {
-    if (!confirm("Kommentar endgültig löschen?")) return;
+    if (!(await ask("Kommentar endgültig löschen?", { confirmLabel: "Ja" }))) return;
     onError(null);
     try {
       await api(`/moderation/comments/${id}`, { method: "DELETE", body: {} });
+      toast.success("Kommentar gelöscht");
       load();
     } catch (e) {
       onError(describeError(e));
     }
   }
 
-  if (rows === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (rows === null) return <CardSkeletons count={2} />;
   if (rows.length === 0) return <Card><p className="text-sm text-muted">Noch keine Kommentare unter Vereinsbeiträgen.</p></Card>;
   return (
     <Card className="divide-y divide-border p-0">

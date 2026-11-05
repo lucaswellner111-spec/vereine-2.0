@@ -5,7 +5,8 @@ import type { InvoiceRecipient, InvoiceSummary } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
 import { InvoiceStatusBadge } from "./invoice-status";
-import { Button, Card, ConceptNote, Field } from "./ui";
+import { Button, Card, ConceptNote, Field, CardSkeletons } from "./ui";
+import { ask } from "./ui-hosts";
 
 type Line = { description: string; quantity: string; price: string; vatRate: string };
 const emptyLine: Line = { description: "", quantity: "1", price: "", vatRate: "0" };
@@ -94,7 +95,7 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
       )}
 
       {rows === null ? (
-        <p className="text-sm text-muted" role="status">Lade …</p>
+        <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
         <Card><p className="text-sm text-muted">Keine Rechnungen gefunden.</p></Card>
       ) : (
@@ -123,8 +124,8 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
                       <a href={`/api/invoices/${i.id}/pdf`} className="inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-xs hover:bg-surface-2">PDF</a>
                       {i.status === "draft" && (
                         <>
-                          <Button size="sm" onClick={() => confirm("Rechnung finalisieren? Danach ist sie unveränderlich und der Empfänger wird benachrichtigt.") && run(() => api(`/invoices/${i.id}/finalize`, { method: "POST" }))}>Finalisieren</Button>
-                          <Button size="sm" variant="ghost" onClick={() => confirm("Entwurf löschen?") && run(() => api(`/invoices/${i.id}`, { method: "DELETE" }))}>Löschen</Button>
+                          <Button size="sm" onClick={async () => await ask("Rechnung finalisieren? Danach ist sie unveränderlich und der Empfänger wird benachrichtigt.") && run(() => api(`/invoices/${i.id}/finalize`, { method: "POST" }))}>Finalisieren</Button>
+                          <Button size="sm" variant="ghost" onClick={async () => await ask("Entwurf löschen?") && run(() => api(`/invoices/${i.id}`, { method: "DELETE" }))}>Löschen</Button>
                         </>
                       )}
                       {i.status === "open" && <Button size="sm" onClick={() => run(() => api(`/invoices/${i.id}/paid`, { method: "POST" }))}>Bezahlt</Button>}

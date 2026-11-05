@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PrivatePushState } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Badge, Button, Card, PageHeader } from "@/components/ui";
+import { Alert, Badge, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 
 function keyToBytes(base64Url: string): Uint8Array {
@@ -86,7 +86,7 @@ export default function NotificationSettingsPage() {
           Push-Mitteilungen informieren dich über neue Termine, Rechnungen, Folgeanfragen und mehr. Sie enthalten nur kurze Hinweise, keine Inhalte deiner Nachrichten. Du kannst sie jederzeit ausschalten. Für Push nutzt dein Browser den Dienst seines Herstellers als Zustellweg; die Nachricht selbst ist verschlüsselt.
         </p>
         {state === null || support === "checking" ? (
-          <p className="text-sm text-muted" role="status">Lade …</p>
+          <CardSkeletons count={2} />
         ) : !state.publicKey ? (
           <Alert tone="info">Push-Mitteilungen sind auf diesem Server noch nicht eingerichtet.</Alert>
         ) : support === "unsupported" ? (

@@ -6,6 +6,7 @@ import { SettingsTabs } from "@/components/settings-tabs";
 import { Alert, Badge, Button, Card, Field, PageHeader } from "@/components/ui";
 import { TwoFactorCard } from "@/components/two-factor-card";
 import { api, describeError } from "@/lib/api";
+import { ask } from "@/components/ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -71,7 +72,7 @@ export default function SecurityPage() {
           variant="secondary"
           size="sm"
           disabled={(sessions?.length ?? 0) < 2}
-          onClick={() => confirm("Alle anderen Geräte abmelden?") && run(() => api("/auth/sessions/revoke-others", { method: "POST", body: {} }))}
+          onClick={async () => await ask("Alle anderen Geräte abmelden?") && run(() => api("/auth/sessions/revoke-others", { method: "POST", body: {} }))}
         >
           Alle anderen abmelden
         </Button>

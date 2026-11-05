@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ReportItem } from "@vereine/shared";
-import { Badge, Button, Card } from "./ui";
+import { Badge, Button, Card, CardSkeletons } from "./ui";
 import { api, describeError } from "@/lib/api";
 
 const reasonLabel: Record<string, string> = { spam: "Spam", hate: "Hass / Hetze", illegal: "Illegal", other: "Sonstiges" };
@@ -33,7 +33,7 @@ export function ModerationQueue({ slug, onError }: { slug: string; onError: (m: 
     }
   }
 
-  if (items === null) return <p className="text-sm text-muted" role="status">Lade …</p>;
+  if (items === null) return <CardSkeletons count={2} />;
   if (items.length === 0) return <Card><p className="text-sm text-muted">Keine offenen Meldungen. 🎉</p></Card>;
 
   return (
