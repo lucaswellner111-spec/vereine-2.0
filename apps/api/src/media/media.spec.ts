@@ -135,7 +135,9 @@ describe("Medien: Upload, Verarbeitung, Auslieferung", () => {
     expect((await upload(anna, "/media/post", "x.svg", svg, "image/svg+xml")).statusCode).toBe(400);
     expect((await upload(anna, "/media/post", "riesig.png", await png(13000, 10))).statusCode).toBe(400); // zu viele Pixel je Seite
     const huge = Buffer.alloc(9 * 1024 * 1024, 1);
-    expect([400, 413]).toContain((await upload(anna, "/media/post", "gross.png", huge)).statusCode);
+    const tooBig = await upload(anna, "/media/post", "gross.png", huge);
+    expect(tooBig.statusCode).toBe(413);
+    expect(tooBig.json().message).toBe("Bild ist größer als 8 MB.");
     expect((await req(anna, "POST", "/media/post", { foo: "bar" })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/media/post" })).statusCode).toBe(401);
     expect(await db.select().from(schema.media).where(eq(schema.media.kind, "post"))).toHaveLength(1); // nur das gueltige Foto von oben

@@ -57,6 +57,19 @@ export class ChatCrypto {
     return this.wrap(this.unwrap(wrapped, fromVersion));
   }
 
+  /** Eigener Schluessel je Meldung (Beweiskopie), mit anderer AAD als Unterhaltungsschluessel (nicht vertauschbar). */
+  wrapReportKey(dataKey: Buffer): { wrapped: string; version: number } {
+    return { wrapped: this.seal(this.master(this.activeVersion), dataKey, "report-key"), version: this.activeVersion };
+  }
+
+  unwrapReportKey(wrapped: string, version: number): Buffer {
+    return this.open(this.master(version), wrapped, "report-key");
+  }
+
+  rewrapReportKey(wrapped: string, fromVersion: number): { wrapped: string; version: number } {
+    return this.wrapReportKey(this.unwrapReportKey(wrapped, fromVersion));
+  }
+
   encrypt(dataKey: Buffer, plaintext: string, aad: string): string {
     return this.seal(dataKey, Buffer.from(plaintext, "utf8"), aad);
   }

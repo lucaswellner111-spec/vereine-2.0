@@ -61,6 +61,7 @@ export default function PrivacyPage() {
       router.replace("/login?geloescht=1");
       clear();
     } catch (e) {
+      // 409: du bist einziger Vorstand eines Vereins mit weiteren Mitgliedern - der Servertext nennt die Vereine.
       setDeleteError(describeError(e));
     }
   }
@@ -98,6 +99,10 @@ export default function PrivacyPage() {
       <Card className="border-danger/40">
         <p className="text-sm text-muted">
           Dein Konto, deine Sitzungen und Einwilligungen werden unwiderruflich gelöscht (Art. 17 DSGVO).
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Bist du einziger Vorstand eines Vereins, übertrage vorher die Vorstandsrolle (Verwaltung → Mitglieder).
+          Vereine ohne weitere Mitglieder werden gelöscht; exportiere vorher die Rechnungen (CSV).
         </p>
         {confirmDelete ? (
           <div className="mt-3 max-w-sm space-y-3">

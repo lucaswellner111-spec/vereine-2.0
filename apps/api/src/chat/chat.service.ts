@@ -2,13 +2,12 @@ import { PushService } from "../notifications/push.service";
 import {
   BadRequestException,
   ForbiddenException,
-  HttpException,
   Inject,
   Injectable,
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type {
   ChatContact,
   ChatEvent,
@@ -25,9 +24,12 @@ import type {
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
+import { decodeCursor, encodeCursor } from "../common/cursor";
+import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
 import { chatBlocks, conversationMembers, conversations, messageReports, messages } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
+import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
 import { ChatCrypto } from "./chat-crypto.service";
 import { REALTIME_BUS, type RealtimeBus } from "./realtime-bus";
@@ -38,18 +40,10 @@ const DELETED_USER = "Gelöschter Nutzer";
 const defaultRetentionDays = () => Number(process.env.CHAT_DEFAULT_RETENTION_DAYS ?? 365);
 
 type Conv = typeof conversations.$inferSelect;
-type Cursor = { ts: string; id: string };
-const encode = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString("base64url");
-function decode(raw?: string): Cursor | null {
-  if (!raw) return null;
-  try {
-    const c = JSON.parse(Buffer.from(raw, "base64url").toString());
-    if (typeof c.ts === "string" && typeof c.id === "string") return c;
-  } catch {
-    /* ungueltig */
-  }
-  throw new BadRequestException("Ungueltiger Cursor.");
-}
+/** Datenbank oder laufende Transaktion (in Transaktionen nur `tx` benutzen). */
+type DbOrTx = Database;
+const encode = encodeCursor;
+const decode = decodeCursor;
 const aad = (conversationId: string, messageId: string) => `${conversationId}:${messageId}`;
 
 /**
@@ -72,12 +66,16 @@ export class ChatService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PushService) private readonly push: PushService,
+    @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
   ) {}
 
   onModuleInit() {
     this.jobs.define("chat.retention", async () => void (await this.purgeExpired()));
     this.jobs.every("chat.retention", 60 * 60 * 1000);
     this.jobs.define("chat.rewrap-keys", async () => void (await this.rewrapKeys()));
+    // Austritt: alle Gruppen-Chats dieses Vereins verlassen (Direktchats bleiben). Verein geloescht: Gruppen loeschen.
+    this.orgEvents.onLeave("chat", (orgId, userId) => this.leaveOrgGroups(orgId, userId));
+    this.orgEvents.onOrgDeleted("chat", (orgId) => this.deleteOrgGroups(orgId));
   }
 
   // --- Unterhaltungen anlegen -------------------------------------------------
@@ -113,16 +111,28 @@ export class ChatService implements OnModuleInit {
       throw new ForbiddenException("Ihr habt keinen gemeinsamen Verein. Direktnachrichten sind nur unter Vereinsmitgliedern oder an den Vorstand eines Vereins moeglich, dem du folgst.");
     }
     const { wrapped, version } = this.crypto.wrap(this.crypto.newDataKey());
-    const [conv] = await this.db
-      .insert(conversations)
-      .values({ kind: "direct", createdBy: user.id, directKey, wrappedKey: wrapped, keyVersion: version })
-      .returning();
-    await this.db.insert(conversationMembers).values([
-      { conversationId: conv.id, userId: user.id, role: "member" },
-      { conversationId: conv.id, userId: otherId, role: "member" },
-    ]);
-    await this.publish([user.id, otherId], { type: "conversation", conversationId: conv.id });
-    return this.detail(user, conv.id);
+    // Parallele Anfragen: der eindeutige direct_key entscheidet, wer anlegt; die anderen bekommen dieselbe Unterhaltung.
+    const created = await this.db.transaction(async (tx) => {
+      const [conv] = await tx
+        .insert(conversations)
+        .values({ kind: "direct", createdBy: user.id, directKey, wrappedKey: wrapped, keyVersion: version })
+        .onConflictDoNothing({ target: conversations.directKey })
+        .returning();
+      if (!conv) return null;
+      await tx.insert(conversationMembers).values([
+        { conversationId: conv.id, userId: user.id, role: "member" },
+        { conversationId: conv.id, userId: otherId, role: "member" },
+      ]);
+      return conv;
+    });
+    if (!created) {
+      const [again] = await this.db.select().from(conversations).where(eq(conversations.directKey, directKey)).limit(1);
+      if (!again) throw new NotFoundException("Unterhaltung nicht gefunden.");
+      await this.requireMember(again.id, user.id);
+      return this.detail(user, again.id);
+    }
+    await this.publish([user.id, otherId], { type: "conversation", conversationId: created.id });
+    return this.detail(user, created.id);
   }
 
   private async createGroup(user: PublicUser, input: Extract<CreateConversationInput, { kind: "group" }>): Promise<ConversationDetail> {
@@ -150,13 +160,19 @@ export class ChatService implements OnModuleInit {
 
   async list(user: PublicUser): Promise<ConversationSummary[]> {
     const rows = await this.db
-      .select({ conv: conversations, lastReadAt: conversationMembers.lastReadAt })
+      .select({ conv: conversations })
       .from(conversationMembers)
       .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
       .where(eq(conversationMembers.userId, user.id))
       .orderBy(desc(sql`coalesce(${conversations.lastMessageAt}, ${conversations.createdAt})`))
       .limit(200);
-    if (rows.length === 0) return [];
+    return this.summarize(user, rows.map((r) => r.conv));
+  }
+
+  /** Zusammenfassungen (Titel, Vorschau, Ungelesen) fuer die uebergebenen Unterhaltungen des Nutzers, Reihenfolge bleibt. */
+  private async summarize(user: PublicUser, convs: Conv[]): Promise<ConversationSummary[]> {
+    if (convs.length === 0) return [];
+    const rows = convs.map((conv) => ({ conv }));
     const ids = rows.map((r) => r.conv.id);
 
     const [unreadRows, lastRows, memberRows] = await Promise.all([
@@ -223,7 +239,7 @@ export class ChatService implements OnModuleInit {
     const list: ConversationMember[] = members
       .map((m) => ({ userId: m.userId, name: names.get(m.userId) ?? DELETED_USER, role: m.role as "owner" | "member" }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
-    const summary = (await this.list(user)).find((s) => s.id === id)!;
+    const [summary] = await this.summarize(user, [conv]);
     const other = conv.kind === "direct" ? members.find((m) => m.userId !== user.id) : undefined;
     return {
       ...summary,
@@ -281,9 +297,8 @@ export class ChatService implements OnModuleInit {
 
   async send(user: PublicUser, id: string, body: string): Promise<ChatMessage> {
     const conv = await this.requireMember(id, user.id);
-    if ((await this.cache.incr(`chat:rate:${user.id}`, 60)) > RATE_LIMIT_PER_MIN) {
-      throw new HttpException({ message: "Zu viele Nachrichten. Bitte warte kurz.", statusCode: 429 }, 429);
-    }
+    // Faellt der Cache aus, wird nicht blockiert (fail open).
+    await enforceLimit(this.cache, `chat:rate:${user.id}`, RATE_LIMIT_PER_MIN, 60, "Zu viele Nachrichten. Bitte warte kurz.");
     const members = await this.db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, id));
     if (conv.kind === "direct") {
       const other = members.find((m) => m.userId !== user.id);
@@ -356,14 +371,54 @@ export class ChatService implements OnModuleInit {
     const conv = await this.requireMember(id, user.id);
     if (conv.kind !== "group") throw new ForbiddenException("Direktchats kann man nicht verlassen - blockiere stattdessen den Kontakt.");
     if (targetId !== user.id) await this.requireOwner(id, user.id);
-    await this.db.delete(conversationMembers).where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, targetId)));
-    const rest = await this.db.select().from(conversationMembers).where(eq(conversationMembers.conversationId, id)).orderBy(asc(conversationMembers.joinedAt));
+    const rest = await this.db.transaction((tx) => this.leaveConversation(tx, id, targetId));
+    await this.publish([targetId, ...rest], { type: "conversation", conversationId: id });
+  }
+
+  /**
+   * Person verlaesst eine Unterhaltung: ohne verbleibende Mitglieder wird sie geloescht (Kaskade: Nachrichten; Meldungen
+   * bleiben mit eigener Beweiskopie), sonst erbt in Gruppen das aelteste Mitglied den Besitz. Liefert die Verbleibenden.
+   */
+  private async leaveConversation(dbOrTx: DbOrTx, conversationId: string, userId: string): Promise<string[]> {
+    await dbOrTx.delete(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, userId)));
+    const rest = await dbOrTx.select().from(conversationMembers).where(eq(conversationMembers.conversationId, conversationId)).orderBy(asc(conversationMembers.joinedAt));
     if (rest.length === 0) {
-      await this.db.delete(conversations).where(eq(conversations.id, id)); // Kaskade: Nachrichten
+      await dbOrTx.delete(conversations).where(eq(conversations.id, conversationId));
     } else if (!rest.some((m) => m.role === "owner")) {
-      await this.db.update(conversationMembers).set({ role: "owner" }).where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, rest[0].userId)));
+      const [c] = await dbOrTx.select({ kind: conversations.kind }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+      if (c?.kind === "group") {
+        await dbOrTx
+          .update(conversationMembers)
+          .set({ role: "owner" })
+          .where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, rest[0].userId)));
+      }
     }
-    await this.publish([targetId, ...rest.map((m) => m.userId)], { type: "conversation", conversationId: id });
+    return rest.map((m) => m.userId);
+  }
+
+  /** Austritt aus dem Verein: alle Gruppen-Chats des Vereins verlassen. */
+  async leaveOrgGroups(orgId: string, userId: string): Promise<void> {
+    const groups = await this.db
+      .select({ id: conversations.id })
+      .from(conversationMembers)
+      .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
+      .where(and(eq(conversationMembers.userId, userId), eq(conversations.kind, "group"), eq(conversations.orgId, orgId)));
+    for (const { id } of groups) {
+      const rest = await this.db.transaction((tx) => this.leaveConversation(tx, id, userId));
+      await this.publish([userId, ...rest], { type: "conversation", conversationId: id });
+    }
+  }
+
+  /** Verein geloescht: dessen Gruppen-Chats samt Nachrichten entfernen (offene Meldungen behalten ihre Beweiskopie). */
+  async deleteOrgGroups(orgId: string): Promise<void> {
+    const groups = await this.db.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.orgId, orgId), eq(conversations.kind, "group")));
+    if (groups.length === 0) return;
+    const ids = groups.map((g) => g.id);
+    const members = await this.db.select({ id: conversationMembers.conversationId, userId: conversationMembers.userId }).from(conversationMembers).where(inArray(conversationMembers.conversationId, ids));
+    await this.db.delete(conversations).where(inArray(conversations.id, ids));
+    for (const id of ids) {
+      await this.publish(members.filter((m) => m.id === id).map((m) => m.userId), { type: "conversation", conversationId: id });
+    }
   }
 
   // --- Blockieren und Melden -------------------------------------------------------
@@ -383,54 +438,86 @@ export class ChatService implements OnModuleInit {
     return rows.map((r) => ({ userId: r.blockedId, name: names.get(r.blockedId) ?? DELETED_USER }));
   }
 
-  /** Meldung: nur Mitglieder der Unterhaltung. Nur die gemeldete Nachricht wird als verschluesselte Kopie gesichert. */
+  /**
+   * Meldung: nur Mitglieder der Unterhaltung. Nur die gemeldete Nachricht wird gesichert - als Kopie mit EIGENEM
+   * Datenschluessel, damit sie Loeschen der Nachricht, Austritt und Kontoloeschung als Beweis uebersteht.
+   * Doppelte offene Meldung derselben Person: keine neue Zeile (204).
+   */
   async report(user: PublicUser, messageId: string, input: ReportInput): Promise<void> {
     const [m] = await this.db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
     if (!m || m.deletedAt) throw new NotFoundException("Nachricht nicht gefunden.");
-    await this.requireMember(m.conversationId, user.id);
+    const conv = await this.requireMember(m.conversationId, user.id);
     if (m.senderId === user.id) throw new BadRequestException("Eigene Nachrichten kannst du nicht melden.");
-    await this.db.insert(messageReports).values({
-      messageId,
-      conversationId: m.conversationId,
-      reporterId: user.id,
-      reason: input.reason,
-      note: input.note,
-      snapshot: m.ciphertext,
-    });
+    const [open] = await this.db
+      .select({ id: messageReports.id })
+      .from(messageReports)
+      .where(and(eq(messageReports.messageId, messageId), eq(messageReports.reporterId, user.id), eq(messageReports.status, "open")))
+      .limit(1);
+    if (open) return;
+    await enforceLimit(this.cache, `report:${user.id}`, 30, 3600, limitMessage("Meldungen"));
+    const plain = this.crypto.decrypt(this.crypto.unwrap(conv.wrappedKey, conv.keyVersion), m.ciphertext, aad(conv.id, m.id));
+    const reportId = crypto.randomUUID();
+    const dataKey = this.crypto.newDataKey();
+    const { wrapped, version } = this.crypto.wrapReportKey(dataKey);
+    await this.db
+      .insert(messageReports)
+      .values({
+        id: reportId,
+        messageId,
+        conversationId: m.conversationId,
+        reporterId: user.id,
+        senderId: m.senderId,
+        reason: input.reason,
+        note: input.note,
+        snapshot: this.crypto.encrypt(dataKey, plain, `report:${reportId}`),
+        snapshotKey: wrapped,
+        snapshotKeyVersion: version,
+      })
+      .onConflictDoNothing(); // partieller Unique-Index (message_id, reporter_id) where status='open'
   }
 
   // --- Plattform-Moderation (nur Rolle platform admin, jeder Zugriff wird protokolliert) ---------
+
+  /** Beweiskopie entschluesseln: eigener Meldungsschluessel, bei Altzeilen der Schluessel der Unterhaltung (falls noch da). */
+  private reportText(r: typeof messageReports.$inferSelect, c: Conv | null): string | null {
+    if (!r.snapshot) return null;
+    try {
+      if (r.snapshotKey && r.snapshotKeyVersion != null) {
+        return this.crypto.decrypt(this.crypto.unwrapReportKey(r.snapshotKey, r.snapshotKeyVersion), r.snapshot, `report:${r.id}`);
+      }
+      if (c) return this.crypto.decrypt(this.crypto.unwrap(c.wrappedKey, c.keyVersion), r.snapshot, aad(r.conversationId, r.messageId));
+    } catch {
+      /* nicht lesbar */
+    }
+    return null;
+  }
 
   /** Gemeldete Nachrichten im Klartext - ausschliesslich die gemeldete Nachricht, kein Verlauf. */
   async listReports(admin: PublicUser, status = "open"): Promise<ChatReportItem[]> {
     const rows = await this.db
       .select({ r: messageReports, m: messages, c: conversations })
       .from(messageReports)
-      .innerJoin(messages, eq(messages.id, messageReports.messageId))
-      .innerJoin(conversations, eq(conversations.id, messageReports.conversationId))
+      .leftJoin(messages, eq(messages.id, messageReports.messageId))
+      .leftJoin(conversations, eq(conversations.id, messageReports.conversationId))
       .where(eq(messageReports.status, status))
       .orderBy(desc(messageReports.createdAt))
       .limit(100);
-    const names = await this.directory.names(rows.flatMap(({ r, m }) => [r.reporterId, m.senderId]));
+    const names = await this.directory.names(
+      rows.flatMap(({ r, m }) => [r.reporterId, r.senderId ?? m?.senderId ?? null]).filter((x): x is string => !!x),
+    );
     await this.audit.record(admin.id, "platform.chat-reports.viewed", { reportIds: rows.map(({ r }) => r.id) });
     return rows.map(({ r, m, c }) => {
-      const key = this.crypto.unwrap(c.wrappedKey, c.keyVersion);
-      let text: string | null = null;
-      if (!m.deletedAt && r.snapshot) {
-        try {
-          text = this.crypto.decrypt(key, r.snapshot, aad(c.id, m.id)); // Beweiskopie zum Meldezeitpunkt
-        } catch {
-          text = null;
-        }
-      }
+      // Offen: Beweiskopie immer zeigen (auch wenn Nachricht/Unterhaltung weg sind). Erledigt: nur solange die Nachricht existiert.
+      const text = r.status === "open" || (m && !m.deletedAt) ? this.reportText(r, c) : null;
+      const senderId = r.senderId ?? m?.senderId ?? null;
       return {
         id: r.id,
         reason: r.reason,
         note: r.note,
         createdAt: r.createdAt.toISOString(),
-        reporterName: names.get(r.reporterId) ?? DELETED_USER,
-        senderName: names.get(m.senderId) ?? DELETED_USER,
-        conversationKind: c.kind as "direct" | "group",
+        reporterName: (r.reporterId && names.get(r.reporterId)) || DELETED_USER,
+        senderName: (senderId && names.get(senderId)) || DELETED_USER,
+        conversationKind: (c?.kind as "direct" | "group" | undefined) ?? null,
         text,
       };
     });
@@ -444,12 +531,12 @@ export class ChatService implements OnModuleInit {
       await this.db.update(messages).set({ deletedAt: now, ciphertext: "" }).where(eq(messages.id, report.messageId));
       await this.db
         .update(messageReports)
-        .set({ status: "actioned" })
+        .set({ status: "actioned", resolvedAt: now })
         .where(and(eq(messageReports.messageId, report.messageId), eq(messageReports.status, "open")));
       const members = await this.db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, report.conversationId));
       await this.publish(members.map((m) => m.userId), { type: "message", conversationId: report.conversationId, messageId: report.messageId });
     } else {
-      await this.db.update(messageReports).set({ status: "dismissed" }).where(eq(messageReports.id, reportId));
+      await this.db.update(messageReports).set({ status: "dismissed", resolvedAt: now }).where(eq(messageReports.id, reportId));
     }
     await this.audit.record(admin.id, "platform.chat-report.resolved", { reportId, action: input.action, note: input.note ?? null });
   }
@@ -480,22 +567,19 @@ export class ChatService implements OnModuleInit {
     return { conversations: convs.length, messagesSent: out, blockedUsers: blocked.length };
   }
 
-  /** Art. 17 DSGVO: Nachrichten des Nutzers, Mitgliedschaften, Sperren und Meldungen entfernen; leere Unterhaltungen loeschen. */
+  /**
+   * Art. 17 DSGVO: Nachrichten des Nutzers, Mitgliedschaften und Sperren entfernen; leere Unterhaltungen loeschen.
+   * Meldungen: eigene offene werden anonymisiert (Pruefung laeuft weiter), eigene erledigte geloescht. Meldungen UEBER
+   * Nachrichten des Nutzers bleiben mit ihrer Beweiskopie bestehen (Art. 17 Abs. 3 lit. e, DSA). Idempotent.
+   */
   async eraseUser(userId: string): Promise<void> {
     await this.db.transaction(async (tx) => {
       const memberOf = await tx.select({ id: conversationMembers.conversationId }).from(conversationMembers).where(eq(conversationMembers.userId, userId));
-      await tx.delete(messages).where(eq(messages.senderId, userId)); // kaskadiert Meldungen zu diesen Nachrichten
+      await tx.delete(messages).where(eq(messages.senderId, userId));
+      await tx.update(messageReports).set({ reporterId: null }).where(and(eq(messageReports.reporterId, userId), eq(messageReports.status, "open")));
       await tx.delete(messageReports).where(eq(messageReports.reporterId, userId));
-      await tx.delete(conversationMembers).where(eq(conversationMembers.userId, userId));
       await tx.delete(chatBlocks).where(or(eq(chatBlocks.blockerId, userId), eq(chatBlocks.blockedId, userId)));
-      for (const { id } of memberOf) {
-        const rest = await tx.select().from(conversationMembers).where(eq(conversationMembers.conversationId, id)).orderBy(asc(conversationMembers.joinedAt));
-        if (rest.length === 0) await tx.delete(conversations).where(eq(conversations.id, id));
-        else if (!rest.some((m) => m.role === "owner")) {
-          const [c] = await tx.select().from(conversations).where(eq(conversations.id, id)).limit(1);
-          if (c?.kind === "group") await tx.update(conversationMembers).set({ role: "owner" }).where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, rest[0].userId)));
-        }
-      }
+      for (const { id } of memberOf) await this.leaveConversation(tx, id, userId);
     });
   }
 
@@ -510,19 +594,28 @@ export class ChatService implements OnModuleInit {
         and m.created_at < now() - make_interval(days => coalesce(c.retention_days, ${defaultRetentionDays()}))
         and not exists (select 1 from chat.message_reports r where r.message_id = m.id and r.status = 'open')
       returning m.id`);
-    // erledigte Meldungen nach 30 Tagen samt Beweiskopie entfernen
-    await this.db.execute(sql`delete from chat.message_reports where status <> 'open' and created_at < now() - interval '30 days'`);
+    // erledigte Meldungen 30 Tage nach der Pruefung samt Beweiskopie entfernen
+    await this.db.execute(sql`delete from chat.message_reports where status <> 'open' and coalesce(resolved_at, created_at) < now() - interval '30 days'`);
     return (Array.isArray(res) ? res : res.rows ?? []).length;
   }
 
-  /** Master-Schluessel rotieren: Datenschluessel auf die aktive Version umhuellen (Nachrichten bleiben unveraendert). */
+  /** Master-Schluessel rotieren: Datenschluessel (Unterhaltungen und Meldungen) auf die aktive Version umhuellen. */
   async rewrapKeys(): Promise<number> {
     const stale = await this.db.select().from(conversations).where(ne(conversations.keyVersion, this.crypto.activeVersion)).limit(1000);
     for (const c of stale) {
       const { wrapped, version } = this.crypto.rewrap(c.wrappedKey, c.keyVersion);
       await this.db.update(conversations).set({ wrappedKey: wrapped, keyVersion: version }).where(eq(conversations.id, c.id));
     }
-    return stale.length;
+    const staleReports = await this.db
+      .select({ id: messageReports.id, key: messageReports.snapshotKey, version: messageReports.snapshotKeyVersion })
+      .from(messageReports)
+      .where(and(isNotNull(messageReports.snapshotKey), ne(messageReports.snapshotKeyVersion, this.crypto.activeVersion)))
+      .limit(1000);
+    for (const r of staleReports) {
+      const { wrapped, version } = this.crypto.rewrapReportKey(r.key!, r.version!);
+      await this.db.update(messageReports).set({ snapshotKey: wrapped, snapshotKeyVersion: version }).where(eq(messageReports.id, r.id));
+    }
+    return stale.length + staleReports.length;
   }
 
   // --- intern -------------------------------------------------------------------------
@@ -563,13 +656,8 @@ export class ChatService implements OnModuleInit {
   }
 
   private async orgSlugs(orgIds: (string | null)[]): Promise<Map<string, string>> {
-    const ids = [...new Set(orgIds.filter((x): x is string => !!x))];
-    const map = new Map<string, string>();
-    for (const id of ids) {
-      const slug = await this.orgs.slugOf(id);
-      if (slug) map.set(id, slug);
-    }
-    return map;
+    const found = await this.orgs.lookupByIds(orgIds.filter((x): x is string => !!x)); // eine Abfrage statt N
+    return new Map([...found].map(([id, o]) => [id, o.slug]));
   }
 
   private toMessage(m: typeof messages.$inferSelect, key: Buffer, conversationId: string, viewerId: string, names: Map<string, string>): ChatMessage {

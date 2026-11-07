@@ -148,6 +148,13 @@ export class PostsController {
     return this.posts.addComment(user, id, parse(createCommentSchema, body).body);
   }
 
+  /** Eigenen Kommentar oder Kommentar unter eigenem persoenlichen Beitrag loeschen. */
+  @Delete("comments/:id")
+  @HttpCode(204)
+  removeComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
+    return this.posts.deleteComment(user, id);
+  }
+
   @Post("posts/:id/report")
   @HttpCode(204)
   report(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {

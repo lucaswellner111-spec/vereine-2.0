@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ForbiddenException,
-  HttpException,
   Inject,
   Injectable,
   NotFoundException,
@@ -11,7 +10,9 @@ import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import sharp, { type Metadata } from "sharp";
 import type { MediaRef, PublicUser } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
+import { enforceLimit } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
+import { OrgEvents } from "../orgs/org-events";
 import { media, postMedia, posts, profiles } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
 import { ProfileAccess } from "../profiles/profile-access.service";
@@ -43,11 +44,29 @@ export class MediaService implements OnModuleInit {
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
+    @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
   ) {}
 
   onModuleInit() {
     this.jobs.define("media.cleanup", async () => void (await this.cleanupOrphans()));
     this.jobs.every("media.cleanup", 60 * 60 * 1000);
+    // Verein wird geloescht: Bilder seiner Beitraege entfernen, solange die Verknuepfung noch besteht (in der Transaktion).
+    this.orgEvents.onOrgDeleting((orgId, tx) => this.removeForOrg(orgId, tx));
+  }
+
+  /** Zeilen in der Loesch-Transaktion entfernen; Dateien erst nach dem Commit (Rueckgabe). */
+  private async removeForOrg(orgId: string, tx: Database): Promise<(() => Promise<void>) | void> {
+    const rows = await tx
+      .select({ id: postMedia.mediaId })
+      .from(postMedia)
+      .innerJoin(posts, eq(posts.id, postMedia.postId))
+      .where(eq(posts.orgId, orgId));
+    const ids = [...new Set(rows.map((r) => r.id))];
+    if (ids.length === 0) return;
+    await tx.delete(media).where(inArray(media.id, ids));
+    return async () => {
+      for (const id of ids) await this.storage.remove(id);
+    };
   }
 
   // --- Hochladen ------------------------------------------------------------------
@@ -75,9 +94,7 @@ export class MediaService implements OnModuleInit {
   }
 
   private async rateLimit(userId: string) {
-    if ((await this.cache.incr(`media:up:${userId}`, 3600)) > UPLOADS_PER_HOUR) {
-      throw new HttpException({ message: "Zu viele Uploads. Bitte warte etwas.", statusCode: 429 }, 429);
-    }
+    await enforceLimit(this.cache, `media:up:${userId}`, UPLOADS_PER_HOUR, 3600, "Zu viele Uploads. Bitte warte etwas."); // fail open
   }
 
   private async store(ownerId: string, kind: Kind, data: Buffer): Promise<MediaRef> {

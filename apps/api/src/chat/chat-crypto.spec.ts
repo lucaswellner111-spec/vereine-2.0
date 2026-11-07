@@ -58,6 +58,25 @@ describe("ChatCrypto", () => {
     expect(new ChatCrypto().unwrap(moved.wrapped, 2).equals(dataKey)).toBe(true);
   });
 
+  it("Meldungsschluessel: eigener AAD-Kontext, Rotation wie Unterhaltungsschluessel", () => {
+    const k1 = k();
+    const k2 = k();
+    process.env.CHAT_MASTER_KEYS = `1:${k1}`;
+    const v1 = new ChatCrypto();
+    const dataKey = v1.newDataKey();
+    const { wrapped, version } = v1.wrapReportKey(dataKey);
+    expect(v1.unwrapReportKey(wrapped, version).equals(dataKey)).toBe(true);
+    expect(() => v1.unwrap(wrapped, version)).toThrow(); // nicht als Unterhaltungsschluessel verwendbar
+    expect(() => v1.unwrapReportKey(v1.wrap(dataKey).wrapped, 1)).toThrow(); // und umgekehrt
+
+    process.env.CHAT_MASTER_KEYS = `1:${k1},2:${k2}`;
+    process.env.CHAT_ACTIVE_KEY_VERSION = "2";
+    const moved = new ChatCrypto().rewrapReportKey(wrapped, 1);
+    expect(moved.version).toBe(2);
+    process.env.CHAT_MASTER_KEYS = `2:${k2}`;
+    expect(new ChatCrypto().unwrapReportKey(moved.wrapped, 2).equals(dataKey)).toBe(true);
+  });
+
   it("Konfigurationsfehler und Produktionsschutz", () => {
     process.env.CHAT_MASTER_KEYS = "1:zukurz";
     expect(() => new ChatCrypto()).toThrow(/ungueltig/);

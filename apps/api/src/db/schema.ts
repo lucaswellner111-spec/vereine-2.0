@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -95,21 +96,25 @@ export const recoveryCodes = identity.table(
 
 // --- Vereine, Beitraege, Feed ------------------------------------------------
 
-export const organizations = social.table("organizations", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  category: text("category").notNull(),
-  city: text("city").notNull(),
-  about: text("about").notNull().default(""),
-  /** Sportarten/Themen aus dem festen Katalog (packages/shared/src/tags.ts), max. 5. */
-  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
-  /** Stammdaten fuer Rechnungen (Anschrift, IBAN, Steuerhinweis); nur Vorstand/Kassenwart sehen und aendern sie. */
-  address: text("address").notNull().default(""),
-  iban: text("iban").notNull().default(""),
-  taxInfo: text("tax_info").notNull().default(""),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const organizations = social.table(
+  "organizations",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    city: text("city").notNull(),
+    about: text("about").notNull().default(""),
+    /** Sportarten/Themen aus dem festen Katalog (packages/shared/src/tags.ts), max. 5. */
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    /** Stammdaten fuer Rechnungen (Anschrift, IBAN, Steuerhinweis); nur Vorstand/Kassenwart sehen und aendern sie. */
+    address: text("address").notNull().default(""),
+    iban: text("iban").notNull().default(""),
+    taxInfo: text("tax_info").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("organizations_tags_idx").using("gin", t.tags)],
+);
 
 /** Einladungslinks: nur der SHA-256-Hash des Tokens wird gespeichert (wie bei Sessions). */
 export const orgInvites = social.table(
@@ -181,7 +186,7 @@ export const postLikes = social.table(
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.postId, t.userId] })],
+  (t) => [primaryKey({ columns: [t.postId, t.userId] }), index("post_likes_user_created_idx").on(t.userId, t.createdAt)],
 );
 
 export const comments = social.table(
@@ -193,7 +198,7 @@ export const comments = social.table(
     body: text("body").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("comments_post_idx").on(t.postId)],
+  (t) => [index("comments_post_idx").on(t.postId), index("comments_author_created_idx").on(t.authorId, t.createdAt)],
 );
 
 export const reports = social.table("reports", {
@@ -208,7 +213,12 @@ export const reports = social.table("reports", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   resolution: text("resolution"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("reports_org_status_idx").on(t.orgId, t.status)]);
+}, (t) => [
+  index("reports_org_status_idx").on(t.orgId, t.status),
+  index("reports_post_status_idx").on(t.postId, t.status),
+  // Je Person hoechstens eine offene Meldung pro Beitrag (Doppelklicks, Spam).
+  uniqueIndex("reports_open_once_uq").on(t.postId, t.reporterId).where(sql`status = 'open'`),
+]);
 
 export const notifications = social.table(
   "notifications",
@@ -270,6 +280,7 @@ export const events = social.table(
     index("events_org_starts_idx").on(t.orgId, t.startsAt),
     index("events_starts_idx").on(t.startsAt),
     index("events_series_idx").on(t.seriesId),
+    index("events_team_idx").on(t.teamId),
   ],
 );
 
@@ -288,7 +299,7 @@ export const eventRsvps = social.table(
     status: text("status").notNull(), // yes | maybe | no
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.eventId, t.userId] })],
+  (t) => [primaryKey({ columns: [t.eventId, t.userId] }), index("event_rsvps_user_idx").on(t.userId)],
 );
 
 // --- Chat (eigener Bereich, KEINE Fremdschluessel auf identity/social) -----------
@@ -313,7 +324,7 @@ export const conversations = chat.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
   },
-  (t) => [index("conversations_key_version_idx").on(t.keyVersion)],
+  (t) => [index("conversations_key_version_idx").on(t.keyVersion), index("conversations_org_idx").on(t.orgId)],
 );
 
 export const conversationMembers = chat.table(
@@ -355,18 +366,37 @@ export const chatBlocks = chat.table(
   (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] }), index("blocks_blocked_idx").on(t.blockedId)],
 );
 
-export const messageReports = chat.table("message_reports", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  messageId: uuid("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
-  conversationId: uuid("conversation_id").notNull(),
-  reporterId: uuid("reporter_id").notNull(),
-  reason: text("reason").notNull(),
-  note: text("note"),
-  /** Kopie des verschluesselten Textes als Beweis (gesperrt gegen Loeschfristen, solange offen). */
-  snapshot: text("snapshot").notNull(),
-  status: text("status").notNull().default("open"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * Meldungen sind Beweismittel (DSA): kein Fremdschluessel auf messages, damit sie Loeschen der Nachricht, Austritt
+ * oder Kontoloeschung ueberstehen. Die Kopie ist mit einem EIGENEN Datenschluessel verschluesselt (snapshot_key,
+ * mit dem Master-Schluessel umhuellt), also unabhaengig von der Unterhaltung lesbar.
+ */
+export const messageReports = chat.table(
+  "message_reports",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    messageId: uuid("message_id").notNull(),
+    conversationId: uuid("conversation_id").notNull(),
+    /** Null, wenn die meldende Person ihr Konto geloescht hat (Meldung bleibt anonym bestehen). */
+    reporterId: uuid("reporter_id"),
+    /** Absender der gemeldeten Nachricht (Kopie, Nachricht kann inzwischen geloescht sein). */
+    senderId: uuid("sender_id"),
+    reason: text("reason").notNull(),
+    note: text("note"),
+    /** Verschluesselte Kopie des Textes als Beweis (gesperrt gegen Loeschfristen, solange offen). */
+    snapshot: text("snapshot").notNull(),
+    /** Datenschluessel der Kopie (umhuellt); null bei Altzeilen (dann Schluessel der Unterhaltung). */
+    snapshotKey: text("snapshot_key"),
+    snapshotKeyVersion: integer("snapshot_key_version"),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("message_reports_message_status_idx").on(t.messageId, t.status),
+    uniqueIndex("message_reports_open_once_uq").on(t.messageId, t.reporterId).where(sql`status = 'open'`),
+  ],
+);
 
 // --- Profile, Medien, Feed-Feedback (Bereich social) ---------------------------
 
@@ -414,7 +444,7 @@ export const postMedia = social.table(
     mediaId: uuid("media_id").notNull().references(() => media.id, { onDelete: "cascade" }),
     position: integer("position").notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.postId, t.mediaId] })],
+  (t) => [primaryKey({ columns: [t.postId, t.mediaId] }), index("post_media_media_idx").on(t.mediaId)],
 );
 
 /** "Weniger davon": ausgeblendete Beitraege sowie stummgeschaltete Nutzer/Vereine (nur fuer den eigenen Feed). */

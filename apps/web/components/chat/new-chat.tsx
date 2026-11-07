@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import type { ChatContact, ConversationDetail, MemberItem, OrgSummary } from "@vereine/shared";
+import type { ChatContact, ConversationDetail, OrgMemberName, OrgSummary } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Alert, Avatar, Button, Field } from "../ui";
@@ -15,7 +15,7 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
   const [error, setError] = useState<string | null>(null);
   const [org, setOrg] = useState("");
   const [title, setTitle] = useState("");
-  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [members, setMembers] = useState<OrgMemberName[]>([]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
@@ -27,10 +27,10 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
     }).catch(() => undefined);
   }, []);
 
-  // Mitgliederliste (nur der Vorstand darf sie abrufen)
+  // Namensliste aktiver Mitglieder (nur Vorstand und Moderation duerfen sie abrufen)
   useEffect(() => {
     if (tab !== "group" || !org) return;
-    api<MemberItem[]>(`/orgs/${org}/members?status=active`).then((all) => setMembers(all.filter((m) => m.userId !== user?.id))).catch(() => setMembers([]));
+    api<OrgMemberName[]>(`/orgs/${org}/member-names`).then((all) => setMembers(all.filter((m) => m.userId !== user?.id))).catch(() => setMembers([]));
     setPicked(new Set());
   }, [tab, org]);
 
@@ -127,7 +127,7 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
           <fieldset className="min-h-0">
             <legend className="mb-1 text-sm font-medium">Mitglieder ({picked.size})</legend>
             {members.length === 0 ? (
-              <p className="text-xs text-muted">Keine weiteren aktiven Mitglieder abrufbar (nur der Vorstand sieht die Mitgliederliste). Du kannst die Gruppe leer anlegen und später Mitglieder hinzufügen.</p>
+              <p className="text-xs text-muted">Keine weiteren aktiven Mitglieder abrufbar. Gruppen legen nur Vorstand und Moderation an; du kannst die Gruppe auch leer anlegen und später Mitglieder hinzufügen.</p>
             ) : (
               <ul className="max-h-48 space-y-1 overflow-y-auto">
                 {members.map((m) => (

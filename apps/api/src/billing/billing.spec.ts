@@ -6,7 +6,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
@@ -232,5 +232,34 @@ describe("Rechnungen (Verein -> Mitglied)", () => {
     expect(after.recipientUserId).toBeNull();
     const [row] = await db.select().from(schema.invoices).where(eq(schema.invoices.id, inv.id));
     expect(row.recipientUserId).toBeNull();
+  });
+
+  it("Silvester-Nacht: Rechnungsdatum und Nummernkreis nach deutscher Zeit (Europe/Berlin)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-12-31T23:30:00Z")); // in Berlin bereits 01.01.2027, 00:30 Uhr
+    try {
+      const [sil, max] = [await signup("silvester"), await signup("maxneu")];
+      await req(sil, "POST", "/orgs", { name: "Silvester Verein", category: "Sport", city: "Neujahr" });
+      await req(max, "POST", "/orgs/silvester-verein/membership");
+      await req(sil, "POST", `/orgs/silvester-verein/members/${max.id}/decision`, { decision: "approve" });
+      const draft = (await req(sil, "POST", "/orgs/silvester-verein/invoices", { recipientUserId: max.id, dueDate: "2027-01-31", items: [item] })).json();
+      const fin = (await req(sil, "POST", `/invoices/${draft.id}/finalize`)).json();
+      expect(fin.number).toBe("2027-0001");
+      expect(fin.issueDate).toBe("2027-01-01");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Ausstellerdaten werden beim Finalisieren uebernommen (IBAN nach dem Entwurf geaendert)", async () => {
+    await req(vera, "PUT", `/orgs/${org}/billing-profile`, { address: "Altweg 1", iban: "DE89 3704 0044 0532 0130 00", taxInfo: "" });
+    const draft = (await create(vera, mia)).json();
+    expect(draft.issuerIban).toBe("DE89370400440532013000");
+    await req(vera, "PUT", `/orgs/${org}/billing-profile`, { address: "Neuweg 2", iban: "DE02 1203 0000 0000 2020 51", taxInfo: "" });
+    const fin = (await req(vera, "POST", `/invoices/${draft.id}/finalize`)).json();
+    expect(fin).toMatchObject({ issuerIban: "DE02120300000000202051", issuerAddress: "Neuweg 2" });
+    const [row] = await db.select().from(schema.invoices).where(eq(schema.invoices.id, draft.id));
+    expect(row.issuerIban).toBe("DE02120300000000202051"); // PDF wird aus dieser Kopie erzeugt
+    expect((await req(vera, "GET", `/invoices/${draft.id}/pdf`)).statusCode).toBe(200);
   });
 });

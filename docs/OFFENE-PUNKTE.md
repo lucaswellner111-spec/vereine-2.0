@@ -72,3 +72,12 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Moderation: Sperren/Verwarnungen von Nutzern im Verein, Einspruchsverfahren (DSA Art. 20), Transparenzbericht, automatische Spam-Hinweise, Moderationsprotokoll als Ansicht für den Vorstand, Moderation von Chat-Gruppen eines Vereins.
 - Bedienkomfort offen: Kurzprofil-Karte beim Antippen von Namen, Wochenansicht im Kalender, Terminen Typen (Training/Spiel) geben, Tastaturkürzel-Übersicht, Skeletons je Seite feiner abstimmen. Recherche-Ideen Block 2 (Anwesenheit, Warteliste, Umfragen, Helferlisten, Fahrgemeinschaften): siehe `docs/RESEARCH-MARKT-UND-UI.md`.
 
+## Härtung Paket P1: offen (Stand 2026-11-07)
+- **Art. 20 DSA:** erledigte Chat-Meldungen werden 30 Tage nach der Prüfung gelöscht; das interne Beschwerdeverfahren verlangt, Entscheidungen 6 Monate anfechtbar zu halten → Frist mit Anwalt/DSB klären (z. B. Entscheidung + Begründung 6 Monate, Beweiskopie 30 Tage).
+- **Finalisierte Rechnungen gelöschter Vereine** bleiben bis zum Ende der Aufbewahrungsfrist (8–10 Jahre) in `billing.invoices` (Empfänger sieht sie weiter unter „Meine Rechnungen“); ein Löschjob nach Fristablauf fehlt noch. `billing.invoice_counters` bleibt ebenfalls erhalten.
+- Grenzfall Vereinslöschung: tritt zwischen Vorprüfung und Löschung jemand bei, bleibt der Verein ohne Vorstand bestehen – Plattform-Werkzeug „Vorstand setzen“ fehlt.
+- Meldungen aus der Zeit vor Migration 0016 haben keinen eigenen Schlüssel; wurde ihre Unterhaltung gelöscht, ist die Beweiskopie nicht mehr lesbar (0016 löscht leere Gruppen mit offenen Meldungen deshalb nicht).
+- Aufräumen nach Austritt/Vereinslöschung läuft nach dem Commit; stürzt der Prozess genau dazwischen ab, unterbleibt es → später Outbox-Zeile in derselben Transaktion.
+- Während der Lösch-Sperrfrist des einzigen Vorstands sind offene Einladungen des Vereins noch gültig → beim Löschen widerrufen.
+- Push: wer den (geheimen) Endpunkt eines fremden Geräts kennt, kann dessen Abo durch eigenes Anmelden entfernen; geringes Risiko, akzeptiert.
+

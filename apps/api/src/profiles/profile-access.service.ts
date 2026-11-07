@@ -1,8 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray } from "drizzle-orm";
+import { handleSchema } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
 import { profiles, userFollows } from "../db/schema";
+import { isUniqueViolation } from "../common/pg-errors";
 
 export type ProfileRow = typeof profiles.$inferSelect;
 
@@ -14,11 +16,6 @@ const baseHandle = (name: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 22);
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23505" || e?.cause?.code === "23505";
-}
 
 /**
  * Zugriff auf Profile fuer andere Module (Beitraege, Feed, Medien): Profile werden bei Bedarf automatisch
@@ -58,6 +55,8 @@ export class ProfileAccess {
     if (base.length < 3) base = `${base}user`.slice(0, 22);
     for (let i = 0; i < 8; i++) {
       const handle = i === 0 ? base : `${base}${Math.floor(100 + Math.random() * 9000)}`;
+      // Gleiche Regeln wie beim manuellen Aendern (Format, reservierte Namen wie "admin") -> sonst Suffix
+      if (!handleSchema.safeParse(handle).success) continue;
       try {
         await this.db.insert(profiles).values({ userId, handle }).onConflictDoNothing({ target: profiles.userId });
         return;

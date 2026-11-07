@@ -8,7 +8,7 @@ import { Test } from "@nestjs/testing";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { AppModule } from "../src/app.module";
-import { configureApp } from "../src/app.setup";
+import { configureApp, fastifyOptions } from "../src/app.setup";
 import { AuthService } from "../src/auth/auth.service";
 import { REALTIME_BUS } from "../src/chat/realtime-bus";
 import { attachChatGateway } from "../src/chat/ws-gateway";
@@ -24,7 +24,7 @@ async function main() {
     .overrideProvider(DB)
     .useValue(db)
     .compile();
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter({ logger: true }));
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(fastifyOptions()));
   await configureApp(app, { rateLimit: false });
   await app.listen(Number(process.env.API_PORT ?? 4000), "127.0.0.1");
   attachChatGateway(app.getHttpServer(), { auth: app.get(AuthService), bus: app.get(REALTIME_BUS) });

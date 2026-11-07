@@ -1,20 +1,37 @@
+import { randomBytes } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { isTagId, type CreateOrgInput, type MemberItem, type OrgDetail, type OrgRole, type OrgSummary, type PublicUser } from "@vereine/shared";
+import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import {
+  isTagId,
+  RESERVED_ORG_SLUGS,
+  type CreateOrgInput,
+  type MemberItem,
+  type OrgDetail,
+  type OrgMemberName,
+  type OrgRole,
+  type OrgSummary,
+  type PublicUser,
+} from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { CACHE, type Cache } from "../cache/cache.module";
+import { isUniqueViolation } from "../common/pg-errors";
+import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { follows, orgMembers, organizations } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgEvents } from "./org-events";
 
 type OrgRow = typeof organizations.$inferSelect;
+/** Datenbank oder laufende Transaktion (in Transaktionen nur `tx` benutzen, sonst verklemmt PGlite). */
+type DbOrTx = Database;
 
 const slugify = (name: string) =>
   name
@@ -27,25 +44,41 @@ const slugify = (name: string) =>
 
 @Injectable()
 export class OrgsService {
+  private readonly log = new Logger("OrgsService");
+
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgEvents) private readonly events: OrgEvents,
+    @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
+  /**
+   * Neuer Verein mit freier Adresse (slug). Parallele Anlagen mit gleichem Namen: der Unique-Index entscheidet,
+   * der Verlierer nimmt den naechsten Suffix (je Versuch eigene Transaktion), nach 20 Versuchen ein Zufallssuffix.
+   */
   async create(user: PublicUser, input: CreateOrgInput): Promise<OrgDetail> {
+    await enforceLimit(this.cache, `org:create:${user.id}`, 10, 24 * 3600, limitMessage("neue Vereine"));
     const base = slugify(input.name);
-    let slug = base;
-    for (let i = 2; await this.findBySlug(slug); i++) slug = `${base}-${i}`;
-
-    const org = await this.db.transaction(async (tx) => {
-      const [created] = await tx.insert(organizations).values({ ...input, slug }).returning();
-      await tx.insert(orgMembers).values({ orgId: created.id, userId: user.id, role: "admin", status: "active" });
-      await tx.insert(follows).values({ orgId: created.id, userId: user.id });
-      return created;
-    });
-    return this.detail(org.slug, user.id);
+    const sequential = [base, ...Array.from({ length: 19 }, (_, i) => `${base}-${i + 2}`)];
+    for (let attempt = 0; attempt < sequential.length + 3; attempt++) {
+      const random = attempt >= sequential.length;
+      const slug = random ? `${base.slice(0, 52)}-${randomBytes(3).toString("hex")}` : sequential[attempt];
+      if (RESERVED_ORG_SLUGS.includes(slug) || (!random && (await this.findBySlug(slug)))) continue;
+      try {
+        const org = await this.db.transaction(async (tx) => {
+          const [created] = await tx.insert(organizations).values({ ...input, slug }).returning();
+          await tx.insert(orgMembers).values({ orgId: created.id, userId: user.id, role: "admin", status: "active" });
+          await tx.insert(follows).values({ orgId: created.id, userId: user.id });
+          return created;
+        });
+        return this.detail(org.slug, user.id);
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err; // Adresse inzwischen vergeben -> naechster Versuch
+      }
+    }
+    throw new ConflictException("Für diesen Namen ist keine freie Vereinsadresse mehr verfügbar. Bitte wähle einen anderen Namen.");
   }
 
   async list(userId: string, q?: string, tag?: string): Promise<OrgSummary[]> {
@@ -130,6 +163,11 @@ export class OrgsService {
   /** Mitgliedschaftsantrag; die Freigabe durch den Vorstand folgt im Modul "Verwaltung". */
   async requestMembership(slug: string, userId: string): Promise<OrgDetail> {
     const org = await this.requireBySlug(slug);
+    // Schutz vor Antrags-Spam: abgelehnte Antraege werden geloescht und koennten sonst endlos wiederholt werden.
+    const [existing] = await this.db.select({ status: orgMembers.status }).from(orgMembers).where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, userId))).limit(1);
+    if (existing) throw new ConflictException("Du bist bereits Mitglied oder hast schon einen Antrag gestellt.");
+    await enforceLimit(this.cache, `org:apply:${org.id}:${userId}`, 3, 30 * 86400, limitMessage("Mitgliedsanträge bei diesem Verein"));
+    await enforceLimit(this.cache, `org:apply:${userId}`, 20, 86400, limitMessage("Mitgliedsanträge"));
     const inserted = await this.db
       .insert(orgMembers)
       .values({ orgId: org.id, userId, role: "member", status: "pending" })
@@ -150,14 +188,14 @@ export class OrgsService {
 
   // --- Mitgliederverwaltung (nur Vorstand) -------------------------------------
 
-  private async requireAdmin(orgId: string, userId: string) {
-    if ((await this.activeRole(orgId, userId)) !== "admin") {
+  private async requireAdmin(orgId: string, userId: string, dbOrTx: DbOrTx = this.db) {
+    if ((await this.activeRole(orgId, userId, dbOrTx)) !== "admin") {
       throw new ForbiddenException("Nur der Vorstand darf Mitglieder verwalten.");
     }
   }
 
-  private async adminCount(orgId: string): Promise<number> {
-    const [{ n }] = await this.db
+  private async adminCount(orgId: string, dbOrTx: DbOrTx = this.db): Promise<number> {
+    const [{ n }] = await dbOrTx
       .select({ n: sql<number>`count(*)::int` })
       .from(orgMembers)
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")));
@@ -204,32 +242,114 @@ export class OrgsService {
     });
   }
 
+  /** Sperrt den Verein bis zum Ende der Transaktion (serialisiert Rollen-/Austrittsaenderungen, "letzter Vorstand"). */
+  private async lockOrg(tx: DbOrTx, orgId: string) {
+    await tx.execute(sql`select id from social.organizations where id = ${orgId} for update`);
+  }
+
   async setRole(slug: string, actor: PublicUser, targetId: string, role: OrgRole): Promise<void> {
     const org = await this.requireBySlug(slug);
-    await this.requireAdmin(org.id, actor.id);
-    const current = await this.activeRole(org.id, targetId);
-    if (!current) throw new NotFoundException("Aktives Mitglied nicht gefunden.");
-    if (current === "admin" && role !== "admin" && (await this.adminCount(org.id)) <= 1) {
-      throw new BadRequestException("Der Verein braucht mindestens einen Vorstand.");
-    }
-    await this.db
-      .update(orgMembers)
-      .set({ role })
-      .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId)));
+    await this.db.transaction(async (tx) => {
+      await this.lockOrg(tx, org.id);
+      await this.requireAdmin(org.id, actor.id, tx);
+      const current = await this.activeRole(org.id, targetId, tx); // erst nach der Sperre lesen
+      if (!current) throw new NotFoundException("Aktives Mitglied nicht gefunden.");
+      if (current === "admin" && role !== "admin" && (await this.adminCount(org.id, tx)) <= 1) {
+        throw new BadRequestException("Der Verein braucht mindestens einen Vorstand.");
+      }
+      await tx
+        .update(orgMembers)
+        .set({ role })
+        .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId)));
+    });
   }
 
   /** Austritt (selbst) oder Entfernen (Vorstand). */
   async removeMember(slug: string, actor: PublicUser, targetId: string): Promise<void> {
     const org = await this.requireBySlug(slug);
-    if (targetId !== actor.id) await this.requireAdmin(org.id, actor.id);
-    const key = and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId));
-    const [m] = await this.db.select().from(orgMembers).where(key).limit(1);
-    if (!m) throw new NotFoundException("Mitglied nicht gefunden.");
-    if (m.role === "admin" && m.status === "active" && (await this.adminCount(org.id)) <= 1) {
-      throw new BadRequestException("Der letzte Vorstand kann den Verein nicht verlassen.");
+    await this.db.transaction(async (tx) => {
+      await this.lockOrg(tx, org.id);
+      if (targetId !== actor.id) await this.requireAdmin(org.id, actor.id, tx);
+      const key = and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId));
+      const [m] = await tx.select().from(orgMembers).where(key).limit(1);
+      if (!m) throw new NotFoundException("Mitglied nicht gefunden.");
+      if (m.role === "admin" && m.status === "active" && (await this.adminCount(org.id, tx)) <= 1) {
+        throw new BadRequestException("Der letzte Vorstand kann den Verein nicht verlassen.");
+      }
+      await tx.delete(orgMembers).where(key);
+    });
+    // Nach dem Commit: Stammdaten, Teams, interne Zusagen, Gruppen-Chats (Datenschutz). Wirft nie.
+    await this.events.emitLeave(org.id, targetId);
+  }
+
+  /** Namen aktiver Mitglieder (max. 2000), nur fuer Vorstand und Moderation - ohne Rollen, E-Mails oder Status. */
+  async memberNames(slug: string, actor: PublicUser): Promise<OrgMemberName[]> {
+    const org = await this.requireBySlug(slug);
+    const role = await this.activeRole(org.id, actor.id);
+    if (role !== "admin" && role !== "moderator") throw new ForbiddenException("Nur Vorstand und Moderation sehen die Mitgliederliste.");
+    const ids = await this.allActiveMemberIds(org.id);
+    const names = await this.directory.names(ids);
+    return ids
+      .filter((id) => names.has(id))
+      .map((id) => ({ userId: id, name: names.get(id)! }))
+      .sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }
+
+  // --- Kontoloeschung (Variante A) ----------------------------------------------------
+
+  /** Vereine, in denen der Nutzer einziger aktiver Vorstand ist, mit Anzahl weiterer aktiver Mitglieder. */
+  async soleAdminOrgs(userId: string): Promise<{ id: string; slug: string; name: string; otherActive: number }[]> {
+    const res: any = await this.db.execute(sql`
+      select o.id, o.slug, o.name,
+        (select count(*)::int from social.org_members x where x.org_id = o.id and x.status = 'active' and x.user_id <> ${userId}) as other_active
+      from social.org_members m
+      join social.organizations o on o.id = m.org_id
+      where m.user_id = ${userId} and m.status = 'active' and m.role = 'admin'
+        and not exists (select 1 from social.org_members a where a.org_id = o.id and a.status = 'active' and a.role = 'admin' and a.user_id <> ${userId})
+      order by o.name`);
+    const rows: { id: string; slug: string; name: string; other_active: number }[] = Array.isArray(res) ? res : res.rows ?? [];
+    return rows.map((r) => ({ id: r.id, slug: r.slug, name: r.name, otherActive: Number(r.other_active) }));
+  }
+
+  /**
+   * Loescht einen Verein, wenn ausser `userId` niemand mehr aktives Mitglied ist (Kontoloeschung des einzigen Vorstands).
+   * Kaskade in social (Beitraege, Termine, Teams, Einladungen); andere Bereiche raeumen per OrgEvents auf.
+   * Finalisierte Rechnungen (billing) bleiben als Aufbewahrungsdaten erhalten, nur Entwuerfe werden geloescht.
+   */
+  async deleteIfAbandoned(orgId: string, userId: string): Promise<boolean> {
+    const after = await this.db.transaction(async (tx) => {
+      await this.lockOrg(tx, orgId);
+      const [other] = await tx
+        .select({ userId: orgMembers.userId })
+        .from(orgMembers)
+        .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active"), ne(orgMembers.userId, userId)))
+        .limit(1);
+      if (other) return null;
+      const cbs = await this.events.runDeleting(orgId, tx);
+      const deleted = await tx
+        .delete(organizations)
+        .where(and(eq(organizations.id, orgId), sql`not exists (select 1 from social.org_members m where m.org_id = ${orgId} and m.status = 'active' and m.user_id <> ${userId})`))
+        .returning({ id: organizations.id });
+      if (deleted.length === 0) return null;
+      return cbs;
+    });
+    if (!after) return false;
+    for (const cb of after) {
+      try {
+        await cb();
+      } catch {
+        this.log.error(`Nacharbeit nach Vereinsloeschung fehlgeschlagen (Verein ${orgId}).`);
+      }
     }
-    await this.db.delete(orgMembers).where(key);
-    await this.events.emitLeave(org.id, targetId); // z. B. Stammdaten loeschen (Datenschutz)
+    await this.events.emitOrgDeleted(orgId);
+    return true;
+  }
+
+  /** Ausstellerdaten fuer Rechnungen (Stand beim Finalisieren). */
+  async issuerData(orgId: string): Promise<{ name: string; city: string; address: string; iban: string; taxInfo: string }> {
+    const [o] = await this.db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!o) throw new NotFoundException("Verein nicht gefunden.");
+    return { name: o.name, city: o.city, address: o.address, iban: o.iban, taxInfo: o.taxInfo };
   }
 
   // --- Kontakte (fuer den Chat) ---------------------------------------------------
@@ -307,8 +427,8 @@ export class OrgsService {
   }
 
   /** Aktive Rolle des Nutzers im Verein (null = kein aktives Mitglied). */
-  async activeRole(orgId: string, userId: string): Promise<OrgRole | null> {
-    const [m] = await this.db
+  async activeRole(orgId: string, userId: string, dbOrTx: DbOrTx = this.db): Promise<OrgRole | null> {
+    const [m] = await dbOrTx
       .select()
       .from(orgMembers)
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId), eq(orgMembers.status, "active")))

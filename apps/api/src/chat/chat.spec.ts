@@ -60,7 +60,7 @@ describe("Chat", () => {
   // Das Rate-Limit (30/min) soll nur der eigene Test ausloesen, nicht die Massen-Tests davor.
   beforeEach(async () => {
     const cache = app.get<Cache>(CACHE);
-    for (const u of [vera, mia, ben, tom, nina]) if (u) await cache.del(`chat:rate:${u.id}`);
+    for (const u of [vera, mia, ben, tom, nina]) if (u) await cache.del(`lim:chat:rate:${u.id}`);
   });
   const org = "chat-verein";
 
@@ -154,7 +154,7 @@ describe("Chat", () => {
 
   it("Paging: Keyset-Cursor liefert alle Nachrichten ohne Doppelte, aelteste zuerst", async () => {
     for (let i = 1; i <= 70; i++) {
-      if (i % 20 === 0) await app.get<Cache>(CACHE).del(`chat:rate:${ben.id}`); // Rate-Limit nicht ausloesen
+      if (i % 20 === 0) await app.get<Cache>(CACHE).del(`lim:chat:rate:${ben.id}`); // Rate-Limit nicht ausloesen
       expect((await req(ben, "POST", `/chat/conversations/${dm}/messages`, { body: `Nachricht ${i}` })).statusCode).toBe(201);
     }
     const seen: string[] = [];

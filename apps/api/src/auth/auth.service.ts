@@ -21,16 +21,24 @@ import { JobsService } from "../jobs/jobs.service";
 import { TwoFactorService } from "./two-factor.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, consents, sessions, users } from "../db/schema";
+import { isUniqueViolation } from "../common/pg-errors";
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Sessions werden kurz gecacht: spart eine DB-Abfrage pro Request (SKALIERUNG). */
 const SESSION_CACHE_TTL_S = 60;
 const sessionKey = (tokenHash: string) => `sess:${tokenHash}`;
 
-/** Brute-Force-Schutz je Konto (zusaetzlich zum IP-Limit): nach 10 Fehlversuchen 15 Minuten Sperre. */
+/**
+ * Brute-Force-Schutz (zusaetzlich zum IP-Limit): 10 Fehlversuche je E-Mail UND IP sperren 15 Minuten - so kann ein
+ * Angreifer das Konto nicht fuer alle anderen Geraete sperren. Notbremse: 100 Fehlversuche je E-Mail (alle IPs) sperren
+ * 1 Stunde (verteilte Angriffe). Gespeichert werden nur Hashes (keine E-Mail/IP im Klartext in Redis).
+ */
 const MAX_LOGIN_FAILS = 10;
 const LOGIN_FAIL_WINDOW_S = 15 * 60;
-const failKey = (email: string) => `login:fail:${email}`;
+const MAX_LOGIN_FAILS_EMAIL = 100;
+const LOGIN_FAIL_EMAIL_WINDOW_S = 60 * 60;
+const failKeyIp = (email: string, ip: string) => `login:fail:${sha256(`${email}|${ip}`)}`;
+const failKeyEmail = (email: string) => `login:fail:${sha256(email)}`;
 
 /** Grobe Beschreibung aus dem User-Agent (ohne Bibliothek, bewusst ungenau). */
 export function describeDevice(ua?: string): string {
@@ -44,11 +52,6 @@ export function describeDevice(ua?: string): string {
 const ARGON_OPTIONS = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23505" || e?.cause?.code === "23505";
-}
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -77,6 +80,20 @@ export class AuthService implements OnModuleInit {
   async invalidateUserSessions(userId: string): Promise<void> {
     const rows = await this.db.select({ tokenHash: sessions.tokenHash }).from(sessions).where(eq(sessions.userId, userId));
     await this.cache.del(...rows.map((r) => sessionKey(r.tokenHash)));
+  }
+
+  /**
+   * Erster Schritt der Kontoloeschung: Konto sperren (deleted_at) und alle Sitzungen in EINER Transaktion beenden,
+   * danach die gecachten Sitzungen leeren. Login und Sitzungspruefung beachten deleted_at bereits.
+   */
+  async beginAccountDeletion(userId: string): Promise<void> {
+    const hashes = await this.db.transaction(async (tx) => {
+      await tx.update(users).set({ deletedAt: new Date() }).where(and(eq(users.id, userId), isNull(users.deletedAt)));
+      const removed = await tx.delete(sessions).where(eq(sessions.userId, userId)).returning({ hash: sessions.tokenHash });
+      await tx.insert(auditLog).values({ userId, action: "user.deletion-started" });
+      return removed.map((r) => r.hash);
+    });
+    await this.cache.del(...hashes.map(sessionKey)).catch(() => undefined);
   }
 
   async register(input: RegisterInput): Promise<PublicUser> {
@@ -111,11 +128,19 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(input: LoginInput, userAgent?: string): Promise<{ user: PublicUser; token: string } | { challenge: string }> {
-    // Fehlversuche je E-Mail zaehlen (auch fuer unbekannte Adressen: verraet nicht, ob ein Konto existiert).
-    const fails = Number((await this.cache.get(failKey(input.email)).catch(() => null)) ?? 0);
-    if (fails >= MAX_LOGIN_FAILS) {
+  async login(input: LoginInput, userAgent?: string, ip = "unknown"): Promise<{ user: PublicUser; token: string } | { challenge: string }> {
+    // Fehlversuche zaehlen (auch fuer unbekannte Adressen: verraet nicht, ob ein Konto existiert).
+    const ipKey = failKeyIp(input.email, ip);
+    const emailKey = failKeyEmail(input.email);
+    const [fails, emailFails] = await Promise.all([
+      this.cache.get(ipKey).catch(() => null),
+      this.cache.get(emailKey).catch(() => null),
+    ]);
+    if (Number(fails ?? 0) >= MAX_LOGIN_FAILS) {
       throw new HttpException({ message: "Zu viele Fehlversuche. Bitte warte 15 Minuten und versuche es erneut.", statusCode: 429 }, 429);
+    }
+    if (Number(emailFails ?? 0) >= MAX_LOGIN_FAILS_EMAIL) {
+      throw new HttpException({ message: "Zu viele Fehlversuche für dieses Konto. Bitte versuche es in einer Stunde erneut.", statusCode: 429 }, 429);
     }
     const [user] = await this.db
       .select()
@@ -125,10 +150,11 @@ export class AuthService implements OnModuleInit {
 
     const valid = await verify(user?.passwordHash ?? (await this.dummyHash), input.password);
     if (!user || !valid) {
-      await this.cache.incr(failKey(input.email), LOGIN_FAIL_WINDOW_S).catch(() => undefined);
+      await this.cache.incr(ipKey, LOGIN_FAIL_WINDOW_S).catch(() => undefined);
+      await this.cache.incr(emailKey, LOGIN_FAIL_EMAIL_WINDOW_S).catch(() => undefined);
       throw new UnauthorizedException("E-Mail oder Passwort ist falsch.");
     }
-    await this.cache.del(failKey(input.email)).catch(() => undefined);
+    await this.cache.del(ipKey).catch(() => undefined); // nur diese IP entsperren; die Notbremse laeuft ab
 
     // Zweiter Faktor aktiv: noch keine Sitzung, nur eine kurzlebige signierte Herausforderung.
     if (await this.twoFactor.isEnabled(user.id)) return { challenge: this.twoFactor.challenge(user.id) };

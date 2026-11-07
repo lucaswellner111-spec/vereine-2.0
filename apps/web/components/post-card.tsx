@@ -1,14 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { Heart, MessageCircle } from "lucide-react";
+import { Heart, MessageCircle, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { CommentItem, FeedPost } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { mediaUrl } from "@/lib/media";
 import { Lightbox } from "./lightbox";
 import { TagChips } from "./tag-chips";
+import { ask, toast } from "./ui-hosts";
 import { Alert, Avatar, Badge, Button, Card } from "./ui";
 
 const timeAgo = (iso: string) => {
@@ -28,6 +30,7 @@ const reasons = [
 ] as const;
 
 export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPost; onDeleted: (id: string) => void; onHidden?: (id: string) => void }) {
+  const { user } = useAuth();
   const [post, setPost] = useState(initial);
   const [why, setWhy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -76,6 +79,20 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
       setPost((p) => ({ ...p, comments: p.comments + 1 }));
       setDraft("");
     });
+  };
+
+  // Loeschen: eigene Kommentare und alle Kommentare unter dem eigenen persoenlichen Beitrag
+  const canDeleteComment = (c: CommentItem) => !!user && (c.author.id === user.id || (post.author.id === user.id && !post.org));
+  const deleteComment = async (c: CommentItem) => {
+    if (!(await ask("Kommentar löschen? Das lässt sich nicht rückgängig machen.", { confirmLabel: "Löschen", danger: true }))) return;
+    try {
+      await api(`/comments/${c.id}`, { method: "DELETE" });
+      setComments((list) => (list ?? []).filter((x) => x.id !== c.id));
+      setPost((p) => ({ ...p, comments: Math.max(0, p.comments - 1) }));
+      toast.success("Kommentar gelöscht.");
+    } catch (e) {
+      toast.error(describeError(e));
+    }
   };
 
   const report = (reason: (typeof reasons)[number]["id"]) =>
@@ -202,6 +219,17 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
                       <span className="font-medium">{c.author.name}</span>
                     )}{" "}
                     <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
+                    {canDeleteComment(c) && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteComment(c)}
+                        aria-label="Kommentar löschen"
+                        title="Kommentar löschen"
+                        className="ml-1 inline-flex align-middle text-muted hover:text-danger"
+                      >
+                        <Trash2 size={13} aria-hidden />
+                      </button>
+                    )}
                     <p className="break-words text-muted">{c.body}</p>
                   </li>
                 ))}

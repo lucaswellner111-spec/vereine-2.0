@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * Dieser Test bricht, sobald jemand wieder `users`, `sessions`, `consents` oder `auditLog` importiert.
  */
 const root = join(__dirname, "..");
-const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications"];
+const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications", "profiles", "media"];
 const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog"];
 
 function sources(dir: string): string[] {
@@ -75,6 +75,25 @@ describe("Mitglieder-Bereich", () => {
       );
       const foreign = imports.filter((i) => !MEMBER_TABLES.includes(i));
       expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Dokumentierte Ausnahme (docs/ARCHITEKTUR.md, Trennlinie 1): Der Datenschutz-Dienst liest fuer Auskunft und
+ * Kontoloeschung eine FESTE Liste von Tabellen direkt. Alles andere (Vereine, Chat, Medien, Mitglieder, Rechnungen)
+ * laeuft ueber die jeweiligen Dienste. Neue Tabellen hier nur nach Absprache ergaenzen.
+ */
+describe("Datenschutz-Bereich (Ausnahme mit Allowlist)", () => {
+  const PRIVACY_TABLES = ["auditLog", "comments", "consents", "follows", "orgMembers", "posts", "sessions", "users"];
+  it("importiert nur die freigegebenen Tabellen", () => {
+    for (const file of sources(join(root, "privacy"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !PRIVACY_TABLES.includes(i));
+      expect(foreign, `${file} importiert nicht freigegebene Tabellen: ${foreign.join(", ")}`).toEqual([]);
     }
   });
 });

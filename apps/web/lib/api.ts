@@ -37,7 +37,8 @@ export function describeError(err: unknown): string {
       const first = Object.entries(err.fields)[0];
       if (first) return `${first[0]}: ${first[1][0]}`;
     }
-    if (err.status === 429) return "Zu viele Versuche. Bitte warte kurz.";
+    // 429: konkreten Servertext zeigen (z. B. Nutzungslimit), sonst allgemeiner Hinweis
+    if (err.status === 429) return err.message && err.message !== "Etwas ist schiefgelaufen." ? err.message : "Zu viele Versuche. Bitte warte kurz.";
     return err.message;
   }
   return "Verbindung fehlgeschlagen. Bitte versuche es erneut.";

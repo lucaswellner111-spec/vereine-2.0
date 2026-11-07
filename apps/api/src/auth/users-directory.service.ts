@@ -13,14 +13,14 @@ import { consents, users } from "../db/schema";
 export class UsersDirectory {
   constructor(@Inject(DB) private readonly db: Database) {}
 
-  /** Anzeigenamen fuer viele Nutzer in EINER Abfrage (Reihenfolge egal, fehlende IDs fehlen im Ergebnis). */
+  /** Anzeigenamen fuer viele Nutzer in EINER Abfrage (Reihenfolge egal, fehlende und gesperrte IDs fehlen im Ergebnis). */
   async names(ids: string[]): Promise<Map<string, string>> {
     const unique = [...new Set(ids)];
     if (unique.length === 0) return new Map();
     const rows = await this.db
       .select({ id: users.id, name: users.displayName })
       .from(users)
-      .where(inArray(users.id, unique));
+      .where(and(inArray(users.id, unique), isNull(users.deletedAt))); // gesperrt (in Loeschung) = "Geloeschter Nutzer"
     return new Map(rows.map((r) => [r.id, r.name]));
   }
 

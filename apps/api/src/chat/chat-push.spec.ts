@@ -20,7 +20,7 @@ import * as schema from "../db/schema";
 
 const password = "ein-sehr-langes-passwort";
 const sub = (n: number) => ({
-  endpoint: `https://push.example.test/chat/${n}`,
+  endpoint: `https://fcm.googleapis.com/fcm/send/chat-${n}`,
   keys: { p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM", auth: "tBHItJI5svbpez7KI4CCXg" },
 });
 

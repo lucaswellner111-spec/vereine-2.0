@@ -18,11 +18,13 @@ import { DB, type Database } from "../db/db.module";
 import { feeClasses, memberCounters, memberProfiles } from "../db/schema";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { berlinDate } from "../common/berlin-date";
+import { isUniqueViolation } from "../common/pg-errors";
 
 type ProfileRow = typeof memberProfiles.$inferSelect;
 const READERS: OrgRole[] = ["admin", "treasurer"];
 const DELETED = "Gelöschtes Mitglied";
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => berlinDate();
 
 function isMinor(birthDate: string | null): boolean | null {
   if (!birthDate) return null;
@@ -52,7 +54,8 @@ export class MembersService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.orgEvents.onLeave((orgId, userId) => this.anonymizeOnLeave(orgId, userId));
+    this.orgEvents.onLeave("members", (orgId, userId) => this.anonymizeOnLeave(orgId, userId));
+    this.orgEvents.onOrgDeleted("members", (orgId) => this.eraseOrg(orgId));
   }
 
   // --- Zugriff ------------------------------------------------------------------
@@ -93,7 +96,7 @@ export class MembersService implements OnModuleInit {
       const first = counter.lastNo - missing.length + 1;
       await tx
         .insert(memberProfiles)
-        .values(missing.map((m, i) => ({ orgId, userId: m.userId, memberNo: first + i, joinedOn: m.since.toISOString().slice(0, 10) })))
+        .values(missing.map((m, i) => ({ orgId, userId: m.userId, memberNo: first + i, joinedOn: berlinDate(m.since) })))
         .onConflictDoNothing();
     });
   }
@@ -267,8 +270,7 @@ export class MembersService implements OnModuleInit {
         await this.db.insert(feeClasses).values({ orgId, ...input });
       }
     } catch (err) {
-      const e = err as { code?: string; cause?: { code?: string } };
-      if (e?.code === "23505" || e?.cause?.code === "23505") throw new ConflictException("Eine Beitragsklasse mit diesem Namen gibt es schon.");
+      if (isUniqueViolation(err)) throw new ConflictException("Eine Beitragsklasse mit diesem Namen gibt es schon.");
       throw err;
     }
   }
@@ -328,6 +330,15 @@ export class MembersService implements OnModuleInit {
       .update(memberProfiles)
       .set({ street: "", zip: "", city: "", phone: "", birthDate: null, guardianName: "", guardianEmail: "", notes: "", leftOn: today(), updatedAt: new Date() })
       .where(and(eq(memberProfiles.orgId, orgId), eq(memberProfiles.userId, userId), isNull(memberProfiles.leftOn)));
+  }
+
+  /** Verein geloescht (Kontoloeschung des einzigen Vorstands): alle Stammdaten, Beitragsklassen und Zaehler entfernen. */
+  async eraseOrg(orgId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(memberProfiles).where(eq(memberProfiles.orgId, orgId));
+      await tx.delete(feeClasses).where(eq(feeClasses.orgId, orgId));
+      await tx.delete(memberCounters).where(eq(memberCounters.orgId, orgId));
+    });
   }
 
   /** Kontoloeschung: alle Stammdaten der Person in allen Vereinen entfernen (Art. 17). */

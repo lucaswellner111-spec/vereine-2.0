@@ -12,6 +12,9 @@ import {
   type ReportInput,
 } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { CACHE, type Cache } from "../cache/cache.module";
+import { decodeCursor, encodeCursor, type Cursor } from "../common/cursor";
+import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
 import { comments, feedFeedback, follows, orgMembers, organizations, postLikes, posts, reports } from "../db/schema";
 import { diversify, reasonFor, scorePost, type Relation } from "../feed/ranking";
@@ -33,23 +36,13 @@ const RANK_WINDOW = 150;
 const RANK_DAYS = 14;
 const AFFINITY_DAYS = 30;
 
-type Cursor = { ts: string; id: string };
-const encode = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString("base64url");
-function decode(raw?: string): Cursor | null {
-  if (!raw) return null;
-  try {
-    const c = JSON.parse(Buffer.from(raw, "base64url").toString());
-    if (typeof c.ts === "string" && typeof c.id === "string") return c;
-  } catch {
-    /* fall through */
-  }
-  throw new BadRequestException("Ungueltiger Cursor.");
-}
+const encode = encodeCursor;
+const decode = decodeCursor;
 
 type Muted = { posts: Set<string>; users: Set<string>; orgs: Set<string> };
-/** Beziehungen und Stummschaltungen des Betrachters (einmal je Anfrage geladen). */
-type Ctx = { orgs: Map<string, Relation>; friends: Set<string>; muted: Muted };
-const EMPTY_CTX: Ctx = { orgs: new Map(), friends: new Set(), muted: { posts: new Set(), users: new Set(), orgs: new Set() } };
+/** Beziehungen, Moderationsrechte und Stummschaltungen des Betrachters (einmal je Anfrage geladen). */
+type Ctx = { orgs: Map<string, Relation>; friends: Set<string>; muted: Muted; modOrgs: Set<string> };
+const EMPTY_CTX: Ctx = { orgs: new Map(), friends: new Set(), muted: { posts: new Set(), users: new Set(), orgs: new Set() }, modOrgs: new Set() };
 
 @Injectable()
 export class PostsService {
@@ -60,9 +53,11 @@ export class PostsService {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(MediaService) private readonly mediaSvc: MediaService,
+    @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
   async create(user: PublicUser, input: CreatePostInput): Promise<FeedPost> {
+    await enforceLimit(this.cache, `post:create:${user.id}`, 60, 3600, limitMessage("neue Beiträge"));
     let orgId: string | null = null;
     let orgTags: string[] = [];
     if (input.orgSlug) {
@@ -254,7 +249,7 @@ export class PostsService {
       .delete(postLikes)
       .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, user.id)))
       .returning();
-    if (removed.length === 0) await this.db.insert(postLikes).values({ postId, userId: user.id });
+    if (removed.length === 0) await this.db.insert(postLikes).values({ postId, userId: user.id }).onConflictDoNothing(); // parallele Klicks
     const [{ n }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(postLikes).where(eq(postLikes.postId, postId));
     return { liked: removed.length === 0, likes: n };
   }
@@ -278,6 +273,7 @@ export class PostsService {
 
   async addComment(user: PublicUser, postId: string, body: string): Promise<CommentItem> {
     const post = await this.requirePost(postId, user.id);
+    await enforceLimit(this.cache, `comment:create:${user.id}`, 100, 3600, limitMessage("Kommentare"));
     const [row] = await this.db.insert(comments).values({ postId, authorId: user.id, body }).returning();
     if (post.authorId !== user.id) {
       await this.notifications.notify([post.authorId], "comment", { postId, commenter: user.displayName, excerpt: body.slice(0, 80) });
@@ -286,9 +282,35 @@ export class PostsService {
     return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), author: { id: user.id, name: user.displayName, handle: mine?.handle ?? null } };
   }
 
+  /** Kommentar loeschen: eigene Kommentare (auch unter ausgeblendeten/geloeschten Beitraegen) oder unter eigenen persoenlichen Beitraegen. */
+  async deleteComment(user: PublicUser, commentId: string): Promise<void> {
+    const [row] = await this.db
+      .select({ authorId: comments.authorId, postAuthorId: posts.authorId, postOrgId: posts.orgId })
+      .from(comments)
+      .innerJoin(posts, eq(posts.id, comments.postId))
+      .where(eq(comments.id, commentId))
+      .limit(1);
+    if (!row) throw new NotFoundException("Kommentar nicht gefunden.");
+    const ownComment = row.authorId === user.id;
+    const ownPersonalPost = row.postAuthorId === user.id && !row.postOrgId;
+    if (!ownComment && !ownPersonalPost) throw new ForbiddenException("Du darfst diesen Kommentar nicht löschen.");
+    await this.db.delete(comments).where(eq(comments.id, commentId));
+  }
+
+  /** Meldung: je Person hoechstens eine offene Meldung pro Beitrag (Wiederholung = 204 ohne neue Zeile). */
   async report(user: PublicUser, postId: string, input: ReportInput): Promise<void> {
     const post = await this.requirePost(postId, user.id);
-    await this.db.insert(reports).values({ postId, orgId: post.orgId, reporterId: user.id, reason: input.reason, note: input.note });
+    const [open] = await this.db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.postId, postId), eq(reports.reporterId, user.id), eq(reports.status, "open")))
+      .limit(1);
+    if (open) return;
+    await enforceLimit(this.cache, `report:${user.id}`, 30, 3600, limitMessage("Meldungen"));
+    await this.db
+      .insert(reports)
+      .values({ postId, orgId: post.orgId, reporterId: user.id, reason: input.reason, note: input.note })
+      .onConflictDoNothing(); // partieller Unique-Index (post_id, reporter_id) where status='open'
   }
 
   async remove(user: PublicUser, postId: string): Promise<void> {
@@ -365,7 +387,7 @@ export class PostsService {
   private async context(userId: string): Promise<Ctx> {
     const [followed, member, friends, feedback] = await Promise.all([
       this.db.select({ orgId: follows.orgId }).from(follows).where(eq(follows.userId, userId)),
-      this.db.select({ orgId: orgMembers.orgId }).from(orgMembers).where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"))),
+      this.db.select({ orgId: orgMembers.orgId, role: orgMembers.role }).from(orgMembers).where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"))),
       this.access.followedUserIds(userId),
       this.db.select().from(feedFeedback).where(eq(feedFeedback.userId, userId)),
     ]);
@@ -373,7 +395,8 @@ export class PostsService {
     followed.forEach((f) => orgs.set(f.orgId, "follow"));
     member.forEach((m) => orgs.set(m.orgId, "member"));
     const set = (k: string) => new Set(feedback.filter((f) => f.targetKind === k).map((f) => f.targetId));
-    return { orgs, friends: new Set(friends), muted: { posts: set("post"), users: set("user"), orgs: set("org") } };
+    const modOrgs = new Set(member.filter((m) => MODERATION_ROLES.includes(m.role)).map((m) => m.orgId));
+    return { orgs, friends: new Set(friends), muted: { posts: set("post"), users: set("user"), orgs: set("org") }, modOrgs };
   }
 
   /** Affinitaet: Likes (1) und Kommentare (2) des Betrachters der letzten 30 Tage je Autor (persoenlich) bzw. Verein. */
@@ -436,13 +459,8 @@ export class PostsService {
     const authorIds = rows.map((r) => r.authorId);
     const [names, profs] = await Promise.all([this.directory.names(authorIds), this.access.ensureMany(authorIds)]);
 
-    const roleCache = new Map<string, Promise<string | null>>();
-    const canModerate = async (orgId: string | null) => {
-      if (!orgId) return false;
-      if (!roleCache.has(orgId)) roleCache.set(orgId, this.orgs.activeRole(orgId, userId));
-      const role = await roleCache.get(orgId)!;
-      return !!role && MODERATION_ROLES.includes(role);
-    };
+    // Moderationsrechte kommen aus dem Kontext (eine Abfrage je Anfrage statt einer je Verein).
+    const canModerate = (orgId: string | null) => !!orgId && ctx.modOrgs.has(orgId);
 
     return Promise.all(
       ids
@@ -470,7 +488,7 @@ export class PostsService {
             likes: l,
             comments: c,
             likedByMe: liked.has(id),
-            canDelete: r.authorId === userId || (await canModerate(r.orgId)),
+            canDelete: r.authorId === userId || canModerate(r.orgId),
             reason: reasonFor(relation, r.orgName, l, c, { authorName }),
             orgId: r.orgId,
           };

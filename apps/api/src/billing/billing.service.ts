@@ -15,7 +15,9 @@ import { DB, type Database } from "../db/db.module";
 import { invoiceCounters, invoiceItems, invoices } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { berlinDate, berlinYear } from "../common/berlin-date";
 import { buildInvoicePdf, formatEur } from "./invoice-pdf";
 
 const BILLERS: OrgRole[] = ["admin", "treasurer"];
@@ -25,7 +27,8 @@ const DELETED_NAME = "Gelöschtes Mitglied";
 
 type InvoiceRow = typeof invoices.$inferSelect;
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Kalendertag in Deutschland (nicht UTC): Rechnungsdatum, Faelligkeit, Jahr des Nummernkreises. */
+const today = () => berlinDate();
 
 /**
  * Rechnungen eines Vereins an seine Mitglieder (Bereich `billing`, keine Fremdschluessel).
@@ -44,12 +47,20 @@ export class BillingService implements OnModuleInit {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
   ) {}
 
   onModuleInit() {
     // Atomarer Claim (overdue_notified_at) macht mehrere Worker gefahrlos.
     this.jobs.define("billing.overdue", async () => void (await this.notifyOverdue()));
     this.jobs.every("billing.overdue", OVERDUE_INTERVAL_MS);
+    // Verein geloescht: nur Entwuerfe entfernen. Finalisierte Rechnungen bleiben (Aufbewahrungspflicht, Ausstellerdaten
+    // liegen als Kopie in der Rechnung); ihr Loesch-Job nach Fristende ist noch offen (docs/OFFENE-PUNKTE.md).
+    this.orgEvents.onOrgDeleted("billing", (orgId) => this.deleteDraftsOfOrg(orgId));
+  }
+
+  async deleteDraftsOfOrg(orgId: string): Promise<void> {
+    await this.db.delete(invoices).where(and(eq(invoices.orgId, orgId), eq(invoices.status, "draft")));
   }
 
   // --- Zugriff ----------------------------------------------------------------
@@ -124,7 +135,7 @@ export class BillingService implements OnModuleInit {
   /** DATEV-nahe CSV (Semikolon, UTF-8 mit BOM, Dezimalkomma) aller finalisierten Rechnungen eines Jahres. */
   async csv(user: PublicUser, slug: string, year?: string): Promise<string> {
     const org = await this.requireBiller(user, slug);
-    const y = year && /^\d{4}$/.test(year) ? Number(year) : new Date().getFullYear();
+    const y = year && /^\d{4}$/.test(year) ? Number(year) : berlinYear();
     const rows = await this.db
       .select()
       .from(invoices)
@@ -149,7 +160,7 @@ export class BillingService implements OnModuleInit {
           num(r.vatCents),
           num(r.totalCents),
           r.status === "void" ? "storniert" : r.status === "paid" ? "bezahlt" : "offen",
-          r.paidAt ? r.paidAt.toISOString().slice(0, 10) : "",
+          r.paidAt ? berlinDate(r.paidAt) : "",
         ].join(";"),
       );
     }
@@ -199,9 +210,13 @@ export class BillingService implements OnModuleInit {
     if (!biller) throw new ForbiddenException("Nur Vorstand und Kassenwart verwalten Rechnungen.");
     if (row.status !== "draft") throw new BadRequestException("Nur Entwuerfe koennen finalisiert werden.");
 
-    const year = new Date().getFullYear();
+    // Rechnungsdatum und Jahr des Nummernkreises nach deutschem Kalendertag (Silvester 23:30 UTC = Neujahr).
+    const issueDate = berlinDate();
+    const year = Number(issueDate.slice(0, 4));
     const items = await this.db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id));
     const vatNote = items.some((i) => i.vatRate > 0) ? "" : DEFAULT_VAT_NOTE;
+    // Ausstellerdaten zum Zeitpunkt des Finalisierens (z. B. geaenderte IBAN nach Anlage des Entwurfs).
+    const issuer = await this.orgs.issuerData(row.orgId);
 
     const finalized = await this.db.transaction(async (tx) => {
       // Atomarer, lueckenloser Zaehler: bei Fehlern rollt die Transaktion die Nummer mit zurueck.
@@ -214,7 +229,18 @@ export class BillingService implements OnModuleInit {
       // Bedingung status='draft' schuetzt vor doppeltem Finalisieren (parallele Anfragen).
       const [updated] = await tx
         .update(invoices)
-        .set({ status: "open", number, issueDate: today(), finalizedAt: new Date(), vatNote })
+        .set({
+          status: "open",
+          number,
+          issueDate,
+          finalizedAt: new Date(),
+          vatNote,
+          issuerName: issuer.name,
+          issuerCity: issuer.city,
+          issuerAddress: issuer.address,
+          issuerIban: issuer.iban,
+          issuerTaxInfo: issuer.taxInfo,
+        })
         .where(and(eq(invoices.id, id), eq(invoices.status, "draft")))
         .returning();
       if (!updated) throw new BadRequestException("Die Rechnung wurde bereits finalisiert.");
@@ -275,14 +301,14 @@ export class BillingService implements OnModuleInit {
       .from(invoices)
       .where(eq(invoices.orgId, orgId))
       .limit(10000);
-    const year = new Date().getFullYear();
+    const year = berlinYear();
     let open = 0, overdue = 0, openCents = 0, paidThisYearCents = 0;
     for (const r of rows) {
       if (r.status === "open") {
         open += 1;
         openCents += r.total;
         if (r.due < today()) overdue += 1;
-      } else if (r.status === "paid" && r.paidAt && r.paidAt.getFullYear() === year) paidThisYearCents += r.total;
+      } else if (r.status === "paid" && r.paidAt && berlinYear(r.paidAt) === year) paidThisYearCents += r.total;
     }
     return { open, overdue, openCents, paidThisYearCents };
   }

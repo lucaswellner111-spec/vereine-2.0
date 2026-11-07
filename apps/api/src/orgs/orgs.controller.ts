@@ -19,6 +19,7 @@ import {
   setRoleSchema,
   type MemberItem,
   type OrgDetail,
+  type OrgMemberName,
   type OrgSummary,
   type PublicUser,
 } from "@vereine/shared";
@@ -80,6 +81,12 @@ export class OrgsController {
     @Query("status") status?: string,
   ): Promise<MemberItem[]> {
     return this.orgs.members(slug, user, status === "pending" || status === "active" ? status : undefined);
+  }
+
+  /** Nur Namen aktiver Mitglieder (Vorstand/Moderation), z. B. fuer neue Gruppen-Chats. */
+  @Get(":slug/member-names")
+  memberNames(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgMemberName[]> {
+    return this.orgs.memberNames(slug, user);
   }
 
   @Post(":slug/members/:userId/decision")

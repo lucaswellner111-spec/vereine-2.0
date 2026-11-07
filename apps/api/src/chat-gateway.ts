@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { Controller, Get, Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { fastifyOptions } from "./app.setup";
 import { AuthModule } from "./auth/auth.module";
 import { AuthService } from "./auth/auth.service";
 import { CacheModule } from "./cache/cache.module";
@@ -23,7 +24,7 @@ class GatewayHealthController {
 class GatewayModule {}
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(GatewayModule, new FastifyAdapter({ logger: true, trustProxy: true }));
+  const app = await NestFactory.create<NestFastifyApplication>(GatewayModule, new FastifyAdapter(fastifyOptions()));
   app.enableShutdownHooks();
   const port = Number(process.env.CHAT_GATEWAY_PORT ?? 4100);
   await app.listen(port, "0.0.0.0");

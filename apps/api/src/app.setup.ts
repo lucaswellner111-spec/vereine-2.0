@@ -5,15 +5,56 @@ import { HttpException } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type Redis from "ioredis";
 import { REDIS } from "./cache/cache.module";
+import { AppErrorFilter } from "./common/error.filter";
+import { loggerOptions } from "./common/log-redact";
 import { recordRequest } from "./metrics/http-metrics";
 
-const isAuthRoute = (url: string) => url.startsWith("/auth/");
+/**
+ * Strenges Limit (10/min je IP) nur fuer Anmeldung und sicherheitskritische Aktionen. Verglichen wird das
+ * Routenmuster (req.routeOptions.url), nicht die rohe URL - sonst umgeht z. B. "/auth/%6Cogin" das Limit.
+ */
+const STRICT_ROUTES = new Set([
+  "POST /auth/login",
+  "POST /auth/login/2fa",
+  "POST /auth/register",
+  "PUT /auth/password",
+  "POST /auth/2fa/enable",
+  "POST /auth/2fa/disable",
+  "POST /auth/2fa/recovery-codes",
+  "DELETE /privacy/account",
+]);
+export const isStrictRoute = (req: { method: string; routeOptions?: { url?: string } }) =>
+  STRICT_ROUTES.has(`${req.method} ${req.routeOptions?.url ?? ""}`);
+
+const DEFAULT_TRUST_PROXY = "loopback,linklocal,uniquelocal";
+const TRUST_TOKEN = /^(loopback|linklocal|uniquelocal|[0-9a-f.:]+(\/\d{1,3})?)$/i;
+
+/**
+ * Welche Proxys duerfen X-Forwarded-For setzen? Standard: nur private Netze (Caddy im Docker-Netz). "true"/"*" oder
+ * unbekannte Werte werden NICHT uebernommen (sonst koennte jeder seine IP faelschen und Limits umgehen).
+ */
+export function trustProxySetting(raw = process.env.TRUST_PROXY): string {
+  if (!raw?.trim()) return DEFAULT_TRUST_PROXY;
+  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0 || !parts.every((p) => TRUST_TOKEN.test(p))) {
+    console.warn("TRUST_PROXY ungueltig (erlaubt: loopback, linklocal, uniquelocal, IP/CIDR) - Standard wird verwendet.");
+    return DEFAULT_TRUST_PROXY;
+  }
+  return parts.join(",");
+}
+
+/** Gemeinsame Fastify-Optionen fuer API, Chat-Gateway und lokalen PGlite-Server. */
+export function fastifyOptions(opts: { logger?: boolean } = {}) {
+  return { trustProxy: trustProxySetting(), logger: opts.logger === false ? false : loggerOptions };
+}
 
 export async function configureApp(
   app: NestFastifyApplication,
   opts: { rateLimit?: boolean } = {},
 ) {
   const fastify = app.getHttpAdapter().getInstance();
+  // Datenbank-/Fastify-Fehler als 4xx, unbekannte Fehler bereinigt loggen (keine SQL-Parameter).
+  app.useGlobalFilters(new AppErrorFilter(app.getHttpAdapter()));
 
   await fastify.register(fastifyCookie);
   // Uploads: nur 1 Datei je Anfrage, max. 8 MB (die eigentliche Pruefung macht MediaService am Inhalt).
@@ -26,12 +67,12 @@ export async function configureApp(
       redis,
       nameSpace: "rl:",
       skipOnError: true, // Redis-Ausfall darf die API nicht lahmlegen (Fail-open)
-      max: (req) => (isAuthRoute(req.url) ? 10 : 200),
+      max: (req) => (isStrictRoute(req) ? 10 : 200),
       timeWindow: "1 minute",
       // HttpException statt Roh-Fehler: sauberes 429 ohne Fehler-Log-Flut.
       errorResponseBuilder: (_req, ctx) =>
         new HttpException({ message: `Zu viele Anfragen. Bitte warte ${Math.ceil(ctx.ttl / 1000)} Sekunden.`, statusCode: 429 }, 429),
-      keyGenerator: (req) => `${req.ip}:${isAuthRoute(req.url) ? "auth" : "gen"}`,
+      keyGenerator: (req) => `${req.ip}:${isStrictRoute(req) ? "auth" : "gen"}`,
     });
   }
 

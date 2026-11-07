@@ -100,6 +100,10 @@ export const createOrgSchema = z.object({
   about: z.string().trim().max(600).default(""),
 });
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
+/** Vereins-Adressen, die mit festen Routen (/orgs/mine, /orgs/managed, /vereine/neu) kollidieren wuerden. */
+export const RESERVED_ORG_SLUGS = ["mine", "managed", "neu"];
+/** Namensliste aktiver Mitglieder (fuer Vorstand/Moderation, z. B. Gruppen-Chat anlegen) - ohne Rollen und E-Mails. */
+export type OrgMemberName = { userId: string; name: string };
 
 export const ORG_ROLES = ["admin", "treasurer", "moderator", "member"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
@@ -347,7 +351,8 @@ export type ChatReportItem = {
   createdAt: string;
   reporterName: string;
   senderName: string;
-  conversationKind: "direct" | "group";
+  /** null = Unterhaltung existiert nicht mehr (die Beweiskopie der Meldung bleibt trotzdem lesbar). */
+  conversationKind: "direct" | "group" | null;
   /** Nur die gemeldete Nachricht, null wenn bereits geloescht. */
   text: string | null;
 };
@@ -394,6 +399,10 @@ export const followDecisionSchema = z.object({ decision: z.enum(["approve", "rej
 export const feedbackSchema = z.object({ kind: z.enum(["hide", "mute_author", "mute_org"]) });
 export type MutedItem = { kind: "post" | "user" | "org"; id: string; label: string };
 
+/** Kalenderdatum JJJJ-MM-TT; prueft auch, ob es den Tag gibt (2026-02-31 ist ungueltig). */
+const isoDate = z.iso.date({ error: "Ungültiges Datum (JJJJ-MM-TT)" });
+const birthDate = isoDate.refine((d) => d >= "1900-01-01" && d <= new Date().toISOString().slice(0, 10), "Geburtsdatum nicht plausibel");
+
 // --- Rechnungen (Verein -> Mitglied) -----------------------------------------
 
 export const INVOICE_STATUS = ["draft", "open", "paid", "void"] as const;
@@ -414,7 +423,7 @@ export const createInvoiceSchema = z.object({
   /** Optionale Anschrift des Empfaengers (wird als Kopie in der Rechnung gespeichert). */
   recipientAddress: z.string().trim().max(300).default(""),
   /** Faelligkeit als Datum (JJJJ-MM-TT). */
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT"),
+  dueDate: isoDate,
   note: z.string().trim().max(500).default(""),
   items: z.array(invoiceItemSchema).min(1).max(30),
 });
@@ -519,8 +528,27 @@ export type LoginResult = PublicUser | { twoFactorRequired: true; challenge: str
 // --- Web-Push ----------------------------------------------------------------------
 
 const pushEndpoint = z.string().url().max(1000).refine((u) => u.startsWith("https://"), "Nur https-Endpunkte");
+
+/** Bekannte Push-Dienste der Browserhersteller (Chrome/Edge, Firefox, Safari, Windows). */
+export const PUSH_HOSTS = ["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"];
+export const PUSH_HOST_SUFFIXES = [".notify.windows.com", ".push.apple.com"];
+export const PUSH_HOST_ERROR = "Dieser Push-Dienst wird nicht unterstützt.";
+
+/** Nur https, Standardport, keine Zugangsdaten in der URL und ein bekannter Push-Dienst (kein SSRF auf beliebige Hosts). */
+export function isAllowedPushEndpoint(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" || (u.port !== "" && u.port !== "443") || u.username || u.password) return false;
+  const host = u.hostname.toLowerCase();
+  return PUSH_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some((s) => host.endsWith(s) && host.length > s.length);
+}
+
 export const pushSubscribeSchema = z.object({
-  endpoint: pushEndpoint,
+  endpoint: pushEndpoint.refine(isAllowedPushEndpoint, PUSH_HOST_ERROR),
   keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(10).max(100) }),
 });
 export const pushUnsubscribeSchema = z.object({ endpoint: pushEndpoint });
@@ -540,12 +568,6 @@ export const feeClassSchema = z.object({
 });
 export type FeeClassInput = z.infer<typeof feeClassSchema>;
 export type FeeClassItem = FeeClassInput & { id: string; members: number };
-
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datum im Format JJJJ-MM-TT")
-  .refine((d) => !Number.isNaN(Date.parse(d)), "Ungültiges Datum");
-const birthDate = isoDate.refine((d) => d >= "1900-01-01" && d <= new Date().toISOString().slice(0, 10), "Geburtsdatum nicht plausibel");
 
 /** Angaben, die ein Mitglied selbst pflegt. */
 export const selfMemberProfileSchema = z.object({

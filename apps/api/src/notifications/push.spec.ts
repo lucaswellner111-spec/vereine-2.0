@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +24,7 @@ import { pushMessage } from "./push.service";
 
 const password = "ein-sehr-langes-passwort";
 const sub = (n: number) => ({
-  endpoint: `https://push.example.test/send/${n}`,
+  endpoint: `https://fcm.googleapis.com/fcm/send/${n}`,
   keys: { p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM", auth: "tBHItJI5svbpez7KI4CCXg" },
 });
 
@@ -105,6 +106,60 @@ describe("Web-Push", () => {
     expect((await call("GET", "/push", undefined, d.cookie)).json().devices).toBe(1); // 410 weg, 500 bleibt
     // die gespeicherte Benachrichtigung existiert trotz Push-Fehlern
     expect((await call("GET", "/notifications", undefined, d.cookie)).json().unread).toBe(1);
+  });
+
+  it("nur bekannte Push-Dienste: fremder Host, http, anderer Port, IP -> 400", async () => {
+    const u = await signup("hans");
+    for (const endpoint of ["https://evil.example.com/push/1", "http://fcm.googleapis.com/fcm/send/1", "https://fcm.googleapis.com:8443/fcm/send/1", "https://192.168.0.10/push"]) {
+      const res = await call("POST", "/push/subscribe", { endpoint, keys: sub(1).keys }, u.cookie);
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toContain("Dieser Push-Dienst wird nicht unterstützt.");
+    }
+    expect((await call("POST", "/push/subscribe", { endpoint: "https://wns2-par02p.notify.windows.com/w/?token=abc", keys: sub(1).keys }, u.cookie)).statusCode).toBe(204);
+  });
+
+  it("hoechstens 10 Geraete: das 11. ersetzt das aelteste", async () => {
+    const u = await signup("ida");
+    for (let i = 100; i < 110; i++) {
+      await call("POST", "/push/subscribe", sub(i), u.cookie);
+      await db.execute(sql`update social.push_subscriptions set created_at = now() - make_interval(mins => ${200 - i}) where endpoint = ${sub(i).endpoint}`);
+    }
+    expect((await call("GET", "/push", undefined, u.cookie)).json().devices).toBe(10);
+    await call("POST", "/push/subscribe", sub(110), u.cookie);
+    const rows = await db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, u.id));
+    expect(rows).toHaveLength(10);
+    expect(rows.map((r) => r.endpoint)).not.toContain(sub(100).endpoint);
+    expect(rows.map((r) => r.endpoint)).toContain(sub(110).endpoint);
+  });
+
+  it("fremder Endpunkt wird nicht still uebernommen, sondern neu angelegt", async () => {
+    const a = await signup("jan");
+    const b = await signup("kai");
+    await call("POST", "/push/subscribe", sub(200), a.cookie);
+    const [before] = await db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, sub(200).endpoint));
+    expect((await call("POST", "/push/subscribe", sub(200), b.cookie)).statusCode).toBe(204);
+    const rows = await db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, sub(200).endpoint));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBe(b.id);
+    expect(rows[0].id).not.toBe(before.id);
+    expect((await call("GET", "/push", undefined, a.cookie)).json().devices).toBe(0);
+  });
+
+  it("Altzeilen mit fremdem Host werden nicht angefragt, sondern entfernt; Abmelden alter Endpunkte geht", async () => {
+    const u = await signup("lea");
+    await call("POST", "/push/subscribe", sub(300), u.cookie);
+    await db.insert(schema.pushSubscriptions).values([
+      { userId: u.id, endpoint: "https://intern.example.net/push/1", p256dh: sub(1).keys.p256dh, auth: sub(1).keys.auth },
+      { userId: u.id, endpoint: "https://intern.example.net/push/2", p256dh: sub(1).keys.p256dh, auth: sub(1).keys.auth },
+    ]);
+    // Abmelden eines Alt-Endpunkts ist weiterhin moeglich (Allowlist gilt nur beim Anmelden)
+    expect((await call("DELETE", "/push/subscribe", { endpoint: "https://intern.example.net/push/2" }, u.cookie)).statusCode).toBe(204);
+    sendNotification.mockResolvedValue({ statusCode: 201 });
+    await app.get(NotificationsService).notify([u.id], "new_follower", { name: "X", handle: "x" });
+    const hosts = sendNotification.mock.calls.map((c) => (c[0] as { endpoint: string }).endpoint);
+    expect(hosts).toEqual([sub(300).endpoint]);
+    const left = await db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, u.id));
+    expect(left.map((r) => r.endpoint)).toEqual([sub(300).endpoint]);
   });
 
   it("Kurztexte kennen alle Typen", () => {

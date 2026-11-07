@@ -145,6 +145,74 @@ describe("Redis: Rate-Limit", () => {
   });
 });
 
+describe("Rate-Limit: strenge Routen und Login-Sperre", () => {
+  const register = (app: NestFastifyApplication, email: string) =>
+    app.inject({
+      method: "POST", url: "/auth/register",
+      payload: { email, password, displayName: email.split("@")[0], confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
+    });
+
+  it("strenges Limit nur fuer Login & Co. (per Routenmuster), nicht fuer /auth/me", async () => {
+    // eigene Instanz (ioredis-mock teilt Daten je Host/Port zwischen Instanzen)
+    const { app } = await boot({ redis: new RedisMock({ port: 6391 }) }, true);
+    const me: number[] = [];
+    for (let i = 0; i < 15; i++) me.push((await app.inject({ method: "GET", url: "/auth/me" })).statusCode);
+    expect(me.every((s) => s === 401)).toBe(true);
+    // URL-kodierte Schreibweise trifft dieselbe Route und damit dasselbe strenge Limit
+    const enc: number[] = [];
+    for (let i = 0; i < 11; i++) {
+      enc.push((await app.inject({ method: "POST", url: "/auth/%6Cogin", payload: { email: "y@example.de", password: "falsch-falsch-falsch" } })).statusCode);
+    }
+    expect(enc.slice(0, 10).every((s) => s === 401)).toBe(true);
+    expect(enc[10]).toBe(429);
+    await app.close();
+  });
+
+  it("Login-Sperre gilt je E-Mail und IP: eine andere IP kann sich weiter anmelden", async () => {
+    const redis = new RedisMock({ port: 6392 });
+    const { app } = await boot({ redis });
+    await register(app, "lock@example.de");
+    const login = (ip: string, pw: string) =>
+      app.inject({ method: "POST", url: "/auth/login", remoteAddress: ip, payload: { email: "lock@example.de", password: pw } });
+    for (let i = 0; i < 10; i++) expect((await login("203.0.113.1", "falsch-falsch-falsch")).statusCode).toBe(401);
+    const locked = await login("203.0.113.1", password);
+    expect(locked.statusCode).toBe(429);
+    expect(locked.json().message).toMatch(/15 Minuten/);
+    expect((await login("203.0.113.2", password)).statusCode).toBe(200);
+    // Schluessel enthalten weder E-Mail noch IP im Klartext
+    const keys = (await redis.keys("*")).join(" ");
+    expect(keys).not.toMatch(/lock@|203\.0\.113/);
+    await app.close();
+  });
+
+  it("Cache-Ausfall beim Zaehlen blockiert fachliche Aktionen nicht (fail open)", async () => {
+    const store = new Map<string, string>();
+    const flaky: Cache = {
+      kind: "redis",
+      get: async (k) => store.get(k) ?? null,
+      set: async (k, v) => void store.set(k, v),
+      del: async (k) => void store.delete(k),
+      incr: async () => { throw new Error("Redis weg"); },
+      ping: async () => true,
+    };
+    const { app } = await boot({ cache: flaky });
+    const users: { id: string; cookie: string }[] = [];
+    for (const name of ["fa", "fb"]) {
+      const reg = await register(app, `${name}@example.de`);
+      const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: `${name}@example.de`, password } });
+      users.push({ id: reg.json().id, cookie: String(login.headers["set-cookie"]).split(";")[0] });
+    }
+    const [a, b] = users;
+    const as = (u: typeof a, method: "POST", url: string, payload: object = {}) => app.inject({ method, url, payload, headers: { cookie: u.cookie } });
+    expect((await as(a, "POST", "/orgs", { name: "Fail Open", category: "Sport", city: "Stadt" })).statusCode).toBe(201);
+    await as(b, "POST", "/orgs/fail-open/membership");
+    await as(a, "POST", `/orgs/fail-open/members/${b.id}/decision`, { decision: "approve" });
+    const dm = (await as(a, "POST", "/chat/conversations", { kind: "direct", userId: b.id })).json();
+    expect((await as(a, "POST", `/chat/conversations/${dm.id}/messages`, { body: "geht trotzdem" })).statusCode).toBe(201);
+    await app.close();
+  });
+});
+
 describe("Health: Ausfall", () => {
   it("meldet 503, wenn der Cache nicht antwortet", async () => {
     const broken: Cache = {

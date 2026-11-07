@@ -134,7 +134,7 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                 <Badge tone="danger">{reasonLabel[r.reason] ?? r.reason}</Badge>
                 <span>{new Date(r.createdAt).toLocaleString("de-DE")}</span>
-                <span>· {r.conversationKind === "group" ? "Gruppe" : "Direktnachricht"}</span>
+                <span>· {r.conversationKind === "group" ? "Gruppe" : r.conversationKind === "direct" ? "Direktnachricht" : "Unterhaltung gelöscht"}</span>
                 <span>· von {r.senderName}, gemeldet von {r.reporterName}</span>
               </div>
               <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-surface-2 p-3 text-sm">{r.text ?? "Nachricht bereits gelöscht."}</p>

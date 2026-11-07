@@ -5,7 +5,7 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { AppModule } from "./app.module";
-import { configureApp } from "./app.setup";
+import { configureApp, fastifyOptions } from "./app.setup";
 import { AuthService } from "./auth/auth.service";
 import { REALTIME_BUS } from "./chat/realtime-bus";
 import { attachChatGateway } from "./chat/ws-gateway";
@@ -13,7 +13,7 @@ import { attachChatGateway } from "./chat/ws-gateway";
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true, trustProxy: true }),
+    new FastifyAdapter(fastifyOptions()),
   );
   await configureApp(app);
   const port = Number(process.env.API_PORT ?? 4000);

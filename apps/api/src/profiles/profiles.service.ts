@@ -6,12 +6,8 @@ import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
 import { orgMembers, organizations, posts, profiles, userFollows } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { isUniqueViolation } from "../common/pg-errors";
 import { ProfileAccess, type ProfileRow } from "./profile-access.service";
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23505" || e?.cause?.code === "23505";
-}
 
 @Injectable()
 export class ProfilesService {
@@ -199,8 +195,9 @@ export class ProfilesService {
       userId: p.userId,
       handle: p.handle,
       displayName: names.get(p.userId) ?? "Gelöschter Nutzer",
-      bio: p.bio,
-      location: p.location,
+      // Private Profile: Bio und Ort nur fuer bestaetigte Follower (wie Beitraege und Vereine)
+      bio: canView ? p.bio : "",
+      location: canView ? p.location : "",
       avatarId: p.avatarMediaId,
       visibility: p.visibility as ProfileView["visibility"],
       showClubs: p.showClubs,

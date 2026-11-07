@@ -1,5 +1,5 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
-import { desc, eq } from "drizzle-orm";
+import { ConflictException, ForbiddenException, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
 import {
   CONSENT_PURPOSES,
   LEGAL_VERSION,
@@ -15,9 +15,21 @@ import { MediaService } from "../media/media.service";
 import { MembersService } from "../members/members.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
+import { JobsService } from "../jobs/jobs.service";
+import { OrgsService } from "../orgs/orgs.service";
 
+/** Nach dieser Zeit schliesst der Job `privacy.erase-pending` abgebrochene Kontoloeschungen ab. */
+const ERASE_GRACE_MS = 15 * 60_000;
+
+/**
+ * Datenschutz (Einwilligungen, Auskunft, Loeschung). Dokumentierte Ausnahme der Bereichsgrenzen (db/boundaries.spec.ts):
+ * liest/loescht fuer Auskunft und Kontoloeschung direkt eine feste Liste von identity-/social-Tabellen; alles andere
+ * laeuft ueber die Dienste der Bereiche (Chat, Medien, Mitglieder, Rechnungen, Vereine).
+ */
 @Injectable()
-export class PrivacyService {
+export class PrivacyService implements OnModuleInit {
+  private readonly log = new Logger("PrivacyService");
+
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(AuthService) private readonly auth: AuthService,
@@ -25,7 +37,15 @@ export class PrivacyService {
     @Inject(MediaService) private readonly mediaSvc: MediaService,
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(MembersService) private readonly members: MembersService,
+    @Inject(OrgsService) private readonly orgs: OrgsService,
+    @Inject(JobsService) private readonly jobs: JobsService,
   ) {}
+
+  onModuleInit() {
+    // Schliesst Loeschungen ab, deren Schritte nach der Sperre abgebrochen sind (idempotent).
+    this.jobs.define("privacy.erase-pending", async () => void (await this.erasePending()));
+    this.jobs.every("privacy.erase-pending", 60 * 60 * 1000);
+  }
 
   /** Neuester Eintrag je Zweck; Zwecke ohne Eintrag gelten als nicht erteilt. */
   async getConsents(userId: string): Promise<ConsentState[]> {
@@ -103,21 +123,65 @@ export class PrivacyService {
     };
   }
 
-  /** Loeschung (Art. 17): Konto, Sessions und Einwilligungen werden entfernt (FK cascade). */
+  /**
+   * Loeschung (Art. 17). Ablauf: (1) Passwort und Vorstandsregel pruefen, (2) Konto sofort sperren (deleted_at,
+   * alle Sitzungen weg), (3) Daten in allen Bereichen loeschen (idempotent). Bricht (3) ab, ist das Konto trotzdem
+   * gesperrt und der Job `privacy.erase-pending` schliesst die Loeschung ab.
+   */
   async deleteAccount(user: PublicUser, password: string): Promise<void> {
     if (!(await this.auth.verifyPassword(user.id, password))) {
       throw new ForbiddenException("Passwort ist falsch.");
     }
-    await this.auth.invalidateUserSessions(user.id);
-    await this.chat.eraseUser(user.id);
-    await this.mediaSvc.eraseUser(user.id); // Bilddateien (Zeilen folgen per Kaskade)
-    await this.members.eraseUser(user.id); // Mitgliederstammdaten in allen Vereinen
-    await this.billing.anonymizeRecipient(user.id); // Rechnungen bleiben (GoBD), aber ohne Personenbezug
+    // Einziger Vorstand eines Vereins mit weiteren Mitgliedern: erst Rolle uebergeben (sonst bliebe der Verein fuehrungslos).
+    const blocking = (await this.orgs.soleAdminOrgs(user.id)).filter((o) => o.otherActive > 0);
+    if (blocking.length) {
+      const names = blocking.map((o) => `„${o.name}“`).join(", ");
+      throw new ConflictException(`Du bist einziger Vorstand von ${names}. Übertrage die Vorstandsrolle (Verwaltung → Mitglieder), bevor du dein Konto löschst.`);
+    }
+    await this.auth.beginAccountDeletion(user.id);
+    try {
+      await this.eraseEverything(user.id);
+    } catch {
+      this.log.error("Kontoloeschung unvollstaendig, wird vom Job privacy.erase-pending abgeschlossen.");
+    }
+  }
+
+  /**
+   * Alle Daten des (bereits gesperrten) Kontos loeschen. Idempotent, darf mehrfach laufen. Vereine, deren einziges
+   * aktives Mitglied die Person ist, werden mitgeloescht (Variante A; finalisierte Rechnungen bleiben erhalten).
+   */
+  async eraseEverything(userId: string): Promise<void> {
+    await this.chat.eraseUser(userId);
+    await this.members.eraseUser(userId); // Mitgliederstammdaten in allen Vereinen
+    await this.billing.anonymizeRecipient(userId); // Rechnungen bleiben (GoBD), aber ohne Personenbezug
+    for (const org of await this.orgs.soleAdminOrgs(userId)) {
+      if (org.otherActive === 0) await this.orgs.deleteIfAbandoned(org.id, userId);
+    }
+    await this.mediaSvc.eraseUser(userId); // Bilddateien (Zeilen folgen per Kaskade)
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
-      await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, user.id));
+      await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, userId));
       await tx.insert(auditLog).values({ userId: null, action: "user.deleted" });
-      await tx.delete(users).where(eq(users.id, user.id));
+      await tx.delete(users).where(eq(users.id, userId));
     });
+  }
+
+  /** Job: gesperrte Konten (deleted_at aelter als `olderThanMs`), die noch existieren, fertig loeschen. */
+  async erasePending(olderThanMs = ERASE_GRACE_MS): Promise<number> {
+    const pending = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(isNotNull(users.deletedAt), lt(users.deletedAt, new Date(Date.now() - olderThanMs))))
+      .limit(100);
+    let done = 0;
+    for (const { id } of pending) {
+      try {
+        await this.eraseEverything(id);
+        done++;
+      } catch {
+        this.log.error("Kontoloeschung weiterhin unvollstaendig, naechster Versuch beim naechsten Lauf.");
+      }
+    }
+    return done;
   }
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { PrivatePushState } from "@vereine/shared";
+import { PUSH_HOST_ERROR, type PrivatePushState } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { Alert, Badge, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
-import { api, describeError } from "@/lib/api";
+import { ApiError, api, describeError } from "@/lib/api";
 
 function keyToBytes(base64Url: string): Uint8Array {
   const pad = "=".repeat((4 - (base64Url.length % 4)) % 4);
@@ -20,6 +20,7 @@ export default function NotificationSettingsPage() {
   const [active, setActive] = useState(false); // dieses Geraet ist angemeldet
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -41,6 +42,7 @@ export default function NotificationSettingsPage() {
     if (!state?.publicKey) return;
     setBusy(true);
     setError(null);
+    setHint(null);
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
@@ -49,7 +51,15 @@ export default function NotificationSettingsPage() {
       }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyToBytes(state.publicKey) as BufferSource });
-      await api("/push/subscribe", { method: "POST", body: sub.toJSON() });
+      try {
+        await api("/push/subscribe", { method: "POST", body: sub.toJSON() });
+      } catch (e) {
+        // Server lehnt unbekannte Push-Dienste ab (Schutz vor Anfragen an beliebige Server): Hinweis statt Fehler
+        const unsupported = e instanceof ApiError && e.status === 400 && (e.message.includes(PUSH_HOST_ERROR) || JSON.stringify(e.fields ?? {}).includes(PUSH_HOST_ERROR));
+        if (!unsupported) throw e;
+        await sub.unsubscribe().catch(() => undefined);
+        setHint("Der Push-Dienst dieses Browsers wird nicht unterstützt. Nutze einen aktuellen Chrome, Edge, Firefox oder Safari.");
+      }
       await refresh();
     } catch (e) {
       setError(describeError(e));
@@ -81,9 +91,10 @@ export default function NotificationSettingsPage() {
       <PageHeader title="Mitteilungen" subtitle="Benachrichtigungen auf diesem Gerät, auch wenn Klubnest geschlossen ist." />
       <SettingsTabs active="/einstellungen/mitteilungen" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      {hint && <div className="mb-4"><Alert tone="info">{hint}</Alert></div>}
       <Card className="space-y-4">
         <p className="text-sm text-muted">
-          Push-Mitteilungen informieren dich über neue Termine, Rechnungen, Folgeanfragen und mehr. Sie enthalten nur kurze Hinweise, keine Inhalte deiner Nachrichten. Du kannst sie jederzeit ausschalten. Für Push nutzt dein Browser den Dienst seines Herstellers als Zustellweg; die Nachricht selbst ist verschlüsselt.
+          Push-Mitteilungen informieren dich über neue Termine, Rechnungen, Folgeanfragen und mehr. Sie enthalten nur kurze Hinweise, keine Inhalte deiner Nachrichten. Du kannst sie jederzeit ausschalten; pro Konto bleiben höchstens 10 Geräte angemeldet (das älteste wird ersetzt). Für Push nutzt dein Browser den Dienst seines Herstellers als Zustellweg; die Nachricht selbst ist verschlüsselt.
         </p>
         {state === null || support === "checking" ? (
           <CardSkeletons count={2} />

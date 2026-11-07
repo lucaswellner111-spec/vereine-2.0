@@ -59,7 +59,7 @@ export class AuthController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<LoginResult> {
-    const result = await this.auth.login(parse(loginSchema, body), req.headers["user-agent"]);
+    const result = await this.auth.login(parse(loginSchema, body), req.headers["user-agent"], req.ip);
     if ("challenge" in result) return { twoFactorRequired: true, challenge: result.challenge };
     this.setSession(reply, result.token);
     return result.user;

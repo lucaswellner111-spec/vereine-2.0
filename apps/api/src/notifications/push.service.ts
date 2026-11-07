@@ -1,11 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import webpush from "web-push";
-import type { NotificationItem } from "@vereine/shared";
+import { isAllowedPushEndpoint, type NotificationItem } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { pushSubscriptions } from "../db/schema";
 
 type Type = NotificationItem["type"];
+/** Hoechstens so viele Geraete je Nutzer; ein neues ersetzt das aelteste. */
+const MAX_DEVICES = 10;
+const USER_BLOCK = 500;
 export type PushPayload = { title: string; body: string; url: string; tag?: string };
 
 /**
@@ -60,11 +63,28 @@ export class PushService {
     if (this.configured) webpush.setVapidDetails(process.env.VAPID_SUBJECT ?? "https://klubnest.de", pub!, priv!);
   }
 
+  /**
+   * Geraet anmelden (Endpunkt ist per Zod auf bekannte Push-Dienste begrenzt). Gehoert der Endpunkt einem anderen
+   * Konto, wird die fremde Zeile entfernt und neu angelegt (kein stilles Uebernehmen samt Alt-Daten). Danach bleiben
+   * nur die 10 neuesten Geraete des Nutzers.
+   */
   async subscribe(userId: string, sub: { endpoint: string; p256dh: string; auth: string }, userAgent?: string): Promise<void> {
-    await this.db
-      .insert(pushSubscriptions)
-      .values({ userId, ...sub, userAgent: userAgent?.slice(0, 200) ?? null })
-      .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId, p256dh: sub.p256dh, auth: sub.auth } });
+    await this.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(pushSubscriptions).where(eq(pushSubscriptions.endpoint, sub.endpoint)).limit(1);
+      if (existing && existing.userId === userId) {
+        await tx.update(pushSubscriptions).set({ p256dh: sub.p256dh, auth: sub.auth }).where(eq(pushSubscriptions.id, existing.id));
+      } else {
+        if (existing) await tx.delete(pushSubscriptions).where(eq(pushSubscriptions.id, existing.id));
+        await tx.insert(pushSubscriptions).values({ userId, ...sub, userAgent: userAgent?.slice(0, 200) ?? null });
+      }
+      const mine = await tx
+        .select({ id: pushSubscriptions.id })
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.userId, userId))
+        .orderBy(desc(pushSubscriptions.createdAt), desc(pushSubscriptions.id));
+      const surplus = mine.slice(MAX_DEVICES).map((r) => r.id);
+      if (surplus.length) await tx.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, surplus));
+    });
   }
 
   async unsubscribe(userId: string, endpoint: string): Promise<void> {
@@ -75,25 +95,33 @@ export class PushService {
     return (await this.db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId))).length;
   }
 
-  /** Sendet an alle Geraete der Nutzer; ungueltige Abos (404/410) werden entfernt. Fehler brechen nichts ab. */
+  /**
+   * Sendet an alle Geraete der Nutzer (Empfaenger in 500er-Bloecken, kein Gesamtlimit); ungueltige Abos (404/410)
+   * werden entfernt. Altzeilen mit nicht (mehr) erlaubtem Push-Dienst werden nie angefragt, sondern geloescht.
+   * Fehler brechen nichts ab.
+   */
   async sendToUsers(userIds: string[], payload: PushPayload): Promise<void> {
     if (!this.configured || userIds.length === 0) return;
-    const subs = await this.db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, [...new Set(userIds)])).limit(5000);
+    const ids = [...new Set(userIds)];
     const body = JSON.stringify(payload);
-    const dead: string[] = [];
-    for (let i = 0; i < subs.length; i += 20) {
-      await Promise.all(
-        subs.slice(i, i + 20).map(async (s) => {
-          try {
-            await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 3600, urgency: "normal" });
-          } catch (err) {
-            const status = (err as { statusCode?: number }).statusCode;
-            if (status === 404 || status === 410) dead.push(s.endpoint);
-            else this.log.warn(`Push fehlgeschlagen (${status ?? "?"})`);
-          }
-        }),
-      );
+    for (let b = 0; b < ids.length; b += USER_BLOCK) {
+      const subs = await this.db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, ids.slice(b, b + USER_BLOCK)));
+      const dead: string[] = subs.filter((s) => !isAllowedPushEndpoint(s.endpoint)).map((s) => s.id);
+      const allowed = subs.filter((s) => isAllowedPushEndpoint(s.endpoint));
+      for (let i = 0; i < allowed.length; i += 20) {
+        await Promise.all(
+          allowed.slice(i, i + 20).map(async (s) => {
+            try {
+              await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 3600, urgency: "normal" });
+            } catch (err) {
+              const status = (err as { statusCode?: number }).statusCode;
+              if (status === 404 || status === 410) dead.push(s.id);
+              else this.log.warn(`Push fehlgeschlagen (${status ?? "?"})`);
+            }
+          }),
+        );
+      }
+      if (dead.length) await this.db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, dead));
     }
-    if (dead.length) await this.db.delete(pushSubscriptions).where(inArray(pushSubscriptions.endpoint, dead));
   }
 }

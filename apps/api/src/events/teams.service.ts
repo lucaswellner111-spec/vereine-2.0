@@ -1,18 +1,41 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { and, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { PublicUser, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
-import { teamMembers, teams } from "../db/schema";
+import { eventRsvps, events, teamMembers, teams } from "../db/schema";
+import { isUniqueViolation } from "../common/pg-errors";
+import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
 
 @Injectable()
-export class TeamsService {
+export class TeamsService implements OnModuleInit {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
   ) {}
+
+  onModuleInit() {
+    this.orgEvents.onLeave("teams", (orgId, userId) => this.leaveOrg(orgId, userId));
+  }
+
+  /**
+   * Austritt: Team-Mitgliedschaften im Verein und Zusagen zu kuenftigen internen Terminen (nur Mitglieder bzw. Team)
+   * entfernen. Zusagen zu oeffentlichen Terminen und vergangene Termine bleiben unveraendert.
+   */
+  async leaveOrg(orgId: string, userId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const orgTeams = tx.select({ id: teams.id }).from(teams).where(eq(teams.orgId, orgId));
+      await tx.delete(teamMembers).where(and(eq(teamMembers.userId, userId), inArray(teamMembers.teamId, orgTeams)));
+      const internal = tx
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.orgId, orgId), gt(events.startsAt, new Date()), or(eq(events.visibility, "members"), isNotNull(events.teamId))));
+      await tx.delete(eventRsvps).where(and(eq(eventRsvps.userId, userId), inArray(eventRsvps.eventId, internal)));
+    });
+  }
 
   private async requireAdmin(orgId: string, userId: string) {
     if ((await this.orgs.activeRole(orgId, userId)) !== "admin") throw new ForbiddenException("Nur der Vorstand verwaltet Teams.");
@@ -31,8 +54,7 @@ export class TeamsService {
       const [t] = await this.db.insert(teams).values({ orgId: org.id, ...input }).returning();
       return { id: t.id, name: t.name, description: t.description, members: 0, isMember: false };
     } catch (err) {
-      const e = err as { code?: string; cause?: { code?: string } };
-      if (e.code === "23505" || e.cause?.code === "23505") throw new ConflictException("Ein Team mit diesem Namen gibt es schon.");
+      if (isUniqueViolation(err)) throw new ConflictException("Ein Team mit diesem Namen gibt es schon.");
       throw err;
     }
   }
