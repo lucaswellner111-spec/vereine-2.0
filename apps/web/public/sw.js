@@ -1,10 +1,10 @@
 /* Klubnest Service Worker: Push-Mitteilungen und Offline-Hinweis.
  * Bewusst KEIN Caching von Seiten oder API-Antworten (angemeldete Inhalte sollen nicht auf dem Geraet verbleiben). */
-const CACHE = "klubnest-shell-v1";
+const CACHE = "klubnest-shell-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE_URL, "/icons/icon-192.png"])).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE_URL, "/icons/icon-192.png", "/icon.svg"])).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {

@@ -51,7 +51,7 @@ export function ThemeToggle({ compact = false, fullWidth = false, className }: {
             onKeyDown={(e) => onKey(e, i)}
             className={clsx(
               "inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors",
-              compact ? "h-8 w-8" : "h-10 px-3 text-[13px] sm:h-8 sm:text-sm", fullWidth && !compact && "flex-1",
+              compact ? "hit-area relative h-8 w-8" : "h-10 px-3 text-[13px] sm:h-8 sm:text-sm", fullWidth && !compact && "flex-1",
               selected ? "bg-brand text-brand-contrast" : "text-muted hover:bg-surface-2 hover:text-text",
             )}
           >

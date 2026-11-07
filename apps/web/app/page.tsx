@@ -1,6 +1,6 @@
 import { Building2, CalendarDays, Check, FileText, Heart, Link2, Lock, MessageCircle, MessageSquare, Newspaper, Tags, Users } from "lucide-react";
 import Link from "next/link";
-import { SiteFooter, SiteHeader } from "@/components/site";
+import { SITE_CONTAINER, SiteFooter, SiteHeader } from "@/components/site";
 import { TagChips } from "@/components/tag-chips";
 
 const features = [
@@ -64,7 +64,7 @@ export default function HomePage() {
         </section>
 
         <section className="border-y border-border bg-surface">
-          <div className="mx-auto max-w-6xl px-4 py-16">
+          <div className={`${SITE_CONTAINER} py-16`}>
             <h2 className="text-2xl font-semibold tracking-tight">Was Klubnest heute kann</h2>
             <p className="mt-2 max-w-2xl text-muted">Weniger WhatsApp-Chaos und Excel-Listen, mehr Zeit für den Verein.</p>
             <ul className="mt-10 grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
@@ -81,7 +81,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mx-auto grid max-w-6xl gap-12 px-4 py-16 md:grid-cols-2">
+        <section className={`${SITE_CONTAINER} grid gap-12 py-16 md:grid-cols-2`}>
           <div>
             <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><Lock size={20} aria-hidden className="text-brand" /> Datenschutz als Grundlage</h2>
             <ul className="mt-5 space-y-2.5 text-sm">
@@ -101,10 +101,11 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 pb-20">
-          <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center">
+        {/* Vollbreite Flaeche wie "Was Klubnest heute kann": Abschnitte wechseln zwischen Seitenhintergrund und Flaeche */}
+        <section className="border-t border-border bg-surface">
+          <div className={`${SITE_CONTAINER} py-16 text-center`}>
             <h2 className="text-2xl font-semibold tracking-tight">Verein anlegen und loslegen</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">Gründe deinen Verein in wenigen Minuten, lade Mitglieder per Link ein und plane den ersten Termin.</p>
+            <p className="mx-auto mt-2 max-w-xl text-muted">Gründe deinen Verein in wenigen Minuten, lade Mitglieder per Link ein und plane den ersten Termin.</p>
             <Link href="/registrieren" className="mt-6 inline-flex h-11 items-center rounded-lg bg-brand px-6 text-sm font-semibold text-brand-contrast hover:bg-brand-hover">
               Kostenlos registrieren
             </Link>

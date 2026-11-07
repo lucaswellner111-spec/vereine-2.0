@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
+import { ThemeToggle } from "./theme-toggle";
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -13,22 +13,24 @@ export function Logo({ className }: { className?: string }) {
   );
 }
 
+/** Gemeinsame Breite fuer Kopf, Inhalt und Fuss der oeffentlichen Seiten */
+export const SITE_CONTAINER = "mx-auto w-full max-w-6xl px-4";
+
 export function SiteHeader() {
   return (
-    <header className="border-b border-border bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-3 sm:px-4">
+    <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
+      <div className={`${SITE_CONTAINER} flex h-16 items-center justify-between max-sm:px-3`}>
         <Logo />
-        <nav className="flex items-center gap-1 text-sm sm:gap-2">
-          {/* Huelle statt className: "hidden" verliert sonst gegen das inline-flex der Komponente (kein tailwind-merge) */}
+        <nav aria-label="Konto" className="flex items-center gap-1 text-sm sm:gap-2">
+          {/* Am Handy steht der Darstellungs-Umschalter in der Fusszeile, damit der Kopf ruhig bleibt.
+              Huelle statt className: "hidden" verliert sonst gegen das inline-flex der Komponente (kein tailwind-merge) */}
           <div className="mr-1 hidden sm:block">
             <ThemeToggle compact />
           </div>
-          {/* unter 375 px reicht die Breite nicht: dort steht der Umschalter im Footer */}
-          <ThemeCycleButton className="max-[374px]:hidden sm:hidden" />
-          <Link href="/login" className="rounded-lg px-2.5 py-2 text-muted hover:bg-surface-2 hover:text-text sm:px-3">
+          <Link href="/login" className="inline-flex h-10 items-center rounded-lg px-3 text-muted hover:bg-surface-2 hover:text-text">
             Anmelden
           </Link>
-          <Link href="/registrieren" className="rounded-lg bg-brand px-2.5 py-2 font-medium text-brand-contrast hover:bg-brand-hover sm:px-3">
+          <Link href="/registrieren" className="inline-flex h-10 items-center rounded-lg bg-brand px-3 font-medium text-brand-contrast hover:bg-brand-hover">
             Registrieren
           </Link>
         </nav>
@@ -37,18 +39,55 @@ export function SiteHeader() {
   );
 }
 
+const footerLink = "-mx-2 flex min-h-11 items-center rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-text sm:min-h-9";
+
+function FooterColumn({ title, links }: { title: string; links: { href: string; label: string }[] }) {
+  return (
+    <nav aria-label={title}>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-text">{title}</h2>
+      <ul className="mt-2">
+        {links.map((l) => (
+          <li key={l.href}>
+            <Link href={l.href} className={footerLink}>
+              {l.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border py-8 text-sm text-muted">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4">
-        <p>© {new Date().getFullYear()} Klubnest · Gehostet in Deutschland</p>
-        <nav className="flex flex-wrap gap-x-4 gap-y-2">
-          <Link href="/datenschutz" className="hover:text-text">Datenschutz</Link>
-          <Link href="/impressum" className="hover:text-text">Impressum</Link>
-          <Link href="/agb" className="hover:text-text">Nutzungsbedingungen</Link>
-        </nav>
-        {/* Nur sehr schmale Handys: Darstellungs-Umschalter hier statt in der Kopfleiste */}
-        <ThemeCycleButton className="min-[375px]:hidden" />
+    <footer className="border-t border-border pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-10 text-sm">
+      <div className={`${SITE_CONTAINER} grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[2fr_1fr_1fr]`}>
+        <div className="col-span-2 sm:col-span-1">
+          <Logo />
+          <p className="mt-3 max-w-xs text-muted">Die Plattform für Vereine, Mitglieder und Fans. Gehostet in Deutschland, ohne Werbung und ohne Tracking.</p>
+        </div>
+        <FooterColumn
+          title="Klubnest"
+          links={[
+            { href: "/registrieren", label: "Registrieren" },
+            { href: "/login", label: "Anmelden" },
+          ]}
+        />
+        <FooterColumn
+          title="Rechtliches"
+          links={[
+            { href: "/datenschutz", label: "Datenschutz" },
+            { href: "/impressum", label: "Impressum" },
+            { href: "/agb", label: "Nutzungsbedingungen" },
+          ]}
+        />
+      </div>
+      <div className={`${SITE_CONTAINER} mt-8 flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between`}>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted">Darstellung</span>
+          <ThemeToggle compact />
+        </div>
+        <p className="text-xs text-muted">© {new Date().getFullYear()} Klubnest</p>
       </div>
     </footer>
   );

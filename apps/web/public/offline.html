@@ -2,20 +2,38 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
 <title>Offline · Klubnest</title>
 <style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1511;color:#e9efe9;font-family:system-ui,sans-serif;text-align:center;padding:24px}
-  @media (prefers-color-scheme:light){body{background:#f6f7f5;color:#15201a}}
-  h1{font-size:1.4rem;margin:0 0 .5rem} p{margin:0 0 1.2rem;opacity:.75}
-  button{background:#1f7a4d;color:#fff;border:0;border-radius:10px;padding:.7rem 1.2rem;font-size:1rem;cursor:pointer}
+  /* Farben = Tokens aus app/globals.css (hell/dunkel) */
+  :root{--bg:#f5f7f5;--surface:#fff;--border:#d9e0da;--text:#14201a;--muted:#556258;--brand:#1b6e45;--on-brand:#fff;color-scheme:light dark}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e1410;--surface:#161e18;--border:#2c382e;--text:#e7eee8;--muted:#9aab9e;--brand:#4cc08a;--on-brand:#07140d}}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;text-align:center;padding:24px}
+  main{max-width:22rem;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 24px}
+  .logo{display:inline-flex;width:48px;height:48px;border-radius:12px;background:var(--brand);color:var(--on-brand);font-weight:700;font-size:24px;align-items:center;justify-content:center}
+  h1{font-size:1.25rem;margin:16px 0 8px} p{margin:0 0 20px;color:var(--muted);line-height:1.5}
+  button{background:var(--brand);color:var(--on-brand);border:0;border-radius:10px;min-height:44px;padding:0 20px;font-size:1rem;font-weight:600;cursor:pointer}
+  button:focus-visible{outline:3px solid var(--brand);outline-offset:3px}
+  #status{min-height:1.5em;margin:12px 0 0;font-size:.875rem}
 </style>
 </head>
 <body>
   <main>
+    <span class="logo" aria-hidden="true">K</span>
     <h1>Keine Verbindung</h1>
-    <p>Klubnest braucht eine Internetverbindung. Prüfe dein Netz und versuche es erneut.</p>
-    <button onclick="location.reload()">Erneut versuchen</button>
+    <p>Klubnest braucht eine Internetverbindung. Sobald du wieder online bist, geht es hier automatisch weiter.</p>
+    <button type="button" id="retry">Erneut versuchen</button>
+    <p id="status" role="status" aria-live="polite"></p>
   </main>
+  <script>
+    var status = document.getElementById("status");
+    document.getElementById("retry").addEventListener("click", function () {
+      if (navigator.onLine) location.reload();
+      else status.textContent = "Noch offline. Prüfe WLAN oder mobile Daten.";
+    });
+    window.addEventListener("online", function () { location.reload(); });
+  </script>
 </body>
 </html>

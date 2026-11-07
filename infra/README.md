@@ -30,6 +30,13 @@ ansible-playbook -i inventory.ini bootstrap.yml
   `17 3 * * * /opt/vereine/infra/deploy/backup.sh >> /var/log/vereine-backup.log 2>&1`
 - Produktion: Dumps zusaetzlich verschluesselt auf eine Hetzner Storage Box kopieren (pgBackRest/WAL-Archivierung im Plan).
 
+## Deploy (Vorschau)
+1. `ssh root@<server> "cd /opt/vereine && bash infra/deploy/backup.sh"`
+2. `git archive --format=tar HEAD | ssh root@<server> "cd /opt/vereine && tar -xf - && docker compose -f infra/deploy/docker-compose.preview.yml --env-file .env.preview up -d --build"`
+3. Aufraeumen (sonst fuellt der Build-Cache die Platte, ~1 GB je Deploy):
+   `ssh root@<server> "docker builder prune -f --filter until=72h && docker image prune -f && df -h /"`
+4. Smoke-Test: `/`, `/api/health/ready` (200), `/api/auth/me` (401).
+
 ## Redis
 - Cache/Zaehler-Speicher fuer Sessions (60 s) und Rate-Limit, ohne Persistenz, 128 MB LRU. `REDIS_URL` setzen; ohne Redis faellt die API auf einen Prozess-Cache zurueck (nur lokal sinnvoll).
 - Readiness: `GET /api/health/ready` (DB + Redis), Docker-Healthcheck der API nutzt das.
