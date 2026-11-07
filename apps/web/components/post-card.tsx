@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Heart, MessageCircle, Trash2 } from "lucide-react";
+import { EyeOff, Flag, Heart, Info, MessageCircle, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import type { CommentItem, FeedPost } from "@vereine/shared";
@@ -12,6 +12,7 @@ import { Lightbox } from "./lightbox";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
 import { Alert, Avatar, Badge, Button, Card, Input } from "./ui";
+import { Dialog, DropdownMenu, type MenuEntry } from "./ui-client";
 import { REPORT_REASONS, type ReportReason } from "@/lib/labels";
 
 const timeAgo = (iso: string) => {
@@ -23,7 +24,18 @@ const timeAgo = (iso: string) => {
   return `vor ${Math.round(hours / 24)} Tg.`;
 };
 
-export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPost; onDeleted: (id: string) => void; onHidden?: (id: string) => void }) {
+export function PostCard({
+  post: initial,
+  onDeleted,
+  onHidden,
+  showReason = false,
+}: {
+  post: FeedPost;
+  onDeleted: (id: string) => void;
+  onHidden?: (id: string) => void;
+  /** "Warum sehe ich das?" anbieten – nur im personalisierten Feed ("Für dich") sinnvoll. */
+  showReason?: boolean;
+}) {
   const { user } = useAuth();
   const [post, setPost] = useState(initial);
   // Neue Daten vom Elternteil (z. B. nach reload) uebernehmen, ohne Effekt-Schleife
@@ -116,12 +128,35 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
     });
 
   const remove = async () => {
-    if (!(await ask("Beitrag löschen? Das lässt sich nicht rückgängig machen.", { confirmLabel: "Löschen" }))) return;
+    if (!(await ask("Beitrag löschen? Das lässt sich nicht rückgängig machen.", { confirmLabel: "Löschen", danger: true }))) return;
     await run(async () => {
       await api(`/posts/${post.id}`, { method: "DELETE" });
       onDeleted(post.id);
     });
   };
+
+  const openPanel = (p: "report" | "less") => {
+    setError(null);
+    setPanel(p);
+  };
+  const closePanel = () => {
+    setPanel("none");
+    setError(null);
+  };
+
+  const menu: MenuEntry[] = [
+    ...(showReason
+      ? [{ id: "why", label: why ? "Begründung ausblenden" : "Warum sehe ich das?", icon: Info, onSelect: () => setWhy((w) => !w) }]
+      : []),
+    { id: "less", label: "Weniger davon …", icon: EyeOff, onSelect: () => openPanel("less") },
+    { id: "report", label: "Melden …", icon: Flag, onSelect: () => openPanel("report") },
+    ...(post.canDelete
+      ? [
+          { type: "separator" as const, id: "sep" },
+          { id: "delete", label: "Löschen", icon: Trash2, danger: true, onSelect: () => void remove() },
+        ]
+      : []),
+  ];
 
   const authorHref = post.author.handle ? `/profil/${post.author.handle}` : null;
   const mediaIds = post.media.map((m) => m.id);
@@ -179,40 +214,25 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
 
           <TagChips tags={post.tags} to="/feed" className="mt-3" />
 
-          <div className="mt-3 flex flex-wrap items-center gap-1 text-sm text-muted">
+          <div className="mt-3 flex items-center gap-1 text-sm text-muted">
             <Button variant="ghost" size="sm" aria-pressed={post.likedByMe} aria-label={`Gefällt mir, ${post.likes}`} onClick={like}>
               <Heart size={15} aria-hidden className={clsx(post.likedByMe && "fill-current text-danger")} /> {post.likes}
             </Button>
             <Button variant="ghost" size="sm" aria-expanded={open} aria-label={`Kommentare, ${post.comments}`} onClick={toggleComments}>
               <MessageCircle size={15} aria-hidden /> {post.comments}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setWhy((w) => !w)}>Warum sehe ich das?</Button>
-            <span className="ml-auto flex gap-1">
-              {post.canDelete && <Button variant="ghost" size="sm" onClick={remove}>Löschen</Button>}
-              <Button variant="ghost" size="sm" aria-expanded={panel === "less"} onClick={() => setPanel(panel === "less" ? "none" : "less")}>Weniger davon</Button>
-              <Button variant="ghost" size="sm" aria-expanded={panel === "report"} onClick={() => setPanel(panel === "report" ? "none" : "report")}>Melden</Button>
+            <span className="ml-auto">
+              <DropdownMenu label="Beitragsoptionen" items={menu} />
             </span>
           </div>
 
-          {why && <p className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">{post.reason}</p>}
-          {panel === "report" && (
-            <div className="mt-2 flex flex-wrap gap-2 rounded-lg bg-surface-2 p-2" role="group" aria-label="Grund der Meldung">
-              {REPORT_REASONS.map((r) => (
-                <Button key={r.id} variant="secondary" size="sm" onClick={() => report(r.id)}>{r.label}</Button>
-              ))}
-            </div>
+          {why && showReason && (
+            <p id={`why-${post.id}`} className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+              <span className="font-medium">Warum du das siehst: </span>
+              {post.reason}
+            </p>
           )}
-          {panel === "less" && (
-            <div className="mt-2 flex flex-wrap gap-2 rounded-lg bg-surface-2 p-2" role="group" aria-label="Weniger davon">
-              <Button variant="secondary" size="sm" onClick={() => less("hide")}>Diesen Beitrag ausblenden</Button>
-              {post.org ? (
-                <Button variant="secondary" size="sm" onClick={() => less("mute_org")}>{post.org.name} stummschalten</Button>
-              ) : (
-                post.canDelete === false && <Button variant="secondary" size="sm" onClick={() => less("mute_author")}>{post.author.name} stummschalten</Button>
-              )}
-            </div>
-          )}
-          {error && <div className="mt-2"><Alert>{error}</Alert></div>}
+          {error && panel === "none" && <div className="mt-2"><Alert>{error}</Alert></div>}
 
           {open && (
             <div className="mt-3 border-t border-border pt-3">
@@ -231,7 +251,7 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
                         onClick={() => void deleteComment(c)}
                         aria-label="Kommentar löschen"
                         title="Kommentar löschen"
-                        className="ml-1 inline-flex align-middle text-muted hover:text-danger"
+                        className="relative hit-area ml-0.5 inline-flex rounded p-1 align-middle text-muted hover:text-danger"
                       >
                         <Trash2 size={13} aria-hidden />
                       </button>
@@ -259,6 +279,43 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
         </div>
       </div>
       {lightbox !== null && <Lightbox ids={mediaIds} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />}
+
+      <Dialog
+        open={panel === "less"}
+        onClose={closePanel}
+        title="Weniger davon"
+        description="Was möchtest du weniger sehen?"
+        placement="sheet"
+        size="sm"
+      >
+        <div className="space-y-2">
+          {error && <Alert>{error}</Alert>}
+          <Button variant="secondary" className="w-full" onClick={() => less("hide")}>Diesen Beitrag ausblenden</Button>
+          {post.org ? (
+            <Button variant="secondary" className="w-full" onClick={() => less("mute_org")}>{post.org.name} stummschalten</Button>
+          ) : (
+            post.canDelete === false && (
+              <Button variant="secondary" className="w-full" onClick={() => less("mute_author")}>{post.author.name} stummschalten</Button>
+            )
+          )}
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={panel === "report"}
+        onClose={closePanel}
+        title="Beitrag melden"
+        description="Warum meldest du diesen Beitrag? Die Moderation prüft ihn."
+        placement="sheet"
+        size="sm"
+      >
+        <div className="space-y-2" role="group" aria-label="Grund der Meldung">
+          {error && <Alert>{error}</Alert>}
+          {REPORT_REASONS.map((r) => (
+            <Button key={r.id} variant="secondary" className="w-full" onClick={() => report(r.id)}>{r.label}</Button>
+          ))}
+        </div>
+      </Dialog>
     </Card>
   );
 }

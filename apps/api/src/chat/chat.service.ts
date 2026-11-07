@@ -320,7 +320,7 @@ export class ChatService implements OnModuleInit {
     // Push ans Handy: bewusst OHNE Absender und Inhalt (Sperrbildschirm, Datenschutz). Der Service Worker zeigt sie
     // nicht an, solange die App im Vordergrund offen ist. Fehler duerfen das Senden nie beeintraechtigen.
     void this.push
-      .sendToUsers(members.map((m) => m.userId).filter((u) => u !== user.id), { title: "Neue Nachricht", body: "Öffne Klubnest, um sie zu lesen.", url: "/chat", tag: `chat-${id}` })
+      .sendToUsers(members.map((m) => m.userId).filter((u) => u !== user.id), { title: "Neue Nachricht", body: "Öffne Klubnest, um sie zu lesen.", url: `/chat?c=${encodeURIComponent(id)}`, tag: `chat-${id}` })
       .catch(() => undefined);
     return this.toMessage(row, key, id, user.id, new Map([[user.id, user.displayName]]));
   }

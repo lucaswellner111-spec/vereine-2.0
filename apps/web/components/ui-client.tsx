@@ -1,10 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, Copy, X, type LucideIcon } from "lucide-react";
+import { Check, Copy, MoreHorizontal, X, type LucideIcon } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -40,6 +42,44 @@ export function lockScroll(): () => void {
   };
 }
 
+// ---------- Escape-Stapel: Escape schliesst nur die oberste offene Ebene ----------
+
+type EscapeLayer = { id: number; ref: { current: () => void } };
+const escapeLayers: EscapeLayer[] = [];
+let escapeListening = false;
+let nextEscapeId = 0;
+
+function onWindowEscape(e: globalThis.KeyboardEvent) {
+  if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
+  const top = escapeLayers[escapeLayers.length - 1];
+  if (!top) return;
+  e.preventDefault();
+  top.ref.current();
+}
+
+/**
+ * Meldet eine offene Ebene (Dialog, Menue, Popover) im Escape-Stapel an. Ein einziger keydown-Listener
+ * auf window ruft bei Escape nur die zuletzt geoeffnete Ebene auf – auch wenn der Fokus gerade
+ * auf body liegt (z. B. nach Klick auf Text). Wer Escape selbst behandelt, ruft preventDefault().
+ */
+export function useEscapeLayer(active: boolean, onEscape: () => void) {
+  const ref = useRef(onEscape);
+  ref.current = onEscape;
+  useEffect(() => {
+    if (!active) return;
+    const layer: EscapeLayer = { id: ++nextEscapeId, ref };
+    escapeLayers.push(layer);
+    if (!escapeListening) {
+      window.addEventListener("keydown", onWindowEscape);
+      escapeListening = true;
+    }
+    return () => {
+      const i = escapeLayers.findIndex((l) => l.id === layer.id);
+      if (i >= 0) escapeLayers.splice(i, 1);
+    };
+  }, [active]);
+}
+
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -58,6 +98,8 @@ export function useModal(
 ) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  // Escape auch dann, wenn der Fokus ausserhalb des Panels liegt (body)
+  useEscapeLayer(open, () => onCloseRef.current());
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +123,9 @@ export function useModal(
 
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === "Escape") {
+      if (e.nativeEvent.isComposing) return;
       e.stopPropagation();
+      e.preventDefault();
       onCloseRef.current();
       return;
     }
@@ -192,7 +236,7 @@ function DialogPanel({
           type="button"
           aria-label="Schließen"
           onClick={onClose}
-          className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+          className="hit-area absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
         >
           <X size={16} aria-hidden />
         </button>
@@ -347,5 +391,283 @@ export function CopyField({ label, value, className }: { label: string; value: s
         {copied ? "Kopiert" : "Kopieren"}
       </Button>
     </div>
+  );
+}
+
+// ---------- Aufklappmenue (DropdownMenu) ----------
+
+export type MenuAction = {
+  type?: "item";
+  id: string;
+  label: string;
+  icon?: LucideIcon;
+  onSelect: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+};
+export type MenuEntry = MenuAction | { type: "separator"; id: string } | { type: "group"; id: string; label: string; items: MenuAction[] };
+
+export type MenuTriggerProps = {
+  ref: RefObject<HTMLButtonElement | null>;
+  id: string;
+  type: "button";
+  "aria-haspopup": "menu";
+  "aria-expanded": boolean;
+  "aria-controls"?: string;
+  "aria-label": string;
+  onClick: () => void;
+  onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
+};
+
+type DropdownMenuProps = {
+  /** Zugaenglicher Name des Ausloesers und des Menues. */
+  label: string;
+  items: MenuEntry[];
+  align?: "start" | "end";
+  /** Bevorzugte Seite; bei Platzmangel wird gekippt. */
+  side?: "bottom" | "top";
+  /** Eigener Ausloeser; Standard ist ein Icon-Knopf mit drei Punkten. */
+  trigger?: (props: MenuTriggerProps) => ReactNode;
+  triggerClassName?: string;
+  onOpenChange?: (open: boolean) => void;
+};
+
+const MENU_GAP = 4;
+const VIEWPORT_MARGIN = 8;
+
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
+
+const actionsOf = (items: MenuEntry[]): MenuAction[] =>
+  items.flatMap((e) => (e.type === "separator" ? [] : e.type === "group" ? e.items : [e]));
+
+const enabledIndices = (actions: MenuAction[]) => actions.map((a, i) => (a.disabled ? -1 : i)).filter((i) => i >= 0);
+
+/**
+ * Menue nach WAI-ARIA (menu/menuitem): Pfeiltasten mit Umlauf, Home/End, Escape und Tab schliessen
+ * und geben den Fokus an den Ausloeser zurueck. Liegt als Portal im body (wird in Karten, Dialogen
+ * und scrollenden Bereichen nicht abgeschnitten) und kippt bei Platzmangel nach oben/unten.
+ */
+export function DropdownMenu({ label, items, align = "end", side = "bottom", trigger, triggerClassName, onOpenChange }: DropdownMenuProps) {
+  const [open, setOpenState] = useState(false);
+  const [initial, setInitial] = useState<"first" | "last">("first");
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const triggerId = useId();
+  const menuId = useId();
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  const openRef = useRef(false);
+
+  const setOpen = useCallback((next: boolean) => {
+    if (openRef.current === next) return;
+    openRef.current = next;
+    setOpenState(next);
+    if (!next) setPos(null);
+    onOpenChangeRef.current?.(next);
+  }, []);
+
+  const actions = actionsOf(items);
+
+  const closeAndFocusTrigger = useCallback(() => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }, [setOpen]);
+
+  useEscapeLayer(open, closeAndFocusTrigger);
+
+  const place = useCallback(() => {
+    const t = triggerRef.current?.getBoundingClientRect();
+    const m = menuRef.current;
+    if (!t || !m) return;
+    const mw = m.offsetWidth;
+    const mh = m.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const below = t.bottom + MENU_GAP;
+    const above = t.top - MENU_GAP - mh;
+    let top = side === "bottom" ? below : above;
+    if (side === "bottom" && below + mh > vh - VIEWPORT_MARGIN && above >= VIEWPORT_MARGIN) top = above;
+    if (side === "top" && above < VIEWPORT_MARGIN && below + mh <= vh - VIEWPORT_MARGIN) top = below;
+    top = clamp(top, VIEWPORT_MARGIN, vh - VIEWPORT_MARGIN - mh);
+    const left = clamp(align === "end" ? t.right - mw : t.left, VIEWPORT_MARGIN, vw - VIEWPORT_MARGIN - mw);
+    setPos({ top, left });
+  }, [align, side]);
+
+  // Position vor dem Zeichnen setzen, dann erstes bzw. letztes aktives Item fokussieren
+  useLayoutEffect(() => {
+    if (!open) return;
+    place();
+    const enabled = enabledIndices(actions);
+    const target = initial === "last" ? enabled[enabled.length - 1] : enabled[0];
+    if (target !== undefined) itemRefs.current[target]?.focus();
+    else menuRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false); // ohne Fokusverschiebung
+    };
+    const onScroll = () => place();
+    const onResize = () => setOpen(false);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open, place, setOpen]);
+
+  if (actions.length === 0) return null;
+
+  const show = (from: "first" | "last") => {
+    setInitial(from);
+    setOpen(true);
+  };
+
+  const focusItem = (i: number | undefined) => {
+    if (i !== undefined) itemRefs.current[i]?.focus();
+  };
+
+  const onMenuKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const enabled = enabledIndices(actions);
+    const current = itemRefs.current.findIndex((el) => el !== null && el === document.activeElement);
+    const at = enabled.indexOf(current);
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        focusItem(enabled[at < 0 ? 0 : (at + 1) % enabled.length]);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        focusItem(enabled[at < 0 ? enabled.length - 1 : (at - 1 + enabled.length) % enabled.length]);
+        break;
+      case "Home":
+        e.preventDefault();
+        focusItem(enabled[0]);
+        break;
+      case "End":
+        e.preventDefault();
+        focusItem(enabled[enabled.length - 1]);
+        break;
+      case "Escape":
+      case "Tab":
+        // selbst behandeln: aeussere Dialoge (React-Events laufen durch Portale hoch) reagieren nicht mit
+        e.preventDefault();
+        e.stopPropagation();
+        closeAndFocusTrigger();
+        break;
+    }
+  };
+
+  const select = (a: MenuAction) => {
+    if (a.disabled) return;
+    setOpen(false);
+    triggerRef.current?.focus();
+    a.onSelect();
+  };
+
+  const triggerProps: MenuTriggerProps = {
+    ref: triggerRef,
+    id: triggerId,
+    type: "button",
+    "aria-haspopup": "menu",
+    "aria-expanded": open,
+    "aria-controls": open ? menuId : undefined,
+    "aria-label": label,
+    onClick: () => (openRef.current ? setOpen(false) : show("first")),
+    onKeyDown: (e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        show("first");
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        show("last");
+      }
+    },
+  };
+
+  let index = 0;
+  const renderAction = (a: MenuAction) => {
+    const i = index++;
+    const Icon = a.icon;
+    return (
+      <button
+        key={a.id}
+        ref={(el) => {
+          itemRefs.current[i] = el;
+        }}
+        type="button"
+        role="menuitem"
+        tabIndex={-1}
+        aria-disabled={a.disabled || undefined}
+        onClick={() => select(a)}
+        className={clsx(
+          "flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm pointer-coarse:min-h-11 focus:bg-surface-2 focus:outline-none",
+          a.disabled ? "cursor-not-allowed opacity-50" : "hover:bg-surface-2",
+          a.danger ? "text-danger" : "text-text",
+        )}
+      >
+        {Icon && <Icon size={16} aria-hidden className="shrink-0" />}
+        <span className="truncate">{a.label}</span>
+      </button>
+    );
+  };
+
+  const menu =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            aria-labelledby={triggerId}
+            tabIndex={-1}
+            onKeyDown={onMenuKeyDown}
+            style={{ top: pos?.top ?? 0, left: pos?.left ?? 0 }}
+            className="fixed z-[60] min-w-44 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-surface p-1 shadow-overlay focus:outline-none"
+          >
+            {items.map((e) => {
+              if (e.type === "separator") return <div key={e.id} role="separator" className="my-1 h-px bg-border" />;
+              if (e.type === "group")
+                return (
+                  <div key={e.id} role="group" aria-label={e.label}>
+                    <p aria-hidden className="px-3 pb-1 pt-2 text-xs font-semibold text-muted">
+                      {e.label}
+                    </p>
+                    {e.items.map(renderAction)}
+                  </div>
+                );
+              return renderAction(e);
+            })}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      {trigger ? (
+        trigger(triggerProps)
+      ) : (
+        <button
+          {...triggerProps}
+          className={clsx(
+            "relative hit-area inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text",
+            triggerClassName,
+          )}
+        >
+          <MoreHorizontal size={18} aria-hidden />
+        </button>
+      )}
+      {menu}
+    </>
   );
 }

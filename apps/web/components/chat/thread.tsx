@@ -1,14 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, MoreHorizontal, X } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { ChatMessage, ConversationDetail, MessagePage, PublicUser } from "@vereine/shared";
 import { CHAT_MAX_BODY } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useChat, useChatEvents } from "@/lib/chat";
+import { announceText, foreignNewMessages } from "@/lib/chat-announce";
 import { REPORT_REASONS } from "@/lib/labels";
 import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea } from "../ui";
+import { DropdownMenu, type MenuEntry } from "../ui-client";
 import { ask, toast } from "@/components/ui-hosts";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -19,23 +21,34 @@ export function Thread({
   me,
   onBack,
   onChanged,
+  focusTitle = false,
 }: {
   id: string;
   me: PublicUser;
   onBack: () => void;
   onChanged: () => void;
+  /** Titel nach dem Laden fokussieren (Handy: Thread ersetzt die Liste). */
+  focusTitle?: boolean;
 }) {
   const { refreshUnread } = useChat();
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
-  const [msgs, setMsgs] = useState<ChatMessage[]>([]);
+  const [msgs, setMsgsState] = useState<ChatMessage[]>([]);
   const [older, setOlder] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState(false);
-  const [menu, setMenu] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [announce, setAnnounce] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const stickToBottom = useRef(true);
+  // Synchroner Stand der Nachrichten (fuer den Vergleich alt/neu bei Live-Ansagen); null = noch nicht geladen
+  const msgsRef = useRef<ChatMessage[] | null>(null);
+  const setMsgs = useCallback((fn: (prev: ChatMessage[]) => ChatMessage[]) => {
+    const next = fn(msgsRef.current ?? []);
+    msgsRef.current = next;
+    setMsgsState(next);
+  }, []);
 
   const markRead = useCallback(() => {
     api("/chat/conversations/" + id + "/read", { method: "POST", body: {} })
@@ -46,40 +59,61 @@ export function Thread({
       .catch(() => undefined);
   }, [id, refreshUnread, onChanged]);
 
-  const loadLatest = useCallback(async () => {
-    try {
-      const [d, page] = await Promise.all([
-        api<ConversationDetail>(`/chat/conversations/${id}`),
-        api<MessagePage>(`/chat/conversations/${id}/messages`),
-      ]);
-      setDetail(d);
-      setMsgs((prev) => {
-        // neueste Seite einmischen, bereits geladene aeltere Nachrichten behalten
-        const known = new Map(prev.map((m) => [m.id, m]));
-        page.messages.forEach((m) => known.set(m.id, m));
-        return [...known.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-      });
-      setOlder((prev) => prev ?? page.nextCursor);
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }, [id]);
+  /** Neueste Seite laden; speak = neue fremde Nachrichten fuer Screenreader ansagen (nur bei Events/Poll). */
+  const loadLatest = useCallback(
+    async (speak = false) => {
+      try {
+        const [d, page] = await Promise.all([
+          api<ConversationDetail>(`/chat/conversations/${id}`),
+          api<MessagePage>(`/chat/conversations/${id}/messages`),
+        ]);
+        setDetail(d);
+        const prev = msgsRef.current;
+        setMsgs((current) => {
+          // neueste Seite einmischen, bereits geladene aeltere Nachrichten behalten
+          const known = new Map(current.map((m) => [m.id, m]));
+          page.messages.forEach((m) => known.set(m.id, m));
+          return [...known.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+        });
+        if (speak) {
+          const text = announceText(foreignNewMessages(prev, msgsRef.current ?? []), d.title);
+          if (text) setAnnounce(text);
+        }
+        setOlder((o) => o ?? page.nextCursor);
+      } catch (e) {
+        setError(describeError(e));
+      }
+    },
+    [id, setMsgs],
+  );
 
   useEffect(() => {
     setDetail(null);
-    setMsgs([]);
+    msgsRef.current = null;
+    setMsgsState([]);
     setOlder(null);
     setError(null);
     setInfo(false);
+    setAnnounce("");
     stickToBottom.current = true;
-    void loadLatest().then(markRead);
+    // Erstladen: nur Basislinie fuer spaetere Ansagen
+    void loadLatest(false).then(markRead);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useChatEvents((e) => {
     if (e.type === "poll" || ("conversationId" in e && e.conversationId === id)) {
-      void loadLatest().then(() => e.type === "message" && markRead());
+      void loadLatest(true).then(() => e.type === "message" && markRead());
     }
   });
+
+  // Handy: nach dem Oeffnen den Titel fokussieren (Screenreader hoert, wo er ist)
+  const titleFocused = useRef(false);
+  useEffect(() => {
+    if (focusTitle && detail && !titleFocused.current) {
+      titleFocused.current = true;
+      titleRef.current?.focus();
+    }
+  }, [focusTitle, detail]);
 
   useLayoutEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ block: "end" });
@@ -125,37 +159,98 @@ export function Thread({
     }
   };
 
+  // Live-Bereich immer im DOM, damit Screenreader Aenderungen zuverlaessig ansagen
+  const liveRegion = (
+    <p className="sr-only" aria-live="polite" aria-atomic="true">
+      {announce}
+    </p>
+  );
+
+  const backButton = (
+    <button
+      type="button"
+      onClick={onBack}
+      aria-label="Zurück zur Liste"
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text md:hidden"
+    >
+      <ArrowLeft size={18} aria-hidden />
+    </button>
+  );
+
   if (!detail) {
-    return error ? (
-      <div className="m-auto w-full max-w-sm p-4">
-        <ErrorState
-          message={error}
-          onRetry={() => {
-            setError(null);
-            void loadLatest();
-          }}
-        />
-      </div>
-    ) : (
-      <div role="status" aria-label="Lade" className="flex flex-1 flex-col gap-3 p-4">
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-10 w-2/3 self-start rounded-2xl" />
-        <Skeleton className="h-10 w-1/2 self-end rounded-2xl" />
-        <Skeleton className="h-10 w-3/5 self-start rounded-2xl" />
-      </div>
+    return (
+      <>
+        {liveRegion}
+        <div className="flex items-center border-b border-border px-1 py-1 md:hidden">{backButton}</div>
+        {error ? (
+          <div className="m-auto w-full max-w-sm p-4">
+            <ErrorState
+              message={error}
+              onRetry={() => {
+                setError(null);
+                void loadLatest();
+              }}
+            />
+          </div>
+        ) : (
+          <div role="status" aria-label="Lade" className="flex flex-1 flex-col gap-3 p-4">
+            <Skeleton className="h-8 w-1/2" />
+            <Skeleton className="h-10 w-2/3 self-start rounded-2xl" />
+            <Skeleton className="h-10 w-1/2 self-end rounded-2xl" />
+            <Skeleton className="h-10 w-3/5 self-start rounded-2xl" />
+          </div>
+        )}
+      </>
     );
   }
 
   const other = detail.kind === "direct" ? detail.members.find((m) => m.userId !== me.id) : undefined;
   let lastDay = "";
 
+  const messageMenu = (m: ChatMessage): MenuEntry[] =>
+    m.mine
+      ? [
+          {
+            id: "delete",
+            label: "Löschen",
+            icon: Trash2,
+            danger: true,
+            onSelect: async () => {
+              if (!(await ask("Nachricht löschen?", { confirmLabel: "Löschen", danger: true }))) return;
+              await run(async () => {
+                await api(`/chat/messages/${m.id}`, { method: "DELETE" });
+                await loadLatest();
+              });
+            },
+          },
+        ]
+      : [
+          {
+            type: "group",
+            id: "report",
+            label: "Melden",
+            items: REPORT_REASONS.map((r) => ({
+              id: r.id,
+              label: r.label,
+              onSelect: () =>
+                void run(async () => {
+                  await api(`/chat/messages/${m.id}/report`, { method: "POST", body: { reason: r.id } });
+                  toast.success("Danke, die Nachricht wurde gemeldet.");
+                }),
+            })),
+          },
+        ];
+
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label={`Unterhaltung mit ${detail.title}`}>
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <Button variant="ghost" size="sm" className="md:hidden" onClick={onBack} aria-label="Zurück zur Liste"><ArrowLeft size={16} aria-hidden /></Button>
+    <section className="flex h-full min-h-0 flex-col" aria-labelledby={`thread-title-${id}`}>
+      {liveRegion}
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 max-md:py-1.5 max-md:pl-1">
+        {backButton}
         <Avatar name={detail.title} size={32} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{detail.title}</p>
+          <h2 id={`thread-title-${id}`} ref={titleRef} tabIndex={-1} className="truncate text-sm font-medium focus:outline-none focus-visible:underline">
+            {detail.title}
+          </h2>
           <p className="truncate text-xs text-muted">
             {detail.kind === "group" ? `${detail.members.length} Mitglieder` : "Direktnachricht"}
             {" · "}Löschung nach {detail.effectiveRetentionDays} Tagen
@@ -176,7 +271,7 @@ export function Thread({
                       <button
                         type="button"
                         aria-label={`${m.name} entfernen`}
-                        className="ml-1 text-muted hover:text-danger"
+                        className="relative hit-area ml-1 inline-flex rounded text-muted hover:text-danger"
                         onClick={async () => {
                           if (!(await ask(`${m.name} aus der Gruppe entfernen?`, { confirmLabel: "Entfernen" }))) return;
                           await run(async () => { await api(`/chat/conversations/${id}/members/${m.userId}`, { method: "DELETE" }); await loadLatest(); });
@@ -246,12 +341,14 @@ export function Thread({
       )}
 
       <div
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3"
+        role="region"
+        aria-label="Nachrichtenverlauf"
+        tabIndex={0}
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3"
         onScroll={(e) => {
           const el = e.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
-        aria-live="polite"
       >
         {older && (
           <div className="pb-2 text-center">
@@ -267,42 +364,34 @@ export function Thread({
             <div key={m.id}>
               {showDay && <p className="my-2 text-center text-xs text-muted">{day}</p>}
               <div className={clsx("group flex items-end gap-1", m.mine ? "justify-end" : "justify-start")}>
-                <div className={clsx("max-w-[80%] rounded-2xl px-3 py-2 text-sm", m.mine ? "bg-brand text-brand-contrast" : "bg-surface-2", m.deleted && "italic opacity-70")}>
+                <div
+                  className={clsx(
+                    "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
+                    // geloeschte Nachricht einheitlich (auch eigene): neutrale Flaeche, gedaempfter Text, ohne Transparenz
+                    m.deleted ? "bg-surface-2 italic text-muted" : m.mine ? "bg-brand text-brand-contrast" : "bg-surface-2",
+                  )}
+                >
                   {detail.kind === "group" && !m.mine && <p className="mb-0.5 text-xs font-medium text-brand">{m.senderName}</p>}
                   <p className="whitespace-pre-wrap break-words">{m.deleted ? "Nachricht gelöscht" : m.body}</p>
-                  <p className={clsx("mt-0.5 text-right text-[10px]", m.mine ? "text-brand-contrast/70" : "text-muted")}>{timeFmt.format(new Date(m.createdAt))}</p>
+                  <p className={clsx("mt-0.5 text-right text-[11px]", m.mine && !m.deleted ? "text-brand-contrast/85" : "text-muted")}>
+                    {timeFmt.format(new Date(m.createdAt))}
+                  </p>
                 </div>
                 {!m.deleted && (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      aria-label="Nachrichtenoptionen"
-                      aria-expanded={menu === m.id}
-                      onClick={() => setMenu(menu === m.id ? null : m.id)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted opacity-60 hover:opacity-100 focus:opacity-100"
-                    >
-                      <MoreHorizontal size={16} aria-hidden />
-                    </button>
-                    {menu === m.id && (
-                      <div className={clsx("absolute bottom-6 z-10 w-40 rounded-lg border border-border bg-surface p-1 text-sm shadow-lg", m.mine ? "right-0" : "left-0")}>
-                        {m.mine ? (
-                          <button className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={async () => {
-                            setMenu(null);
-                            if (!(await ask("Nachricht löschen?", { confirmLabel: "Löschen" }))) return;
-                            await run(async () => { await api(`/chat/messages/${m.id}`, { method: "DELETE" }); await loadLatest(); });
-                          }}>
-                            Löschen
-                          </button>
-                        ) : (
-                          REPORT_REASONS.map((r) => (
-                            <button key={r.id} className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={() => run(async () => { await api(`/chat/messages/${m.id}/report`, { method: "POST", body: { reason: r.id } }); setMenu(null); setError(null); toast.success("Danke, die Nachricht wurde gemeldet."); })}>
-                              Melden: {r.label}
-                            </button>
-                          ))
-                        )}
-                      </div>
+                  <DropdownMenu
+                    label="Nachrichtenoptionen"
+                    side="top"
+                    align={m.mine ? "end" : "start"}
+                    items={messageMenu(m)}
+                    trigger={(p) => (
+                      <button
+                        {...p}
+                        className="relative hit-area inline-flex h-7 w-7 items-center justify-center rounded text-muted opacity-60 hover:opacity-100 focus:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                      >
+                        <MoreHorizontal size={16} aria-hidden />
+                      </button>
                     )}
-                  </div>
+                  />
                 )}
               </div>
             </div>
@@ -313,7 +402,7 @@ export function Thread({
 
       {error && <div className="px-3 pb-2"><Alert>{error}</Alert></div>}
 
-      <form onSubmit={send} className="flex gap-2 border-t border-border p-3">
+      <form onSubmit={send} className="flex gap-2 border-t border-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:pb-3">
         <label htmlFor="msg" className="sr-only">Nachricht</label>
         <Textarea
           id="msg"

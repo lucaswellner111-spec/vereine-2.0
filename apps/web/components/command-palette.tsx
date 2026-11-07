@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
 import { applyTheme } from "@/lib/theme";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
+import { useModal } from "./ui-client";
 
 type Entry = { id: string; label: string; hint?: string; icon: LucideIcon; group: string; run: () => void };
 
@@ -30,13 +31,12 @@ export function CommandPalette() {
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [people, setPeople] = useState<PersonItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const lastFocus = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Fokusfalle, Scroll-Sperre, Escape (Stapel) und Fokus-Rueckgabe wie bei allen Dialogen
+  const { onKeyDown: onPanelKeyDown } = useModal(panelRef, { open, onClose: () => setOpen(false), initialFocusRef: inputRef });
 
   useEffect(() => {
-    const show = () => {
-      lastFocus.current = document.activeElement as HTMLElement | null;
-      setOpen(true);
-    };
+    const show = () => setOpen(true);
     const onKey = (e: KeyboardEvent) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -59,7 +59,6 @@ export function CommandPalette() {
     if (open) {
       setQ("");
       setIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [open]);
 
@@ -77,10 +76,7 @@ export function CommandPalette() {
     return () => clearTimeout(t);
   }, [q, open]);
 
-  const close = () => {
-    setOpen(false);
-    lastFocus.current?.focus?.();
-  };
+  const close = () => setOpen(false);
   const go = (href: string) => () => router.push(href);
 
   const entries = useMemo<Entry[]>(() => {
@@ -121,7 +117,7 @@ export function CommandPalette() {
   let lastGroup = "";
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label="Befehlspalette" className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-overlay">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Befehlspalette" onKeyDown={onPanelKeyDown} className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-overlay">
         <div className="flex items-center gap-2 border-b border-border px-3">
           <Search size={16} aria-hidden className="text-muted" />
           <input
@@ -135,13 +131,12 @@ export function CommandPalette() {
             placeholder="Seite, Verein oder Person suchen …"
             className="h-12 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none placeholder:text-muted"
             onKeyDown={(e) => {
-              if (e.key === "Escape") close();
-              else if (e.key === "ArrowDown") (e.preventDefault(), setIndex((i) => Math.min(entries.length - 1, i + 1)));
+              if (e.key === "ArrowDown") (e.preventDefault(), setIndex((i) => Math.min(entries.length - 1, i + 1)));
               else if (e.key === "ArrowUp") (e.preventDefault(), setIndex((i) => Math.max(0, i - 1)));
               else if (e.key === "Enter") (e.preventDefault(), choose(entries[index]));
             }}
           />
-          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[10px] text-muted sm:block">Esc</kbd>
+          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] text-muted sm:block">Esc</kbd>
         </div>
         <ul id="palette-list" role="listbox" className="max-h-80 overflow-y-auto p-1.5">
           {entries.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Nichts gefunden.</li>}

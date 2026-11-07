@@ -1,10 +1,12 @@
 "use client";
 
+import clsx from "clsx";
 import { Bell } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NotificationItem, NotificationsResponse } from "@vereine/shared";
 import { api } from "@/lib/api";
+import { useEscapeLayer } from "./ui-client";
 
 // SKALIERUNG: Polling (30 s) ist fuer den Start in Ordnung. Mit dem Echtzeit-Chat (Phase 2)
 // wird das durch einen WebSocket/SSE-Kanal mit Redis Pub/Sub ersetzt.
@@ -49,6 +51,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
   const [data, setData] = useState<NotificationsResponse>({ unread: 0, items: [] });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(() => {
     api<NotificationsResponse>("/notifications?limit=20").then(setData).catch(() => undefined);
@@ -67,14 +70,15 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
     const close = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", esc);
-    };
+    return () => document.removeEventListener("mousedown", close);
   }, [open]);
+
+  // Escape ueber den gemeinsamen Stapel: schliesst nur, wenn das Popover die oberste Ebene ist
+  useEscapeLayer(open, () => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  });
 
   async function markAll() {
     await api("/notifications/read", { method: "POST", body: {} });
@@ -84,6 +88,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => {
           setOpen((o) => !o);
@@ -95,16 +100,25 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
       >
         <Bell size={18} aria-hidden />
         {data.unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-on-danger">
+          <span aria-hidden className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-semibold leading-none text-on-danger">
             {data.unread > 9 ? "9+" : data.unread}
           </span>
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label="Benachrichtigungen" className={`absolute ${align === "left" ? "left-0" : "right-0"} z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface shadow-lg`}>
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div
+          role="dialog"
+          aria-label="Benachrichtigungen"
+          className={clsx(
+            "absolute z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface shadow-lg",
+            align === "left" ? "left-0" : "right-0",
+            // Handy: volle Breite unter der Kopfleiste, damit nichts aus dem Bildschirm ragt
+            "max-md:fixed max-md:inset-x-2 max-md:top-14 max-md:mt-0 max-md:w-auto max-md:max-w-none",
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
             <p className="text-sm font-semibold">Benachrichtigungen</p>
-            <button type="button" onClick={markAll} disabled={!data.unread} className="text-xs text-brand hover:underline disabled:opacity-40">
+            <button type="button" onClick={markAll} disabled={!data.unread} className="min-h-9 rounded-md px-2 text-xs text-brand hover:underline disabled:opacity-40">
               Alle gelesen
             </button>
           </div>

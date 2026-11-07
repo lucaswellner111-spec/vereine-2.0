@@ -6,9 +6,11 @@ import { MAX_ORG_TAGS, ORG_CATEGORIES, type OrgDetail } from "@vereine/shared";
 import { TagPicker } from "@/components/tag-picker";
 import { Alert, BackLink, Button, Card, Field, PageHeader, SelectField, TextareaField } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
+import { useVerwaltung } from "@/lib/verwaltung";
 
 export default function NewOrgPage() {
   const router = useRouter();
+  const { reloadOrgs } = useVerwaltung();
   const [form, setForm] = useState({ name: "", category: ORG_CATEGORIES[0] as string, city: "", about: "", tags: [] as string[] });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,6 +21,8 @@ export default function NewOrgPage() {
     setBusy(true);
     try {
       const org = await api<OrgDetail>("/orgs", { method: "POST", body: form });
+      // Gruender wird Admin: Verwaltung sofort in Navigation und "Mehr" anbieten
+      reloadOrgs();
       router.push(`/vereine/${org.slug}`);
     } catch (err) {
       setError(describeError(err));

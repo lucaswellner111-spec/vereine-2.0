@@ -8,9 +8,10 @@ import { tagLabel } from "@vereine/shared";
  */
 export function TagChips({ tags, to, className }: { tags: string[]; to?: "/feed" | "/vereine"; className?: string }) {
   if (tags.length === 0) return null;
-  const chip = "inline-flex items-center rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted";
+  // Touch: hoeher (>= 24 px), statt unsichtbarer Trefferflaechen in der dichten Reihe
+  const chip = "inline-flex items-center rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted pointer-coarse:py-1.5";
   return (
-    <ul className={clsx("flex flex-wrap gap-1.5", className)} aria-label="Tags">
+    <ul className={clsx("flex flex-wrap gap-2", className)} aria-label="Tags">
       {tags.map((t) => (
         <li key={t}>
           {to ? (

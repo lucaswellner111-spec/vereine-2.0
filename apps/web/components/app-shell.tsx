@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, ChevronDown, Flag, Search, LayoutDashboard, LogOut, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, ChevronDown, Flag, Search, LayoutDashboard, LogOut, Menu, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -9,8 +9,10 @@ import type { PublicUser } from "@vereine/shared";
 import { useAuth } from "@/lib/auth";
 import { ChatProvider, useChat } from "@/lib/chat";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
+import { ShellChromeProvider, useShellChrome } from "@/lib/shell";
 import { itemsForRole, useVerwaltung, VerwaltungProvider } from "@/lib/verwaltung";
 import { CommandPalette, openCommandPalette } from "./command-palette";
+import { MobileMoreSheet } from "./mobile-more-sheet";
 import { NotificationBell } from "./notification-bell";
 import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
@@ -28,25 +30,35 @@ const nav: NavItem[] = [
 
 const platformItem: NavItem = { href: "/plattform", label: "Plattform", icon: Flag };
 
+/** Bottom-Nav am Handy: fest vier Bereiche plus "Mehr" (5 Spalten, lesbare Beschriftung). */
+const mobileNav: NavItem[] = nav.filter((i) => i.href !== "/verwaltung");
+
 const linkClass = (active: boolean) =>
   clsx(
     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
     active ? "bg-brand/15 text-brand" : "text-muted hover:bg-surface-2 hover:text-text",
   );
 
+/** Zaehler am Chat-Link: Zahl nur optisch, vorgelesen wird ", n ungelesen" als Teil des Link-Namens. */
 function UnreadBadge({ n, floating }: { n: number; floating?: boolean }) {
   return (
-    <span
-      aria-label={`${n} ungelesene Nachrichten`}
-      className={clsx(
-        "inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-on-danger",
-        floating ? "absolute -right-2.5 -top-1.5" : "ml-auto",
-      )}
-    >
-      {n > 9 ? "9+" : n}
-    </span>
+    <>
+      <span
+        aria-hidden
+        className={clsx(
+          "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-semibold leading-none text-on-danger",
+          floating ? "absolute -right-3 -top-1.5" : "ml-auto",
+        )}
+      >
+        {n > 9 ? "9+" : n}
+      </span>
+      <span className="sr-only">, {n} ungelesen</span>
+    </>
   );
 }
+
+/** Bereiche, die am Handy unter "Mehr" liegen (dort ist "Mehr" der aktuelle Bereich). */
+const MORE_PREFIXES = ["/verwaltung", "/einstellungen", "/rechnungen", "/personen", "/plattform", "/spenden"];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -69,7 +81,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ChatProvider>
       <VerwaltungProvider>
-        <Shell user={user}>{children}</Shell>
+        <ShellChromeProvider>
+          <Shell user={user}>{children}</Shell>
+        </ShellChromeProvider>
         <CommandPalette />
       </VerwaltungProvider>
     </ChatProvider>
@@ -172,12 +186,23 @@ function VerwaltungNav({ item, active, pathname }: { item: NavItem; active: bool
 
 function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
   const { unread } = useChat();
-  const items = user.isPlatformAdmin ? [...nav, platformItem] : nav;
+  const { orgs } = useVerwaltung();
+  const { immersive } = useShellChrome();
+  // Verwaltung nur mit Verwaltungsrolle; solange die Liste laedt (null), ausgeblendet
+  const showVerwaltung = (orgs?.length ?? 0) > 0;
+  const showPlattform = !!user.isPlatformAdmin;
+  const items = [...nav.filter((i) => i.href !== "/verwaltung" || showVerwaltung), ...(showPlattform ? [platformItem] : [])];
   const { logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const moreActive = MORE_PREFIXES.some(isActive);
+  const doLogout = () => {
+    setMoreOpen(false);
+    void logout().then(() => router.replace("/login"));
+  };
 
   return (
     <div className="min-h-dvh">
@@ -193,7 +218,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         >
           <Search size={15} aria-hidden />
           <span className="flex-1 text-left">Suchen …</span>
-          <kbd className="rounded border border-border px-1.5 text-[10px]">Strg K</kbd>
+          <kbd className="rounded border border-border px-1.5 text-[11px]">Strg K</kbd>
         </button>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Hauptnavigation">
           {items.map((item) =>
@@ -225,13 +250,18 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
               <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="w-full" onClick={() => logout().then(() => router.replace("/login"))}>
+          <Button variant="ghost" size="sm" className="w-full" onClick={doLogout}>
             <LogOut size={14} aria-hidden /> Abmelden
           </Button>
         </div>
       </aside>
 
-      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface px-3 md:hidden">
+      <header
+        className={clsx(
+          "sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:hidden",
+          immersive && "max-md:hidden",
+        )}
+      >
         <Logo />
         <div className="flex items-center">
           <button type="button" onClick={openCommandPalette} aria-label="Suchen" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
@@ -245,30 +275,63 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         </div>
       </header>
 
-      <main className="px-4 py-6 pb-24 md:ml-64 md:px-8 md:pb-10">
+      <main
+        className={clsx(
+          "md:ml-64 md:px-8 md:py-6 md:pb-10",
+          // immersiv (z. B. Chat-Vollbild am Handy): ohne Innenabstand, Kopfleiste und Bottom-Nav ausgeblendet
+          immersive
+            ? "max-md:p-0"
+            : "py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
+        )}
+      >
         <div className="mx-auto max-w-3xl">{children}</div>
       </main>
 
       <nav
         aria-label="Hauptnavigation"
-        style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-        className="fixed inset-x-0 bottom-0 z-10 grid border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className={clsx(
+          "fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden",
+          immersive && "max-md:hidden",
+        )}
       >
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={isActive(item.href) ? "page" : undefined}
-            className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium", isActive(item.href) ? "text-brand" : "text-muted")}
-          >
-            <span className="relative">
-              <item.icon size={20} aria-hidden />
-              {item.href === "/chat" && unread > 0 && <UnreadBadge n={unread} floating />}
-            </span>
-            {item.label}
-          </Link>
-        ))}
+        {mobileNav.map((item) => {
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium leading-tight", active ? "text-brand" : "text-muted")}
+            >
+              <span className="relative">
+                <item.icon size={20} aria-hidden />
+                {item.href === "/chat" && unread > 0 && <UnreadBadge n={unread} floating />}
+              </span>
+              {item.label}
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen(true)}
+          className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium leading-tight", moreActive ? "text-brand" : "text-muted")}
+        >
+          <Menu size={20} aria-hidden />
+          Mehr
+          {moreActive && <span className="sr-only">, aktueller Bereich</span>}
+        </button>
       </nav>
+
+      <MobileMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        user={user}
+        showVerwaltung={showVerwaltung}
+        showPlattform={showPlattform}
+        onLogout={doLogout}
+      />
     </div>
   );
 }

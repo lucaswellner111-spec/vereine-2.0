@@ -8,15 +8,17 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, Button, Card, PageHeader } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
+import { useIsDesktop } from "@/lib/use-media-query";
 
 /** Ordnerliste der Einstellungen (Handy). Am Desktop steht das Untermenue in der Seitenleiste: direkt zum Profil. */
 export default function SettingsIndexPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
-    if (window.matchMedia("(min-width: 768px)").matches) router.replace("/einstellungen/profil");
-  }, [router]);
+    if (isDesktop) router.replace("/einstellungen/profil");
+  }, [isDesktop, router]);
 
   return (
     <>

@@ -28,6 +28,26 @@ const ratio = (a, b) => {
   const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 };
+
+/*
+ * Farbangabe: "name" (Token) oder "name/alpha@basis" = Token mit Deckkraft alpha auf Token basis
+ * (z. B. "brand/0.15@surface" fuer bg-brand/15 auf einer Karte). Komposition wie im Browser in sRGB.
+ */
+const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const rgbToHex = (rgb) => "#" + rgb.map((c) => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, "0")).join("");
+const resolve = (set, spec) => {
+  const m = /^([a-z0-9-]+)\/([0-9.]+)@([a-z0-9-]+)$/.exec(spec);
+  if (!m) {
+    if (!set[spec]) throw new Error(`Token ${spec} fehlt`);
+    return set[spec];
+  }
+  const [, name, alphaText, base] = m;
+  const alpha = Number(alphaText);
+  const fg = hexToRgb(resolve(set, name));
+  const bg = hexToRgb(resolve(set, base));
+  return rgbToHex(fg.map((c, i) => c * alpha + bg[i] * (1 - alpha)));
+};
+
 // [Vordergrund, Hintergrund, Mindestkontrast, Beschreibung]
 const PAIRS = [
   ["text", "bg", 4.5, "Text auf Seite"],
@@ -43,11 +63,20 @@ const PAIRS = [
   ["on-danger", "danger", 4.5, "Text auf Fehler-Flaeche"],
   ["accent", "surface", 4.5, "Akzenttext auf Karte"],
   ["border", "surface", 1.2, "Rahmen sichtbar (weich)"],
+  // Transparente Flaechen und Texte (Tailwind name/alpha)
+  ["brand-contrast/0.85@brand", "brand", 4.5, "Zeitstempel eigene Chat-Blase"],
+  ["accent", "accent/0.2@surface", 4.5, "Akzent-Badge auf Karte"],
+  ["accent", "accent/0.2@bg", 4.5, "Akzent-Badge auf Seite"],
+  ["brand", "brand/0.15@surface", 4.5, "Marken-Badge/aktiv auf Karte"],
+  ["brand", "brand/0.15@bg", 4.5, "Marken-Badge/aktiv auf Seite"],
+  ["brand", "brand/0.2@surface", 4.5, "Chip-Hover auf Karte"],
+  ["danger", "danger/0.1@surface", 4.5, "Fehler-Hinweis auf Karte"],
+  ["muted", "accent/0.1@bg", 4.5, "Zweittext auf Akzent-Hinweis"],
 ];
 let failed = 0;
 for (const [name, set] of [["Hell", light], ["Dunkel", dark]]) {
   for (const [fg, bg, min, label] of PAIRS) {
-    const r = ratio(set[fg], set[bg]);
+    const r = ratio(resolve(set, fg), resolve(set, bg));
     const ok = r >= min;
     if (!ok) failed++;
     console.log(`${ok ? "OK  " : "FAIL"} ${name.padEnd(6)} ${label.padEnd(34)} ${r.toFixed(2)}:1 (min ${min})`);

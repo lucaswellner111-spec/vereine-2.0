@@ -52,7 +52,7 @@ export default function CalendarPage() {
           {orgs.length > 1 && (
             <>
               <label htmlFor="cal-org" className="sr-only">Verein</label>
-              <Select id="cal-org" size="sm" value={org} onChange={(e) => setOrg(e.target.value)}>
+              <Select id="cal-org" size="sm" value={org} onChange={(e) => setOrg(e.target.value)} className="max-sm:w-full">
                 <option value="">Alle Vereine</option>
                 {orgs.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
               </Select>

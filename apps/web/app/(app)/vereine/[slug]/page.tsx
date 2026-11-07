@@ -69,7 +69,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
       <ul className="space-y-4">
         {posts.data.posts.map((p) => (
           <li key={p.id}>
-            <PostCard post={p} onDeleted={dropPost} />
+            <PostCard post={p} onDeleted={dropPost} onHidden={dropPost} />
           </li>
         ))}
       </ul>

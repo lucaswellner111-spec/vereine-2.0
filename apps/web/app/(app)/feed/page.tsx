@@ -136,7 +136,7 @@ function Feed() {
       <ul className="space-y-4">
         {data.posts.map((p) => (
           <li key={p.id}>
-            <PostCard post={p} onDeleted={dropPost} onHidden={dropPost} />
+            <PostCard post={p} onDeleted={dropPost} onHidden={dropPost} showReason={effective === "ranked"} />
           </li>
         ))}
       </ul>
@@ -155,7 +155,7 @@ function Feed() {
           <span className="text-muted">Gefiltert nach</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand">
             {tagLabel(filterTag)}
-            <Link href="/feed" aria-label="Filter entfernen"><X size={12} aria-hidden /></Link>
+            <Link href="/feed" aria-label="Filter entfernen" className="relative inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-brand/20 hit-area"><X size={12} aria-hidden /></Link>
           </span>
           <Link href={`/vereine?tag=${encodeURIComponent(filterTag)}`} className="text-brand hover:underline">Vereine dazu</Link>
         </div>
@@ -203,7 +203,7 @@ function Feed() {
                   type="button"
                   aria-label="Bild entfernen"
                   onClick={() => setImages((l) => l.filter((x) => x.id !== img.id))}
-                  className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-danger text-on-danger"
+                  className="hit-area absolute -right-1.5 -top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-danger text-on-danger"
                 >
                   <X size={12} aria-hidden />
                 </button>
@@ -211,30 +211,34 @@ function Feed() {
             ))}
           </ul>
         )}
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileRef} id="file" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(e) => pickImages(e.target.files)} />
-            <label
-              htmlFor="file"
-              className={clsx(
-                "inline-flex h-9 cursor-pointer items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium hover:bg-surface-2",
-                (uploading || images.length >= 4) && "pointer-events-none opacity-50",
-              )}
-            >
-              <Camera size={14} aria-hidden className="mr-1.5" />
-              {uploading ? "Lädt hoch …" : `Bild${images.length ? ` (${images.length}/4)` : ""}`}
-            </label>
-            <label htmlFor="target" className="text-xs text-muted">Posten als</label>
-            <Select id="target" size="sm" value={target} onChange={(e) => setTarget(e.target.value)}>
-              <option value="">Ich selbst</option>
-              {orgs.map((o) => (
-                <option key={o.slug} value={o.slug}>{o.name}</option>
-              ))}
-            </Select>
+        {/* Zeile 2: Bild, Absender, Zaehler und Veroeffentlichen */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input ref={fileRef} id="file" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(e) => pickImages(e.target.files)} />
+          <label
+            htmlFor="file"
+            className={clsx(
+              "inline-flex h-9 cursor-pointer items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium hover:bg-surface-2 pointer-coarse:h-10",
+              (uploading || images.length >= 4) && "pointer-events-none opacity-50",
+            )}
+          >
+            <Camera size={14} aria-hidden className="mr-1.5" />
+            {uploading ? "Lädt hoch …" : `Bild${images.length ? ` (${images.length}/4)` : ""}`}
+          </label>
+          <label htmlFor="target" className="text-xs text-muted">Posten als</label>
+          <Select id="target" size="sm" value={target} onChange={(e) => setTarget(e.target.value)} className="min-w-0 max-sm:flex-1 sm:max-w-56">
+            <option value="">Ich selbst</option>
+            {orgs.map((o) => (
+              <option key={o.slug} value={o.slug}>{o.name}</option>
+            ))}
+          </Select>
+          <span className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted">{draft.length}/1000</span>
-          </div>
+            <Button size="sm" onClick={publish} busy={busy} disabled={(!draft.trim() && images.length === 0) || uploading}>Veröffentlichen</Button>
+          </span>
+        </div>
+        {/* Zeile 3: Tags ueber die volle Breite */}
+        <div className="mt-3 border-t border-border pt-3">
           <TagPicker label="Tags (optional)" value={tags} onChange={setTags} max={MAX_POST_TAGS} hint={target ? "Ohne Auswahl übernimmt der Beitrag die Tags des Vereins." : undefined} />
-          <Button size="sm" onClick={publish} busy={busy} disabled={(!draft.trim() && images.length === 0) || uploading}>Veröffentlichen</Button>
         </div>
       </Card>
 

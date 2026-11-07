@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import type { OrgRole } from "@vereine/shared";
 import { itemsForRole, VERWALTUNG_ITEMS, useVerwaltung } from "@/lib/verwaltung";
-import { Alert, ArrowLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "./ui";
+import { Alert, ArrowLink, BackLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "./ui";
 
 export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; onError: (m: string | null) => void };
 
@@ -29,14 +29,16 @@ export function VerwaltungPage({ id, children }: { id: string; children: (ctx: V
   const allowed = !!role && itemsForRole(role).some((i) => i.id === id);
   return (
     <>
+      {/* Handy: Rueckweg zur Bereichsliste (am Desktop steht sie in der Seitenleiste) */}
+      <BackLink href="/verwaltung" className="md:hidden">Verwaltung</BackLink>
       <PageHeader
         title={title}
         subtitle={detail ? `${detail.name} · ${detail.members} ${detail.members === 1 ? "Mitglied" : "Mitglieder"} · ${detail.followers} Follower` : <Skeleton className="mt-1 h-4 w-56" />}
         action={
           orgs.length > 1 ? (
-            <div>
+            <div className="w-full sm:w-auto">
               <label htmlFor="org" className="sr-only">Verein</label>
-              <Select id="org" value={slug} onChange={(e) => setSlug(e.target.value)}>
+              <Select id="org" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full max-w-full sm:w-auto sm:max-w-64">
                 {orgs.map((o) => (
                   <option key={o.slug} value={o.slug}>{o.name}</option>
                 ))}

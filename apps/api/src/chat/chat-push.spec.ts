@@ -67,7 +67,8 @@ describe("Chat-Push", () => {
     const [subscription, body] = sendNotification.mock.calls[0];
     expect(subscription.endpoint).toBe(sub(2).endpoint); // nur Ben, nicht Mia (Absenderin)
     const payload = JSON.parse(body as string);
-    expect(payload).toMatchObject({ title: "Neue Nachricht", url: "/chat", tag: `chat-${dm}` });
+    // Link oeffnet direkt die Unterhaltung (Chat-URL-Zustand ?c=<id>), nur die ID, kein Inhalt
+    expect(payload).toMatchObject({ title: "Neue Nachricht", url: `/chat?c=${dm}`, tag: `chat-${dm}` });
     expect(body as string).not.toContain("GEHEIMER");
     expect(body as string).not.toContain("mia");
 

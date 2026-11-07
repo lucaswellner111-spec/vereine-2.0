@@ -6,7 +6,8 @@ import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
 import { ROLE_LABEL } from "@/lib/labels";
 import { useApi, useBusy } from "@/lib/use-api";
-import { Alert, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, TextareaField } from "./ui";
+import clsx from "clsx";
+import { Alert, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, stackTable, TextareaField } from "./ui";
 import { ask } from "./ui-hosts";
 
 const intervalLabel: Record<FeeInterval, string> = { monthly: "monatlich", quarterly: "vierteljährlich", halfyearly: "halbjährlich", yearly: "jährlich" };
@@ -47,7 +48,7 @@ export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | 
               </div>
             ))}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted"><span>{d.joinsByMonth[0]?.month}</span><span>{d.joinsByMonth[11]?.month}</span></div>
+          <div className="mt-1 flex justify-between text-[11px] text-muted"><span>{d.joinsByMonth[0]?.month}</span><span>{d.joinsByMonth[11]?.month}</span></div>
         </Card>
         <Card>
           <h3 className="mb-3 text-sm font-semibold">Mitglieder nach Beitragsklasse</h3>
@@ -179,13 +180,13 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="mr-q" className="sr-only">Suche</label>
-        <Input id="mr-q" size="sm" type="search" placeholder="Name, Nummer oder Ort" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="w-56" />
+        <Input id="mr-q" size="sm" type="search" placeholder="Name, Nummer oder Ort" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="w-full sm:w-56" />
         <label htmlFor="mr-cls" className="sr-only">Beitragsklasse</label>
-        <Select id="mr-cls" size="sm" value={cls} onChange={(e) => { setCls(e.target.value); setOffset(0); }}>
+        <Select id="mr-cls" size="sm" value={cls} onChange={(e) => { setCls(e.target.value); setOffset(0); }} className="min-w-0 max-sm:flex-1">
           <option value="">Alle Beitragsklassen</option>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
-        {isAdmin && <LinkButton native size="sm" variant="secondary" href={`/api/orgs/${slug}/member-registry.csv`} className="ml-auto">CSV-Export</LinkButton>}
+        {isAdmin && <LinkButton native size="sm" variant="secondary" href={`/api/orgs/${slug}/member-registry.csv`} className="max-sm:w-full sm:ml-auto">CSV-Export</LinkButton>}
       </div>
       {isAdmin && <p className="text-xs text-muted">Der Export wird protokolliert. Gib Mitgliederdaten nur an Personen weiter, die sie für Vereinszwecke brauchen.</p>}
 
@@ -196,21 +197,21 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
       ) : page.items.length === 0 ? (
         <EmptyState title="Keine Mitglieder gefunden." />
       ) : (
-        <Card flush className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-xs text-muted">
-              <tr><th className="p-3 font-medium">Nr.</th><th className="p-3 font-medium">Name</th><th className="p-3 font-medium">Rolle</th><th className="p-3 font-medium">Ort</th><th className="p-3 font-medium">Beitragsklasse</th><th className="p-3 font-medium">Eintritt</th><th className="p-3" /></tr>
+        <Card flush className="sm:overflow-x-auto">
+          <table className={stackTable.table}>
+            <thead className={stackTable.thead}>
+              <tr><th className="p-3 font-medium">Nr.</th><th className="p-3 font-medium">Name</th><th className="p-3 font-medium">Rolle</th><th className="p-3 font-medium">Ort</th><th className="p-3 font-medium">Beitragsklasse</th><th className="p-3 font-medium">Eintritt</th><th className="p-3"><span className="sr-only">Aktionen</span></th></tr>
             </thead>
-            <tbody>
+            <tbody className={stackTable.tbody}>
               {page.items.map((m) => (
-                <tr key={m.userId} className="border-b border-border last:border-0">
-                  <td className="p-3 font-mono text-xs">{m.memberNo}</td>
-                  <td className="p-3">{m.name} {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
-                  <td className="p-3 text-muted">{ROLE_LABEL[m.role]}</td>
-                  <td className="p-3 text-muted">{m.city || "–"}</td>
-                  <td className="p-3 text-muted">{m.feeClassName ?? "–"}</td>
-                  <td className="p-3 text-muted">{dateDe(m.joinedOn)}</td>
-                  <td className="p-3 text-right"><Button size="sm" variant="secondary" onClick={() => show(m.userId)}>{isAdmin ? "Bearbeiten" : "Ansehen"}</Button></td>
+                <tr key={m.userId} className={stackTable.tr}>
+                  <td className={stackTable.td}><CellLabel>Nr.</CellLabel><span className="font-mono text-xs">{m.memberNo}</span></td>
+                  <td className={stackTable.tdMain}>{m.name} {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
+                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Rolle</CellLabel>{ROLE_LABEL[m.role]}</td>
+                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Ort</CellLabel>{m.city || "–"}</td>
+                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Beitragsklasse</CellLabel>{m.feeClassName ?? "–"}</td>
+                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Eintritt</CellLabel>{dateDe(m.joinedOn)}</td>
+                  <td className={clsx(stackTable.tdActions, "sm:text-right")}><Button size="sm" variant="secondary" className="max-sm:w-full" onClick={() => show(m.userId)}>{isAdmin ? "Bearbeiten" : "Ansehen"}</Button></td>
                 </tr>
               ))}
             </tbody>

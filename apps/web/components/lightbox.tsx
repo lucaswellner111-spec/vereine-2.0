@@ -42,7 +42,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
         type="button"
         onClick={onClose}
         aria-label="Schließen"
-        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+        className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
       >
         <X size={20} aria-hidden />
       </button>
@@ -56,7 +56,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
               e.stopPropagation();
               onIndex(index - 1);
             }}
-            className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"
+            className="absolute left-3 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:invisible"
           >
             <ChevronLeft size={20} aria-hidden />
           </button>
@@ -68,7 +68,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
               e.stopPropagation();
               onIndex(index + 1);
             }}
-            className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"
+            className="absolute right-3 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:invisible"
           >
             <ChevronRight size={20} aria-hidden />
           </button>

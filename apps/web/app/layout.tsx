@@ -16,6 +16,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // cover: env(safe-area-inset-*) liefert auf iOS echte Werte (Notch, Home-Leiste);
+  // resizes-content: die Bildschirmtastatur verkleinert den Inhalt statt ihn zu ueberdecken.
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f7f5" },
     { media: "(prefers-color-scheme: dark)", color: "#0e1410" },

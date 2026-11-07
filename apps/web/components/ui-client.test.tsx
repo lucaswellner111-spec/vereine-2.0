@@ -1,9 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fieldAria } from "./ui";
-import { Dialog, SegmentedControl } from "./ui-client";
+import { Dialog, SegmentedControl, useEscapeLayer } from "./ui-client";
 
 afterEach(() => {
   cleanup();
@@ -133,6 +133,81 @@ describe("Dialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(document.body.style.overflow).toBe("");
+  });
+});
+
+function Single({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Dialog
+      open={open}
+      onClose={() => {
+        onClose();
+        setOpen(false);
+      }}
+      title="Einzeln"
+    >
+      <p>Nur Text</p>
+    </Dialog>
+  );
+}
+
+describe("useEscapeLayer", () => {
+  it("Fokus auf body: Escape ruft onClose, Scroll-Sperre danach aufgehoben", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<Single onClose={onClose} />);
+    expect(document.body.style.overflow).toBe("hidden");
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("zwei verschachtelte Ebenen: Escape auf body schliesst nur die obere", async () => {
+    const user = userEvent.setup();
+    render(<Nested />);
+    await user.click(screen.getByRole("button", { name: "Öffnen" }));
+    await user.click(screen.getByRole("button", { name: "Innen öffnen" }));
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Innen" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Außen" })).toBeTruthy();
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("defaultPrevented verhindert das Schliessen", () => {
+    const onEscape = vi.fn();
+    function Layer() {
+      useEscapeLayer(true, onEscape);
+      return null;
+    }
+    render(<Layer />);
+    const prevent = (e: KeyboardEvent) => e.preventDefault();
+    window.addEventListener("keydown", prevent, { capture: true });
+    try {
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(onEscape).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", prevent, { capture: true });
+    }
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+  });
+
+  it("inaktive Ebene reagiert nicht", () => {
+    const onEscape = vi.fn();
+    function Layer() {
+      useEscapeLayer(false, onEscape);
+      return null;
+    }
+    render(<Layer />);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onEscape).not.toHaveBeenCalled();
   });
 });
 

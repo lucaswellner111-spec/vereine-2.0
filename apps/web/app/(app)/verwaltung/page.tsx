@@ -5,17 +5,19 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { ArrowLink, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
 
 export default function VerwaltungIndexPage() {
   const { orgs, slug, setSlug, detail, role, refresh, error, setError } = useVerwaltung();
   const router = useRouter();
   const items = itemsForRole(role);
+  const isDesktop = useIsDesktop();
 
   // Auf grossen Bildschirmen steht das Menue in der Seitenleiste: direkt zum ersten Bereich.
   useEffect(() => {
-    if (items.length > 0 && window.matchMedia("(min-width: 768px)").matches) router.replace(`/verwaltung/${items[0].id}`);
-  }, [items.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (items.length > 0 && isDesktop) router.replace(`/verwaltung/${items[0].id}`);
+  }, [items.length, isDesktop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (orgs === null) return <CardSkeletons count={2} />;
   if (orgs.length === 0) {

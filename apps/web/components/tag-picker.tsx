@@ -40,7 +40,7 @@ export function TagPicker({ value, onChange, max, label = "Tags", hint }: { valu
                 type="button"
                 onClick={() => toggle(t)}
                 aria-label={`${tagLabel(t)} entfernen`}
-                className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/25"
+                className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/20 pointer-coarse:py-2"
               >
                 {tagLabel(t)} <X size={12} aria-hidden />
               </button>
@@ -86,7 +86,7 @@ export function TagPicker({ value, onChange, max, label = "Tags", hint }: { valu
                         disabled={!selected && full}
                         onClick={() => toggle(t.id)}
                         className={clsx(
-                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:py-2",
                           selected ? "border-brand bg-brand/15 font-medium text-brand" : "border-border text-text hover:bg-surface-2",
                         )}
                       >

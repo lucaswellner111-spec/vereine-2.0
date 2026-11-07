@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { PersonItem } from "@vereine/shared";
 import { Alert, ArrowLink, Avatar, Button, Card, EmptyState, ErrorState, Input, ListSkeleton, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
+import { useDesktopAutoFocus } from "@/lib/use-media-query";
 
 export default function PeoplePage() {
   const [q, setQ] = useState("");
@@ -13,6 +14,9 @@ export default function PeoplePage() {
   const active = term.length >= 2;
   const people = useApi<PersonItem[]>(active ? `/profiles/search?q=${encodeURIComponent(term)}` : null, { debounceMs: 250, keepPrevious: true });
   const [error, setError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  // kein autoFocus am Handy (Tastatur wuerde sofort aufgehen)
+  useDesktopAutoFocus(searchRef);
 
   async function follow(p: PersonItem) {
     setError(null);
@@ -57,7 +61,7 @@ export default function PeoplePage() {
         <Input
           id="people-q"
           type="search"
-          autoFocus
+          ref={searchRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Mindestens 2 Zeichen …"

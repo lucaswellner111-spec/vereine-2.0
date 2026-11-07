@@ -1,52 +1,134 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef } from "react";
 import type { ConversationSummary } from "@vereine/shared";
 import { NewChat } from "@/components/chat/new-chat";
 import { Thread } from "@/components/chat/thread";
 import { Alert, Avatar, Badge, Button, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { lockScroll } from "@/components/ui-client";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
 import { useChat, useChatEvents } from "@/lib/chat";
+import { useImmersive } from "@/lib/shell";
+import { useIsDesktop } from "@/lib/use-media-query";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" });
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
+// useSearchParams braucht eine Suspense-Grenze (sonst bricht der statische Build ab)
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+      <ChatView />
+    </Suspense>
+  );
+}
+
+/**
+ * Chat mit Zustand in der URL: ?c=<id> = offene Unterhaltung, ?neu=1 = neuer Chat.
+ * Handy: Oeffnen legt einen Verlaufseintrag an (Zurueck-Taste schliesst den Thread), Thread im Vollbild.
+ * Desktop: zweispaltig, Auswahl ersetzt den Eintrag (kein Verlauf je Klick).
+ */
+function ChatView() {
   const { user } = useAuth();
   const { live } = useChat();
+  const router = useRouter();
+  const pathname = usePathname() ?? "/chat";
+  const params = useSearchParams();
+  const active = params.get("c");
+  const creating = !active && params.get("neu") === "1";
+  const isDesktop = useIsDesktop();
   const conversations = useApi<ConversationSummary[]>("/chat/conversations");
   const list = conversations.data;
   const load = conversations.reload;
-  const [active, setActive] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   useChatEvents(load);
 
-  // Desktop: erste Unterhaltung direkt oeffnen; Mobil: erst die Liste zeigen.
+  const inThread = !!active || creating;
+  const immersive = inThread && !isDesktop;
+  useImmersive(immersive);
+  useEffect(() => (immersive ? lockScroll() : undefined), [immersive]);
+
+  // Haben wir selbst einen Verlaufseintrag angelegt? Dann fuehrt "Zurueck" per history zurueck,
+  // sonst (Direktlink, z. B. aus einer Mitteilung) wird die Liste ersetzt, statt die App zu verlassen.
+  const pushedHere = useRef(false);
+  const navigate = useCallback(
+    (query: string) => {
+      const href = query ? `${pathname}?${query}` : pathname;
+      if (isDesktop || !query) router.replace(href, { scroll: false });
+      else {
+        pushedHere.current = true;
+        router.push(href, { scroll: false });
+      }
+    },
+    [isDesktop, pathname, router],
+  );
+
+  const openConversation = (id: string) => navigate(`c=${encodeURIComponent(id)}`);
+  const startCreating = () => navigate("neu=1");
+  const backToList = () => {
+    if (!isDesktop && pushedHere.current) {
+      pushedHere.current = false;
+      router.back();
+    } else router.replace(pathname, { scroll: false });
+  };
+
+  // Desktop: erste Unterhaltung direkt oeffnen; Handy: erst die Liste zeigen.
   useEffect(() => {
-    if (list && active === null && !creating && window.matchMedia("(min-width: 768px)").matches && list[0]) setActive(list[0].id);
-  }, [list]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (isDesktop && list && !active && !creating && list[0]) router.replace(`${pathname}?c=${encodeURIComponent(list[0].id)}`, { scroll: false });
+  }, [list, isDesktop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wurde die aktive Unterhaltung entfernt (z. B. Gruppe verlassen), zurueck zur Liste.
+  // Ausnahme: gerade angelegt, die Liste ist aber noch nicht neu geladen.
+  const pendingId = useRef<string | null>(null);
   useEffect(() => {
-    if (list && active && !list.some((c) => c.id === active)) setActive(null);
-  }, [list, active]);
+    if (!list || !active) return;
+    if (list.some((c) => c.id === active)) {
+      if (pendingId.current === active) pendingId.current = null;
+      return;
+    }
+    if (pendingId.current === active) return;
+    router.replace(pathname, { scroll: false });
+  }, [list, active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const showList = !active && !creating;
+  // Zurueck am Handy (Knopf oder Browser-Taste): Fokus auf den Listeneintrag der letzten Unterhaltung
+  const lastActive = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = lastActive.current;
+    lastActive.current = active;
+    // Browser-Zurueck hat unseren Eintrag verbraucht: naechster Thread ohne eigenen Push darf nicht history.back() nutzen
+    if (!active && !creating) pushedHere.current = false;
+    if (!active && prev && !isDesktop) {
+      document.querySelector<HTMLElement>(`[data-conv-id="${CSS.escape(prev)}"]`)?.focus();
+    }
+  }, [active, isDesktop]);
+
+  const showList = !inThread;
 
   return (
     <>
-      <PageHeader
-        title="Chat"
-        subtitle={live ? "Verbunden – Nachrichten kommen sofort an." : "Nachrichten werden regelmäßig abgerufen."}
-        action={<Button onClick={() => { setCreating(true); setActive(null); }}>Neuer Chat</Button>}
-      />
-      {conversations.error && list && <div className="mb-3"><Alert>{conversations.error}</Alert></div>}
+      <div className={clsx(inThread && "max-md:hidden")}>
+        <PageHeader
+          title="Chat"
+          subtitle={live ? "Verbunden – Nachrichten kommen sofort an." : "Nachrichten werden regelmäßig abgerufen."}
+          action={<Button onClick={startCreating}>Neuer Chat</Button>}
+        />
+        {conversations.error && list && <div className="mb-3"><Alert>{conversations.error}</Alert></div>}
+      </div>
 
-      <div className="grid h-[calc(100dvh-14rem)] min-h-[26rem] overflow-hidden rounded-xl border border-border bg-surface md:grid-cols-[17rem_1fr]">
-        <ul className={clsx("min-h-0 overflow-y-auto border-border md:block md:border-r", showList ? "block" : "hidden")} aria-label="Unterhaltungen">
+      <div
+        className={clsx(
+          // grid-cols-1 = minmax(0, 1fr): sonst waechst die implizite Spalte mit dem Inhalt und schneidet rechts ab
+          "grid grid-cols-1 overflow-hidden bg-surface md:h-[calc(100dvh-14rem)] md:min-h-[26rem] md:grid-cols-[17rem_1fr] md:rounded-xl md:border md:border-border",
+          inThread ? "max-md:h-dvh" : "rounded-xl border border-border max-md:h-auto",
+        )}
+      >
+        <ul
+          className={clsx("min-h-0 border-border md:block md:overflow-y-auto md:border-r", showList ? "block" : "hidden")}
+          aria-label="Unterhaltungen"
+        >
           {list === null && conversations.error && (
             <li className="p-3">
               <ErrorState message={conversations.error} onRetry={load} />
@@ -75,8 +157,10 @@ export default function ChatPage() {
             return (
               <li key={c.id}>
                 <button
-                  onClick={() => { setActive(c.id); setCreating(false); }}
-                  aria-current={c.id === active}
+                  type="button"
+                  data-conv-id={c.id}
+                  onClick={() => openConversation(c.id)}
+                  aria-current={c.id === active ? "true" : undefined}
                   className={clsx("flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-surface-2", c.id === active && "bg-surface-2")}
                 >
                   <Avatar name={c.title} />
@@ -89,7 +173,12 @@ export default function ChatPage() {
                       <span className={clsx("truncate text-xs", c.unread ? "font-medium text-text" : "text-muted")}>
                         {c.lastMessage ? `${c.lastMessage.mine ? "Du: " : ""}${c.lastMessage.preview}` : "Noch keine Nachricht"}
                       </span>
-                      {c.unread > 0 && <Badge tone="brand">{c.unread}</Badge>}
+                      {c.unread > 0 && (
+                        <Badge tone="brand">
+                          <span aria-hidden>{c.unread}</span>
+                          <span className="sr-only">{c.unread} ungelesen</span>
+                        </Badge>
+                      )}
                     </span>
                   </span>
                 </button>
@@ -100,15 +189,23 @@ export default function ChatPage() {
 
         <div className={clsx("min-h-0 flex-col", showList ? "hidden md:flex" : "flex")}>
           {creating ? (
-            <NewChat onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); setActive(id); load(); }} />
+            <NewChat
+              onClose={backToList}
+              onCreated={(id) => {
+                // ?neu=1 durch ?c=<id> ersetzen: Zurueck fuehrt dann zur Liste, nicht zum Formular
+                pendingId.current = id;
+                router.replace(`${pathname}?c=${encodeURIComponent(id)}`, { scroll: false });
+                load();
+              }}
+            />
           ) : active && user ? (
-            <Thread key={active} id={active} me={user} onBack={() => setActive(null)} onChanged={load} />
+            <Thread key={active} id={active} me={user} onBack={backToList} onChanged={load} focusTitle={!isDesktop} />
           ) : (
             <p className="m-auto p-6 text-center text-sm text-muted">Wähle eine Unterhaltung oder starte einen neuen Chat.</p>
           )}
         </div>
       </div>
-      <p className="mt-2 text-xs text-muted">
+      <p className={clsx("mt-2 text-xs text-muted", inThread && "max-md:hidden")}>
         Nachrichten werden verschlüsselt gespeichert und nach der eingestellten Frist automatisch gelöscht. Keine Ende-zu-Ende-Verschlüsselung: gemeldete Nachrichten können geprüft werden.
       </p>
     </>

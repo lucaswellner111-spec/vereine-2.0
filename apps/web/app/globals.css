@@ -31,7 +31,7 @@
   --brand: #1b6e45;
   --brand-hover: #145636;
   --brand-contrast: #ffffff;
-  --accent: #8a5a00;
+  --accent: #754c00;
   --danger: #b42318;
   --on-danger: #ffffff;
   --ring: #1b6e4566;
@@ -94,6 +94,21 @@ body {
   * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Trefferflaeche mind. 44x44 px bei Touch, ohne Optik zu aendern. Element braucht position. */
+@utility hit-area {
+  @media (pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
   }
 }
 

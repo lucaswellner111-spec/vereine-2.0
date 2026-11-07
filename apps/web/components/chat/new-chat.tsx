@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { ChatContact, ConversationDetail, OrgMemberName, OrgSummary } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -23,6 +24,10 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
   const [members, setMembers] = useState<OrgMemberName[]>([]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  // Beim Oeffnen Fokus auf die Ueberschrift (Inline-Bereich, kein modaler Dialog)
+  useEffect(() => titleRef.current?.focus(), []);
 
   useEffect(() => {
     api<OrgSummary[]>("/orgs/mine").then((o) => {
@@ -66,10 +71,19 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
   const filtered = (contacts ?? []).filter((c) => (c.name + c.context).toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <div className="flex h-full min-h-0 flex-col" role="dialog" aria-label="Neuer Chat">
-      <header className="flex items-center justify-between border-b border-border px-3 py-2.5">
-        <p className="text-sm font-medium">Neuer Chat</p>
-        <Button variant="ghost" size="sm" onClick={onClose}>Schließen</Button>
+    <section className="flex h-full min-h-0 flex-col" aria-labelledby="newchat-title">
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 max-md:py-1.5 max-md:pl-1">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Neuen Chat schließen"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text md:h-8 md:w-8"
+        >
+          <ArrowLeft size={18} aria-hidden />
+        </button>
+        <h2 id="newchat-title" ref={titleRef} tabIndex={-1} className="text-sm font-medium focus:outline-none focus-visible:underline">
+          Neuer Chat
+        </h2>
       </header>
       <div className="p-3 pb-0">
         <SegmentedControl
@@ -150,6 +164,6 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
         </form>
       )}
       </div>
-    </div>
+    </section>
   );
 }

@@ -16,7 +16,8 @@ type Size = "sm" | "md";
 export function buttonClasses({ variant = "primary", size = "md" }: { variant?: Variant; size?: Size } = {}) {
   return clsx(
     "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-    size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs",
+    // sm bei Touch etwas hoeher (40 px), Desktop-Optik unveraendert
+    size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs pointer-coarse:h-10",
     variant === "primary" && "bg-brand text-brand-contrast hover:bg-brand-hover",
     variant === "secondary" && "border border-border bg-surface text-text hover:bg-surface-2",
     variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
@@ -95,7 +96,7 @@ export function Input({ size = "md", invalid, className, ...props }: Omit<Compon
     <input
       aria-invalid={invalid ? "true" : undefined}
       {...props}
-      className={clsx(controlBase, size === "md" ? "h-10" : "h-9", className)}
+      className={clsx(controlBase, size === "md" ? "h-10" : "h-9 pointer-coarse:h-10", className)}
     />
   );
 }
@@ -105,7 +106,7 @@ export function Select({ size = "md", invalid, className, ...props }: Omit<Compo
     <select
       aria-invalid={invalid ? "true" : undefined}
       {...props}
-      className={clsx(controlBase, size === "md" ? "h-10" : "h-9", className)}
+      className={clsx(controlBase, size === "md" ? "h-10" : "h-9 pointer-coarse:h-10", className)}
     />
   );
 }
@@ -193,6 +194,27 @@ export function Checkbox({
 /** flush = ohne Innenabstand (Listen mit eigenen Zeilenabstaenden); p-0 per className wirkt nicht, da p-4 spaeter sortiert. */
 export function Card({ className, flush = false, children }: { className?: string; flush?: boolean; children: ReactNode }) {
   return <div className={clsx("rounded-xl border border-border bg-surface shadow-card", !flush && "p-4", className)}>{children}</div>;
+}
+
+/**
+ * Tabelle, die unter sm (640 px) zu Karten wird: jede Zeile ein Block, Spalten untereinander mit
+ * sichtbarer Beschriftung (CellLabel). Der Tabellenkopf bleibt fuer Screenreader (sr-only); unter sm
+ * geht die Tabellen-Semantik per CSS bewusst verloren, die Beschriftungen tragen die Bedeutung.
+ */
+export const stackTable = {
+  table: "w-full text-left text-sm max-sm:block",
+  thead: "border-b border-border text-xs text-muted max-sm:sr-only",
+  tbody: "max-sm:block max-sm:divide-y max-sm:divide-border",
+  // flex-col statt block: so kann die Titelzelle (tdMain) per order nach oben, auch wenn sie nicht die erste Spalte ist
+  tr: "border-b border-border last:border-0 max-sm:flex max-sm:flex-col max-sm:gap-1 max-sm:border-0 max-sm:p-3",
+  td: "p-3 max-sm:flex max-sm:items-baseline max-sm:justify-between max-sm:gap-3 max-sm:p-0",
+  tdMain: "p-3 max-sm:order-first max-sm:block max-sm:p-0 max-sm:font-medium",
+  tdActions: "p-3 max-sm:block max-sm:p-0 max-sm:pt-2",
+};
+
+/** Beschriftung einer Zelle, nur in der Kartenansicht (unter sm) sichtbar. */
+export function CellLabel({ children }: { children: ReactNode }) {
+  return <span className="text-xs text-muted sm:hidden">{children}</span>;
 }
 
 export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "brand" | "accent" | "danger"; children: ReactNode }) {

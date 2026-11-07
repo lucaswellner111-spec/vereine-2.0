@@ -29,10 +29,11 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
   const end = event.endsAt ? new Date(event.endsAt) : null;
 
   return (
-    <Card className={clsx(event.canceled && "opacity-60")}>
+    <Card>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className={clsx("font-semibold", event.canceled && "line-through")}>
+          {/* abgesagt: ohne Transparenz (Kontrast), erkennbar an Durchstreichung, gedaempftem Titel und Badge */}
+          <p className={clsx("font-semibold", event.canceled && "text-muted line-through")}>
             <Link href={`/kalender/${event.id}`} className="hover:text-brand hover:underline">{event.title}</Link>
           </p>
           <p className="mt-0.5 text-sm text-muted">
@@ -47,16 +48,18 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
             {event.canceled && <Badge tone="danger">abgesagt</Badge>}
           </p>
         </div>
-        <Link href={`/kalender/${event.id}`} className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text">
-          Details
-        </Link>
-        <a
-          href={`/api/events/${event.id}/ics`}
-          className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:bg-surface-2 hover:text-text"
-          aria-label={`${event.title} in den Kalender übernehmen (.ics)`}
-        >
-          + Kalender
-        </a>
+        <div className="flex shrink-0 gap-2">
+          <Link href={`/kalender/${event.id}`} className="inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs text-muted hover:bg-surface-2 hover:text-text pointer-coarse:min-h-11">
+            Details
+          </Link>
+          <a
+            href={`/api/events/${event.id}/ics`}
+            className="inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs text-muted hover:bg-surface-2 hover:text-text pointer-coarse:min-h-11"
+            aria-label={`${event.title} in den Kalender übernehmen (.ics)`}
+          >
+            + Kalender
+          </a>
+        </div>
       </div>
       {event.description && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{event.description}</p>}
 

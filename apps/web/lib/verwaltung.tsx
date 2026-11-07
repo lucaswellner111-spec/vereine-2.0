@@ -46,6 +46,8 @@ type Ctx = {
   detail: OrgDetail | null;
   role: OrgRole | null;
   refresh: () => void;
+  /** Liste der verwaltbaren Vereine neu laden (nach Gruendung, Rollenwechsel). */
+  reloadOrgs: () => void;
   error: string | null;
   setError: (message: string | null) => void;
 };
@@ -53,7 +55,7 @@ type Ctx = {
 const VerwaltungContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "verwaltung-org";
 
-/** Laedt einmal die verwaltbaren Vereine; Seitenleiste und Unterseiten teilen sich Auswahl und Rolle. */
+/** Laedt die verwaltbaren Vereine (beim Start und per reloadOrgs); Seitenleiste und Unterseiten teilen sich Auswahl und Rolle. */
 export function VerwaltungProvider({ children }: { children: ReactNode }) {
   const [orgs, setOrgs] = useState<OrgSummary[] | null>(null);
   const [slug, setSlugState] = useState("");
@@ -64,20 +66,27 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   // Fehler gehoeren zur Seite bzw. zum Verein: beim Wechsel zuruecksetzen
   useEffect(() => setError(null), [pathname, slug]);
 
-  useEffect(() => {
+  // Laedt die verwaltbaren Vereine; die bisherige Auswahl bleibt, wenn es den Verein noch gibt.
+  // Erneut aufrufen, wenn sich Rollen aendern (z. B. nach "Verein gruenden"), damit die Navigation ohne Reload passt.
+  const reloadOrgs = useCallback(() => {
     api<OrgSummary[]>("/orgs/managed")
       .then((list) => {
         setOrgs(list);
-        let wanted = "";
-        try {
-          wanted = new URLSearchParams(window.location.search).get("verein") ?? localStorage.getItem(STORAGE_KEY) ?? "";
-        } catch {
-          /* localStorage nicht verfuegbar */
-        }
-        setSlugState(list.some((o) => o.slug === wanted) ? wanted : (list[0]?.slug ?? ""));
+        setSlugState((current) => {
+          if (current && list.some((o) => o.slug === current)) return current;
+          let wanted = "";
+          try {
+            wanted = new URLSearchParams(window.location.search).get("verein") ?? localStorage.getItem(STORAGE_KEY) ?? "";
+          } catch {
+            /* localStorage nicht verfuegbar */
+          }
+          return list.some((o) => o.slug === wanted) ? wanted : (list[0]?.slug ?? "");
+        });
       })
-      .catch(() => setOrgs([]));
+      .catch(() => setOrgs((old) => old ?? []));
   }, []);
+
+  useEffect(() => reloadOrgs(), [reloadOrgs]);
 
   const setSlug = useCallback((next: string) => {
     setSlugState(next);
@@ -99,8 +108,8 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<Ctx>(
-    () => ({ orgs, slug, setSlug, detail, role: detail?.viewer.role ?? null, refresh, error, setError }),
-    [orgs, slug, setSlug, detail, refresh, error],
+    () => ({ orgs, slug, setSlug, detail, role: detail?.viewer.role ?? null, refresh, reloadOrgs, error, setError }),
+    [orgs, slug, setSlug, detail, refresh, reloadOrgs, error],
   );
   return <VerwaltungContext.Provider value={value}>{children}</VerwaltungContext.Provider>;
 }

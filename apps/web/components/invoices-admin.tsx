@@ -7,7 +7,8 @@ import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
 import { InvoiceStatusBadge } from "./invoice-status";
 import { useApi } from "@/lib/use-api";
-import { Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, TextareaField } from "./ui";
+import clsx from "clsx";
+import { Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, stackTable, TextareaField } from "./ui";
 import { ask } from "./ui-hosts";
 
 type Line = { description: string; quantity: string; price: string; vatRate: string };
@@ -95,9 +96,9 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
       ) : rows.length === 0 ? (
         <EmptyState title="Keine Rechnungen gefunden." />
       ) : (
-        <Card flush className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-xs text-muted">
+        <Card flush className="sm:overflow-x-auto">
+          <table className={stackTable.table}>
+            <thead className={stackTable.thead}>
               <tr>
                 <th className="p-3 font-medium">Nr.</th>
                 <th className="p-3 font-medium">An</th>
@@ -107,16 +108,22 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
                 <th className="p-3 font-medium"><span className="sr-only">Aktionen</span></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={stackTable.tbody}>
               {rows.map((i) => (
-                <tr key={i.id} className="border-b border-border align-top last:border-0">
-                  <td className="p-3 font-mono text-xs">{i.number ?? "Entwurf"}</td>
-                  <td className="p-3">{i.recipientName}</td>
-                  <td className="p-3">{dateDe(i.dueDate)}</td>
-                  <td className="p-3">{eurCents(i.totalCents)}</td>
-                  <td className="p-3"><InvoiceStatusBadge status={i.displayStatus} /></td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap justify-end gap-1.5">
+                <tr key={i.id} className={clsx(stackTable.tr, "align-top")}>
+                  <td className={stackTable.td}><CellLabel>Nr.</CellLabel><span className="font-mono text-xs">{i.number ?? "Entwurf"}</span></td>
+                  <td className={stackTable.tdMain}>
+                    {/* Karte: Empfaenger und Status in der Titelzeile; Tabelle: Status in eigener Spalte */}
+                    <span className="max-sm:flex max-sm:items-center max-sm:justify-between max-sm:gap-2">
+                      <span className="min-w-0 max-sm:truncate">{i.recipientName}</span>
+                      <span className="shrink-0 font-normal sm:hidden"><InvoiceStatusBadge status={i.displayStatus} /></span>
+                    </span>
+                  </td>
+                  <td className={stackTable.td}><CellLabel>Fällig</CellLabel>{dateDe(i.dueDate)}</td>
+                  <td className={stackTable.td}><CellLabel>Betrag</CellLabel>{eurCents(i.totalCents)}</td>
+                  <td className={clsx(stackTable.td, "max-sm:hidden")}><InvoiceStatusBadge status={i.displayStatus} /></td>
+                  <td className={stackTable.tdActions}>
+                    <div className="flex flex-wrap justify-end gap-1.5 max-sm:justify-start">
                       <LinkButton native size="sm" variant="secondary" href={`/api/invoices/${i.id}/pdf`}>PDF</LinkButton>
                       {i.status === "draft" && (
                         <>
@@ -167,9 +174,9 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
                       )}
                     </div>
                     {voiding === i.id && (
-                      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                      <div className="mt-2 flex flex-wrap items-center justify-end gap-2 max-sm:justify-start">
                         <label htmlFor={`void-${i.id}`} className="sr-only">Grund</label>
-                        <Input id={`void-${i.id}`} size="sm" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Grund (mind. 5 Zeichen)" maxLength={300} className="w-56" />
+                        <Input id={`void-${i.id}`} size="sm" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Grund (mind. 5 Zeichen)" maxLength={300} className="min-w-0 flex-1 sm:w-56 sm:flex-none" />
                         <Button
                           size="sm"
                           variant="danger"

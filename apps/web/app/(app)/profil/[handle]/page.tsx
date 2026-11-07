@@ -100,7 +100,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={mediaUrl(x.media[0].id, "thumb")} alt="" loading="lazy" className="h-full w-full object-cover" />
                 {x.media.length > 1 && (
-                  <span className="absolute right-1 top-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 text-[10px] text-white">
+                  <span className="absolute right-1 top-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 text-[11px] text-white">
                     <Images size={12} aria-hidden />
                     {x.media.length}
                     <span className="sr-only"> Bilder</span>
