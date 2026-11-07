@@ -68,8 +68,8 @@ export default function LoginPage() {
           <Field id="password" label="Passwort" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </>
       )}
-      <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Anmelden …" : challenge ? "Bestätigen" : "Anmelden"}
+      <Button type="submit" busy={busy} className="w-full">
+        {challenge ? "Bestätigen" : "Anmelden"}
       </Button>
       {challenge && (
         <button type="button" onClick={() => { setChallenge(null); setCode(""); setError(null); }} className="w-full text-center text-sm text-muted hover:text-text">

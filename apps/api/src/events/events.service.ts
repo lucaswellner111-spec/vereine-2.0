@@ -8,13 +8,14 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
-import type { CreateEventInput, EventItem, OrgRole, PublicUser, RsvpItem, RsvpStatus } from "@vereine/shared";
+import type { CreateEventInput, EventAttendees, EventItem, OrgRole, PublicUser, RsvpItem, RsvpStatus } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { JobsService } from "../jobs/jobs.service";
 import { eventRsvps, events, follows, orgMembers, organizations, teamMembers, teams } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { buildIcs, buildIcsFeed } from "./ics";
 import { occurrences } from "./recurrence";
 
@@ -32,6 +33,7 @@ export class EventsService implements OnModuleInit {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   onModuleInit() {
@@ -74,6 +76,38 @@ export class EventsService implements OnModuleInit {
     return rows
       .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer", status: r.status as RsvpStatus }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }
+
+  /**
+   * Zusagen fuer Teilnehmende: nur aktive Vereinsmitglieder sehen bei internen/Team-Terminen Namen und Avatar
+   * (Datenminimierung: kein Vielleicht/Nein, keine E-Mail). Oeffentliche Termine und Follower: nur die Anzahl.
+   */
+  async attendees(user: PublicUser, id: string): Promise<EventAttendees> {
+    const event = await this.get(user, id); // 404, wenn der Termin nicht sichtbar ist
+    const total = event.counts.yes;
+    const [row] = await this.db.select({ orgId: events.orgId, teamId: events.teamId }).from(events).where(eq(events.id, id)).limit(1);
+    const role = row ? await this.orgs.activeRole(row.orgId, user.id) : null;
+    if (!row || event.visibility === "public" || !role) return { visible: false, total, people: [] };
+    // Nur aktuelle Mitglieder zeigen: Zusagen Ausgetretener (z. B. an vergangenen Terminen) bleiben verborgen,
+    // bei Team-Terminen zusaetzlich nur aktuelle Teammitglieder
+    const conds: SQL[] = [eq(eventRsvps.eventId, id), eq(eventRsvps.status, "yes")];
+    if (row.teamId) {
+      conds.push(sql`exists (select 1 from ${teamMembers} where ${teamMembers.teamId} = ${row.teamId} and ${teamMembers.userId} = ${eventRsvps.userId})`);
+    }
+    const rows = await this.db
+      .select({ userId: eventRsvps.userId })
+      .from(eventRsvps)
+      .innerJoin(orgMembers, and(eq(orgMembers.orgId, row.orgId), eq(orgMembers.userId, eventRsvps.userId), eq(orgMembers.status, "active")))
+      .where(and(...conds))
+      .limit(500);
+    const ids = rows.map((r) => r.userId);
+    const [names, profs] = await Promise.all([this.directory.names(ids), this.access.ensureMany(ids)]);
+    const people = ids
+      .filter((uid) => names.has(uid)) // geloeschte Konten nicht anzeigen
+      .map((uid) => ({ userId: uid, name: names.get(uid)!, handle: profs.get(uid)?.handle ?? null, avatarId: profs.get(uid)?.avatarMediaId ?? null }))
+      .sort((a, b) => a.name.localeCompare(b.name, "de"));
+    // Anzahl passend zu den gezeigten Personen (ohne Ausgetretene)
+    return { visible: true, total: people.length, people };
   }
 
   async ics(user: PublicUser, id: string): Promise<string> {

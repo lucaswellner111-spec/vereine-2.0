@@ -40,7 +40,7 @@ export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | 
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <h3 className="mb-3 text-sm font-semibold">Eintritte je Monat</h3>
+          <h2 className="mb-3 text-sm font-semibold">Eintritte je Monat</h2>
           <div className="flex h-24 items-end gap-1" role="img" aria-label="Eintritte der letzten 12 Monate">
             {d.joinsByMonth.map((m) => (
               <div key={m.month} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${m.month}: ${m.joins}`}>
@@ -51,7 +51,7 @@ export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | 
           <div className="mt-1 flex justify-between text-[11px] text-muted"><span>{d.joinsByMonth[0]?.month}</span><span>{d.joinsByMonth[11]?.month}</span></div>
         </Card>
         <Card>
-          <h3 className="mb-3 text-sm font-semibold">Mitglieder nach Beitragsklasse</h3>
+          <h2 className="mb-3 text-sm font-semibold">Mitglieder nach Beitragsklasse</h2>
           <ul className="space-y-1 text-sm">
             {d.byFeeClass.length === 0 && <li className="text-muted">Noch keine Daten.</li>}
             {d.byFeeClass.map((c) => (
@@ -61,7 +61,7 @@ export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | 
         </Card>
       </div>
       <Card>
-        <h3 className="mb-3 text-sm font-semibold">Nächste Termine</h3>
+        <h2 className="mb-3 text-sm font-semibold">Nächste Termine</h2>
         {d.upcomingEvents.length === 0 ? (
           <p className="text-sm text-muted">Keine anstehenden Termine.</p>
         ) : (
@@ -103,7 +103,7 @@ export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canE
   }
 
   async function remove(c: FeeClassItem) {
-    if (!(await ask(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`, { confirmLabel: "Löschen" }))) return;
+    if (!(await ask(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`, { confirmLabel: "Endgültig löschen", danger: true }))) return;
     onError(null);
     try {
       await api(`/orgs/${slug}/fee-classes/${c.id}`, { method: "DELETE" });
@@ -274,7 +274,7 @@ function MemberEditor({ slug, record, classes, canEdit, onError, onClose, onSave
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-semibold">{record.name} <span className="text-sm font-normal text-muted">· Nr. {record.memberNo}</span></h3>
+        <h2 className="font-semibold">{record.name} <span className="text-sm font-normal text-muted">· Nr. {record.memberNo}</span></h2>
         <Button size="sm" variant="ghost" onClick={onClose}>Schließen</Button>
       </div>
       <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">

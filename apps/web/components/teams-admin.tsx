@@ -88,7 +88,7 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                       size="sm"
                       variant="ghost"
                       onClick={async () => {
-                        if (!(await ask(`Team „${t.name}“ samt Terminen löschen?`, { confirmLabel: "Löschen" }))) return;
+                        if (!(await ask(`Team „${t.name}“ samt Terminen löschen?`, { confirmLabel: "Endgültig löschen", danger: true }))) return;
                         await run(async () => {
                           await api(`/orgs/${slug}/teams/${t.id}`, { method: "DELETE" });
                           load();

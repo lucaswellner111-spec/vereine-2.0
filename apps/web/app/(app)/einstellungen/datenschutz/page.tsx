@@ -3,11 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ConsentState } from "@vereine/shared";
-import { SettingsTabs } from "@/components/settings-tabs";
+import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, Button, Card, ErrorState, Field, ListSkeleton, PageHeader, Toggle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
+import { toast } from "@/components/ui-hosts";
 
 const labels: Record<string, { title: string; text: string; locked?: boolean }> = {
   terms: { title: "Nutzungsbedingungen", text: "Voraussetzung für die Nutzung.", locked: true },
@@ -26,7 +27,6 @@ export default function PrivacyPage() {
   const router = useRouter();
   const consentList = useApi<ConsentState[]>("/privacy/consents");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function PrivacyPage() {
       const a = Object.assign(document.createElement("a"), { href: url, download: "meine-daten.json" });
       a.click();
       URL.revokeObjectURL(url);
-      setNotice("Deine Daten wurden heruntergeladen.");
+      toast.success("Deine Daten wurden heruntergeladen.");
     } catch (e) {
       setError(describeError(e));
     }
@@ -68,10 +68,9 @@ export default function PrivacyPage() {
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Datenschutz" subtitle={`Deine Einstellungen und Rechte, ${user?.displayName ?? ""}.`} />
-      <SettingsTabs active="/einstellungen/datenschutz" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
       <h2 className="mb-2 font-semibold">Einwilligungen</h2>
       {consentList.error && !consentList.data ? (

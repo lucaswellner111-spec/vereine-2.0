@@ -5,7 +5,7 @@ import { UiHosts } from "@/components/ui-hosts";
 import { AuthProvider } from "@/lib/auth";
 import { ALLOW_INDEXING, SITE_DESCRIPTION, SITE_URL } from "@/lib/site-meta";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
-import "@fontsource-variable/inter";
+import { inter, interExt } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -39,7 +39,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="de" suppressHydrationWarning>
+    <html lang="de" suppressHydrationWarning className={`${inter.variable} ${interExt.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

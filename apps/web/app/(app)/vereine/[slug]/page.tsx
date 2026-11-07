@@ -3,13 +3,16 @@
 import { use, useRef, useState } from "react";
 import { MAX_ORG_TAGS, type FeedPost, type OrgDetail } from "@vereine/shared";
 import { TagChips } from "@/components/tag-chips";
-import { TagPicker } from "@/components/tag-picker";
+import { LazyTagPicker as TagPicker } from "@/components/lazy";
 import { PostCard } from "@/components/post-card";
-import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState } from "@/components/ui";
+import { Building2 } from "lucide-react";
+import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, SectionTitle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/labels";
 import { useApi, useBusy } from "@/lib/use-api";
+import { useInfiniteScroll, useMoreFailed } from "@/lib/use-infinite-scroll";
+import { usePageTitle } from "@/lib/use-page-title";
 import { ask, toast } from "@/components/ui-hosts";
 
 type PostsPage = { posts: FeedPost[]; nextCursor: string | null };
@@ -23,7 +26,10 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
   const pathRef = useRef(postsPath);
   pathRef.current = postsPath;
   const [moreBusy, runMore] = useBusy();
+  const [moreFailed, setMoreFailed] = useMoreFailed(postsPath);
+  const [followBusy, runFollow] = useBusy();
   const [error, setError] = useState<string | null>(null);
+  usePageTitle(org.data?.name ?? null);
   const [editTags, setEditTags] = useState<string[] | null>(null);
 
   async function act(fn: () => Promise<OrgDetail>) {
@@ -45,12 +51,30 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
         if (pathRef.current !== requested) return;
         posts.setData((prev) => (prev ? { ...p, posts: [...prev.posts, ...p.posts] } : p));
       } catch (e) {
+        setMoreFailed(true); // Sentinel sperren, sonst Endlosschleife
+        toast.error(describeError(e));
+      }
+    });
+  const sentinelRef = useInfiniteScroll({ hasMore: !!posts.data?.nextCursor && !moreFailed, loading: moreBusy, onLoadMore: () => void loadMore() });
+
+  // Optimistisch folgen/entfolgen; bei Fehler zurueck
+  const toggleFollow = () =>
+    runFollow(async () => {
+      const o = org.data;
+      if (!o) return;
+      const following = o.viewer.following;
+      setError(null);
+      org.setData({ ...o, followers: Math.max(0, o.followers + (following ? -1 : 1)), viewer: { ...o.viewer, following: !following } });
+      try {
+        org.setData(await api<OrgDetail>(`/orgs/${slug}/follow`, following ? { method: "DELETE" } : { method: "POST", body: {} }));
+      } catch (e) {
+        org.setData(o);
         toast.error(describeError(e));
       }
     });
 
   if (org.errorStatus === 404) {
-    return <EmptyState title="Dieser Verein existiert nicht." action={<ArrowLink href="/vereine">Zur Übersicht</ArrowLink>} />;
+    return <EmptyState icon={Building2} title="Dieser Verein existiert nicht." action={<ArrowLink href="/vereine">Zur Übersicht</ArrowLink>} />;
   }
   if (org.error && !org.data) return <ErrorState message={org.error} onRetry={org.reload} />;
   if (!org.data) return <CardSkeletons count={1} />;
@@ -79,19 +103,21 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
     <>
       <BackLink href="/vereine">Alle Vereine</BackLink>
       <Card className="mb-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <Avatar name={o.name} size={64} />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold">{o.name}</h1>
-            <p className="mt-1 flex items-center gap-2 text-sm text-muted">
+        <DetailHeader
+          media={<Avatar name={o.name} size={64} />}
+          title={o.name}
+          subtitle={
+            <span className="flex flex-wrap items-center gap-2">
               {o.city} <Badge>{o.category}</Badge>
               {viewer.role && <Badge tone="brand">{ROLE_LABEL[viewer.role]}</Badge>}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+            </span>
+          }
+          actions={
+          <>
             <Button
               variant={viewer.following ? "secondary" : "primary"}
-              onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/follow`, viewer.following ? { method: "DELETE" } : { method: "POST", body: {} }))}
+              aria-busy={followBusy || undefined}
+              onClick={toggleFollow}
             >
               {viewer.following ? "Du folgst" : "Folgen"}
             </Button>
@@ -105,7 +131,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  if (!(await ask("Mitgliedschaft wirklich beenden?", { confirmLabel: "Austreten" }))) return;
+                  if (!(await ask("Mitgliedschaft wirklich beenden? Du verlierst den Zugriff auf interne Termine und Chats des Vereins.", { title: "Austreten?", confirmLabel: "Austreten", danger: true }))) return;
                   setError(null);
                   try {
                     await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
@@ -119,8 +145,9 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
                 Austreten
               </Button>
             )}
-          </div>
-        </div>
+          </>
+          }
+        />
         {o.about && <p className="mt-4 text-sm">{o.about}</p>}
         {editTags === null ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -145,11 +172,12 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
 
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
-      <h2 className="mb-3 mt-6 font-semibold">Beiträge</h2>
+      <SectionTitle className="mb-3 mt-6">Beiträge</SectionTitle>
       {postList}
+      {posts.data?.nextCursor && <div ref={sentinelRef} aria-hidden />}
       {posts.data?.nextCursor && (
         <div className="mt-4 text-center">
-          <Button variant="secondary" busy={moreBusy} onClick={loadMore}>Mehr laden</Button>
+          <Button variant="secondary" busy={moreBusy} onClick={() => { setMoreFailed(false); void loadMore(); }}>Mehr laden</Button>
         </div>
       )}
     </>

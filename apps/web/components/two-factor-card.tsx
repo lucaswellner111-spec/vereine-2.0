@@ -107,7 +107,7 @@ export function TwoFactorCard({ onError }: { onError: (m: string | null) => void
             <p className="break-all font-mono text-xs text-muted">{setup.secret}</p>
             <Field id="tf-code" label="2. Code aus der App" inputMode="numeric" autoComplete="one-time-code" required minLength={6} maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy}>Aktivieren</Button>
+              <Button type="submit" busy={busy}>Aktivieren</Button>
               <Button type="button" variant="ghost" onClick={reset}>Abbrechen</Button>
             </div>
           </form>
@@ -117,7 +117,7 @@ export function TwoFactorCard({ onError }: { onError: (m: string | null) => void
               <Field id="tf-pw" label="Passwort" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
               <Field id="tf-code2" label="Code aus der App oder Notfallcode" required value={code} onChange={(e) => setCode(e.target.value)} />
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" variant="danger" disabled={busy}>Zwei-Faktor ausschalten</Button>
+                <Button type="submit" variant="danger" busy={busy}>Zwei-Faktor ausschalten</Button>
                 <Button type="button" variant="secondary" disabled={busy || !password || !code} onClick={regenerate}>Neue Notfallcodes</Button>
                 <Button type="button" variant="ghost" onClick={reset}>Abbrechen</Button>
               </div>
@@ -129,7 +129,7 @@ export function TwoFactorCard({ onError }: { onError: (m: string | null) => void
             </div>
           )
         ) : (
-          <Button onClick={start} disabled={busy}>Einrichten</Button>
+          <Button onClick={start} busy={busy}>Einrichten</Button>
         )}
       </Card>
     </>

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { MAX_ORG_TAGS, ORG_CATEGORIES, type OrgDetail } from "@vereine/shared";
-import { TagPicker } from "@/components/tag-picker";
+import { LazyTagPicker as TagPicker } from "@/components/lazy";
 import { Alert, BackLink, Button, Card, Field, PageHeader, SelectField, TextareaField } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useVerwaltung } from "@/lib/verwaltung";

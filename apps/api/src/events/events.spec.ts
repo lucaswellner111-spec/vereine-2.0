@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -153,6 +154,26 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
     expect((await req(mia, "GET", `/events/${teamEventId}/participants`)).statusCode).toBe(403);
   });
 
+  it("Zusagen sehen: Mitglieder bei internen Terminen Name+Avatar, oeffentlich nur Anzahl", async () => {
+    await req(ben, "PUT", `/events/${internalId}/rsvp`, { status: "yes" });
+    await req(mia, "PUT", `/events/${internalId}/rsvp`, { status: "maybe" });
+    // Mitglied ohne Verwaltungsrolle: nur Zusagen, Name + Avatar, kein Status/keine E-Mail
+    const seen = (await req(mia, "GET", `/events/${internalId}/attendees`)).json();
+    expect(seen.visible).toBe(true);
+    expect(seen.total).toBe(1);
+    expect(seen.people).toEqual([{ userId: ben.id, name: "ben", handle: expect.any(String), avatarId: null }]);
+    // Team-Termin: gezeigt werden nur aktuelle Teammitglieder; vera (Vorstand, nicht im Team) erscheint nicht
+    const team = (await req(mia, "GET", `/events/${teamEventId}/attendees`)).json();
+    expect(team).toEqual({ visible: true, total: 0, people: [] });
+    // oeffentlicher Termin: auch Mitglieder sehen nur die Anzahl
+    const pub = (await req(mia, "GET", `/events/${publicId}/attendees`)).json();
+    expect(pub).toEqual({ visible: false, total: 1, people: [] });
+    expect((await req(tom, "GET", `/events/${publicId}/attendees`)).json()).toEqual({ visible: false, total: 1, people: [] });
+    // nicht sichtbar: 404
+    expect((await req(tom, "GET", `/events/${internalId}/attendees`)).statusCode).toBe(404);
+    expect((await req(nina, "GET", `/events/${internalId}/attendees`)).statusCode).toBe(404);
+  });
+
   it("Vergangene Termine: keine Zu-/Absage mehr", async () => {
     const past = await req(vera, "POST", `/orgs/${org}/events`, { title: "Altes Training", startsAt: "2020-01-01T18:00:00Z" });
     expect(past.statusCode).toBe(201);
@@ -217,5 +238,27 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
     expect((await req(mia, "GET", `/events/${t2}`)).statusCode).toBe(404);
     expect((await req(vera, "DELETE", `/orgs/${org}/teams/${teamId}`)).statusCode).toBe(204); // Team loeschen entfernt Termine
     expect((await req(vera, "GET", `/events/${t2}`)).statusCode).toBe(404);
+  });
+
+  it("Zusagen sehen: Ausgetretene und Ex-Teammitglieder erscheinen bei vergangenen Terminen nicht", async () => {
+    const [lea, kai] = [await signup("lea"), await signup("kai")];
+    for (const m of [lea, kai]) {
+      await req(m, "POST", `/orgs/${org}/membership`);
+      await req(vera, "POST", `/orgs/${org}/members/${m.id}/decision`, { decision: "approve" });
+    }
+    const team = (await req(vera, "POST", `/orgs/${org}/teams`, { name: "Damen" })).json().id;
+    for (const m of [vera, lea, kai]) await req(vera, "PUT", `/orgs/${org}/teams/${team}/members/${m.id}`);
+    const internal = (await req(vera, "POST", `/orgs/${org}/events`, { title: "Saisonabschluss", startsAt: inHours(5) })).json().id;
+    const teamEvent = (await req(vera, "POST", `/orgs/${org}/events`, { title: "Damen-Training", startsAt: inHours(5), teamId: team })).json().id;
+    for (const id of [internal, teamEvent]) for (const m of [vera, lea, kai]) await req(m, "PUT", `/events/${id}/rsvp`, { status: "yes" });
+    // Termine liegen jetzt in der Vergangenheit: Zusagen bleiben beim Austritt erhalten
+    await db.update(schema.events).set({ startsAt: new Date("2020-06-01T18:00:00Z") }).where(inArray(schema.events.id, [internal, teamEvent]));
+    expect((await req(lea, "DELETE", `/orgs/${org}/members/${lea.id}`)).statusCode).toBe(204); // Austritt
+    expect((await req(vera, "DELETE", `/orgs/${org}/teams/${team}/members/${kai.id}`)).statusCode).toBe(204); // nur aus dem Team
+    const names = async (id: string) => ((await req(vera, "GET", `/events/${id}/attendees`)).json().people as { name: string }[]).map((p) => p.name).sort();
+    expect(await names(internal)).toEqual(["kai", "vera"]);
+    expect(await names(teamEvent)).toEqual(["vera"]);
+    const counted = (await req(vera, "GET", `/events/${internal}/attendees`)).json();
+    expect(counted.total).toBe(2); // Anzahl passt zu den gezeigten Personen
   });
 });

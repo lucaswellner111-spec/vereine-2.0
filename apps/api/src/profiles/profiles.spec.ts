@@ -103,7 +103,7 @@ describe("Profile, Folgen, Sichtbarkeit", () => {
     await req(clara, "POST", "/profiles/anna_m/follow");
     const followers = (await req(dirk, "GET", "/profiles/anna_m/followers")).json();
     expect(followers.map((p: { handle: string }) => p.handle)).toEqual(["clara_weiss", "ben_schroeder"]);
-    expect(followers[0]).toMatchObject({ displayName: "Clara Weiß", follow: "none" });
+    expect(followers[0]).toMatchObject({ displayName: "Clara Weiß", follow: "none", isPrivate: false });
     expect((await req(dirk, "GET", "/profiles/ben_schroeder/following")).json().map((p: { handle: string }) => p.handle)).toEqual(["anna_m"]);
   });
 

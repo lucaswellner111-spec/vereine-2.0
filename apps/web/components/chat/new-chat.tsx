@@ -6,7 +6,7 @@ import type { ChatContact, ConversationDetail, OrgMemberName, OrgSummary } from 
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
-import { Alert, Avatar, Button, ErrorState, Field, Input, ListSkeleton, SelectField } from "../ui";
+import { Alert, Avatar, Button, Checkbox, ErrorState, Field, Input, ListSkeleton, SelectField } from "../ui";
 import { SegmentedControl, tabPanelProps } from "../ui-client";
 
 type Tab = "direct" | "group";
@@ -148,13 +148,12 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
             {members.length === 0 ? (
               <p className="text-xs text-muted">Keine weiteren aktiven Mitglieder abrufbar. Gruppen legen nur Vorstand und Moderation an; du kannst die Gruppe auch leer anlegen und später Mitglieder hinzufügen.</p>
             ) : (
-              <ul className="max-h-48 space-y-1 overflow-y-auto">
+              <ul className="max-h-48 space-y-1 overflow-y-auto overscroll-contain">
                 {members.map((m) => (
                   <li key={m.userId}>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input type="checkbox" className="accent-[var(--brand)]" checked={picked.has(m.userId)} onChange={(e) => setPicked((s) => { const n = new Set(s); e.target.checked ? n.add(m.userId) : n.delete(m.userId); return n; })} />
+                    <Checkbox id={`g-member-${m.userId}`} checked={picked.has(m.userId)} onChange={(e) => setPicked((s) => { const n = new Set(s); e.target.checked ? n.add(m.userId) : n.delete(m.userId); return n; })}>
                       {m.name}
-                    </label>
+                    </Checkbox>
                   </li>
                 ))}
               </ul>

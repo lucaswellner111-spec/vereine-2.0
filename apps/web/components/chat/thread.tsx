@@ -1,13 +1,15 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, MoreHorizontal, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Clock, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { ChatMessage, ConversationDetail, MessagePage, PublicUser } from "@vereine/shared";
 import { CHAT_MAX_BODY } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useChat, useChatEvents } from "@/lib/chat";
 import { announceText, foreignNewMessages } from "@/lib/chat-announce";
+import { COARSE_POINTER_QUERY, enterSends, useAutoGrow, visibleOutbox } from "@/lib/chat-input";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { REPORT_REASONS } from "@/lib/labels";
 import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea } from "../ui";
 import { DropdownMenu, type MenuEntry } from "../ui-client";
@@ -15,6 +17,11 @@ import { ask, toast } from "@/components/ui-hosts";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+
+/** Eigene Nachricht, die noch beim Server ist (temporaere ID) oder nicht gesendet werden konnte. */
+// skip: eigene gleichlautende Nachrichten, die beim Absenden schon da waren (Abgleich mit Live-Ereignissen)
+type Outgoing = { tempId: string; body: string; createdAt: string; status: "sending" | "failed"; skip: string[] };
+let tempSeq = 0;
 
 export function Thread({
   id,
@@ -37,8 +44,13 @@ export function Thread({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [outbox, setOutbox] = useState<Outgoing[]>([]);
+  // Sperre gegen doppeltes "Erneut senden": tempIds, die gerade unterwegs sind
+  const inFlight = useRef(new Set<string>());
   const [announce, setAnnounce] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const coarse = useMediaQuery(COARSE_POINTER_QUERY);
+  useAutoGrow(inputRef, text);
   const bottomRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const stickToBottom = useRef(true);
@@ -94,6 +106,7 @@ export function Thread({
     setOlder(null);
     setError(null);
     setInfo(false);
+    setOutbox([]);
     setAnnounce("");
     stickToBottom.current = true;
     // Erstladen: nur Basislinie fuer spaetere Ansagen
@@ -117,7 +130,7 @@ export function Thread({
 
   useLayoutEffect(() => {
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [msgs]);
+  }, [msgs, outbox]);
 
   async function loadOlder() {
     if (!older) return;
@@ -131,23 +144,36 @@ export function Thread({
     }
   }
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const body = text.trim();
-    if (!body || sending) return;
-    setSending(true);
-    setError(null);
+  /** Schickt eine wartende Nachricht; Erfolg ersetzt sie durch die Server-Nachricht (Abgleich ueber die Server-ID). */
+  async function deliver(item: Outgoing) {
+    if (inFlight.current.has(item.tempId)) return; // laeuft schon
+    inFlight.current.add(item.tempId);
+    setOutbox((o) => o.map((x) => (x.tempId === item.tempId ? { ...x, status: "sending" } : x)));
     try {
-      const m = await api<ChatMessage>(`/chat/conversations/${id}/messages`, { method: "POST", body: { body } });
-      stickToBottom.current = true;
+      const m = await api<ChatMessage>(`/chat/conversations/${id}/messages`, { method: "POST", body: { body: item.body } });
+      // Kam die Nachricht schon per Live-Ereignis, nicht doppelt einfuegen
       setMsgs((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-      setText("");
+      setOutbox((o) => o.filter((x) => x.tempId !== item.tempId));
       onChanged();
     } catch (err) {
-      setError(describeError(err));
+      setOutbox((o) => o.map((x) => (x.tempId === item.tempId ? { ...x, status: "failed" } : x)));
+      setAnnounce(`Nicht gesendet: ${describeError(err)}`);
     } finally {
-      setSending(false);
+      inFlight.current.delete(item.tempId);
     }
+  }
+
+  function send(e: FormEvent) {
+    e.preventDefault();
+    const body = text.trim();
+    if (!body) return;
+    setError(null);
+    const skip = (msgsRef.current ?? []).filter((m) => m.mine && m.body === body).map((m) => m.id);
+    const item: Outgoing = { tempId: `tmp-${++tempSeq}`, body, createdAt: new Date().toISOString(), status: "sending", skip };
+    stickToBottom.current = true;
+    setOutbox((o) => [...o, item]);
+    setText("");
+    void deliver(item);
   }
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -355,7 +381,7 @@ export function Thread({
             <Button variant="ghost" size="sm" onClick={loadOlder}>Ältere Nachrichten laden</Button>
           </div>
         )}
-        {msgs.length === 0 && <p className="py-8 text-center text-sm text-muted">Noch keine Nachrichten. Schreib die erste!</p>}
+        {msgs.length === 0 && outbox.length === 0 && <p className="py-8 text-center text-sm text-muted">Noch keine Nachrichten. Schreib die erste!</p>}
         {msgs.map((m) => {
           const day = dayFmt.format(new Date(m.createdAt));
           const showDay = day !== lastDay;
@@ -397,6 +423,32 @@ export function Thread({
             </div>
           );
         })}
+        {visibleOutbox(outbox, msgs).map((o) => (
+          <div key={o.tempId} className="flex flex-col items-end gap-1">
+            <div
+              className={clsx(
+                "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
+                o.status === "failed" ? "border border-danger/50 bg-surface-2" : "bg-brand text-brand-contrast",
+              )}
+            >
+              <p className="whitespace-pre-wrap break-words">{o.body}</p>
+              <p className={clsx("mt-0.5 flex items-center justify-end gap-1 text-[11px]", o.status === "failed" ? "text-danger" : "text-brand-contrast/85")}>
+                {o.status === "failed" ? "Nicht gesendet" : <><Clock size={11} aria-hidden /> wird gesendet …</>}
+              </p>
+            </div>
+            {o.status === "failed" && (
+              <div className="flex items-center gap-3 text-xs">
+                <AlertCircle size={14} aria-hidden className="text-danger" />
+                <button type="button" onClick={() => void deliver(o)} className="hit-area relative font-medium text-brand hover:underline">
+                  Erneut senden
+                </button>
+                <button type="button" onClick={() => setOutbox((l) => l.filter((x) => x.tempId !== o.tempId))} className="hit-area relative text-muted hover:text-text">
+                  Verwerfen
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -405,6 +457,7 @@ export function Thread({
       <form onSubmit={send} className="flex gap-2 border-t border-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:pb-3">
         <label htmlFor="msg" className="sr-only">Nachricht</label>
         <Textarea
+          ref={inputRef}
           id="msg"
           value={text}
           rows={1}
@@ -412,15 +465,16 @@ export function Thread({
           disabled={detail.blocked}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // Desktop: Enter sendet, Umschalt+Enter = Zeile; Handy: Enter = Zeile, Senden per Knopf
+            if (enterSends({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing }, coarse)) {
               e.preventDefault();
               e.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder={detail.blocked ? "Du hast diese Person blockiert." : "Nachricht schreiben … (Enter sendet)"}
-          className="max-h-32 min-h-10 flex-1"
+          placeholder={detail.blocked ? "Du hast diese Person blockiert." : coarse ? "Nachricht schreiben …" : "Nachricht schreiben … (Enter sendet)"}
+          className="max-h-40 min-h-10 flex-1 [field-sizing:content]"
         />
-        <Button type="submit" disabled={!text.trim() || sending || detail.blocked}>Senden</Button>
+        <Button type="submit" className="self-end" disabled={!text.trim() || detail.blocked}>Senden</Button>
       </form>
     </section>
   );

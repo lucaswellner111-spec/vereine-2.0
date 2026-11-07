@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { TAGS, TAG_GROUPS, type OrgSummary } from "@vereine/shared";
 import { TagChips } from "@/components/tag-chips";
-import { Avatar, Badge, Card, CardSkeletons, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select } from "@/components/ui";
+import { Building2, SearchX } from "lucide-react";
+import { Avatar, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton, PageHeader, Select } from "@/components/ui";
+import { SearchField } from "@/components/ui-client";
 import { useApi } from "@/lib/use-api";
 
 export default function OrgsPage() {
@@ -35,11 +37,30 @@ function Orgs() {
   if (orgs.error && !orgs.data) content = <ErrorState message={orgs.error} onRetry={orgs.reload} />;
   else if (!orgs.data) content = <CardSkeletons count={2} />;
   else if (!orgs.data.length)
-    content = (
-      <EmptyState title={q || tag ? "Nichts gefunden." : "Noch keine Vereine."} action={<LinkButton href="/vereine/neu" variant="secondary">Verein gründen</LinkButton>}>
-        Gründe den ersten Verein deiner Region!
-      </EmptyState>
-    );
+    content =
+      q.trim() || tag ? (
+        <EmptyState
+          icon={SearchX}
+          title="Keine Vereine zu deiner Suche"
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setQ("");
+                setTag("");
+              }}
+            >
+              Filter zurücksetzen
+            </Button>
+          }
+        >
+          Versuche einen anderen Namen, Ort oder eine andere Sportart.
+        </EmptyState>
+      ) : (
+        <EmptyState icon={Building2} title="Noch keine Vereine." action={<LinkButton href="/vereine/neu" variant="secondary">Verein gründen</LinkButton>}>
+          Gründe den ersten Verein deiner Region!
+        </EmptyState>
+      );
   else
     content = (
       <ul className="grid gap-4 sm:grid-cols-2">
@@ -87,15 +108,7 @@ function Orgs() {
             </optgroup>
           ))}
         </Select>
-        <label htmlFor="q" className="sr-only">Suche</label>
-        <Input
-          id="q"
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Name, Ort oder Kategorie suchen …"
-          className="min-w-0 flex-1"
-        />
+        <SearchField id="q" label="Vereine suchen" value={q} onChange={setQ} placeholder="Name, Ort oder Kategorie suchen …" className="min-w-0 flex-1" />
       </div>
       {content}
     </>

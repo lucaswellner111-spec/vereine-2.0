@@ -2,12 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import type { SessionInfo } from "@vereine/shared";
-import { SettingsTabs } from "@/components/settings-tabs";
+import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, Badge, Button, Card, ErrorState, Field, ListSkeleton, PageHeader } from "@/components/ui";
 import { TwoFactorCard } from "@/components/two-factor-card";
 import { api, describeError } from "@/lib/api";
 import { useApi, useBusy } from "@/lib/use-api";
-import { ask } from "@/components/ui-hosts";
+import { ask, toast } from "@/components/ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -18,18 +18,16 @@ export default function SecurityPage() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   function changePassword(e: FormEvent) {
     e.preventDefault();
     void runPw(async () => {
       setError(null);
-      setNotice(null);
       try {
         await api("/auth/password", { method: "PUT", body: { currentPassword: current, newPassword: next } });
         setCurrent("");
         setNext("");
-        setNotice("Passwort geändert. Alle anderen Geräte wurden abgemeldet.");
+        toast.success("Passwort geändert. Alle anderen Geräte wurden abgemeldet.");
         list.reload();
       } catch (err) {
         setError(describeError(err));
@@ -39,7 +37,6 @@ export default function SecurityPage() {
 
   const run = async (fn: () => Promise<unknown>) => {
     setError(null);
-    setNotice(null);
     try {
       await fn();
       list.reload();
@@ -50,10 +47,9 @@ export default function SecurityPage() {
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Sicherheit" subtitle="Passwort und angemeldete Geräte." />
-      <SettingsTabs active="/einstellungen/sicherheit" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
       <TwoFactorCard onError={setError} />
 

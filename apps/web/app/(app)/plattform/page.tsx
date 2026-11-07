@@ -1,9 +1,10 @@
 "use client";
 
+import { ShieldOff } from "lucide-react";
 import { useState } from "react";
 import type { ChatReportItem } from "@vereine/shared";
 import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, PageHeader } from "@/components/ui";
-import { SegmentedControl, tabPanelProps } from "@/components/ui-client";
+import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -24,15 +25,15 @@ export default function PlatformPage() {
 
   if (!user?.isPlatformAdmin) {
     return (
-      <Card>
-        <p className="text-sm">Dieser Bereich ist der Plattform-Moderation vorbehalten.</p>
-        <ArrowLink href="/feed" className="mt-2">Zum Feed</ArrowLink>
-      </Card>
+      <EmptyState icon={ShieldOff} title="Kein Zugriff." action={<ArrowLink href="/feed">Zum Feed</ArrowLink>}>
+        Dieser Bereich ist der Plattform-Moderation vorbehalten.
+      </EmptyState>
     );
   }
 
   return (
     <>
+      <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>
       <PageHeader title="Plattform-Moderation" subtitle="Meldungen ohne Vereinszuständigkeit. Jeder Zugriff auf Chat-Inhalte wird protokolliert." />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <SegmentedControl
@@ -100,7 +101,7 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
                   variant="danger"
                   disabled={!r.text}
                   onClick={async () => {
-                    if (!(await ask("Nachricht endgültig löschen?", { confirmLabel: "Löschen" }))) return;
+                    if (!(await ask("Die gemeldete Nachricht wird für alle gelöscht. Das lässt sich nicht rückgängig machen.", { title: "Nachricht endgültig löschen?", confirmLabel: "Endgültig löschen", danger: true }))) return;
                     await resolve(r.id, "delete");
                   }}
                 >

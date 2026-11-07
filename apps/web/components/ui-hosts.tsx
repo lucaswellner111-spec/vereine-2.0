@@ -14,7 +14,9 @@ import { Dialog } from "./ui-client";
 
 type AskOptions = { confirmLabel?: string; cancelLabel?: string; danger?: boolean; title?: string };
 type Pending = { message: string; opts: AskOptions; resolve: (ok: boolean) => void };
-type ToastItem = { id: number; tone: "success" | "error" | "info"; message: string };
+type ToastAction = { label: string; onClick: () => void };
+type ToastOptions = { action?: ToastAction };
+type ToastItem = { id: number; tone: "success" | "error" | "info"; message: string; action?: ToastAction };
 
 let askListener: ((p: Pending) => void) | null = null;
 let toastListener: ((t: ToastItem) => void) | null = null;
@@ -26,10 +28,11 @@ export function ask(message: string, opts: AskOptions = {}): Promise<boolean> {
   return new Promise((resolve) => askListener!({ message, opts, resolve }));
 }
 
+/** Rueckmeldung; mit action (z. B. "Neu laden") bleibt der Hinweis stehen, bis er bedient oder geschlossen wird. */
 export const toast = {
-  success: (message: string) => toastListener?.({ id: ++toastId, tone: "success", message }),
-  error: (message: string) => toastListener?.({ id: ++toastId, tone: "error", message }),
-  info: (message: string) => toastListener?.({ id: ++toastId, tone: "info", message }),
+  success: (message: string, opts: ToastOptions = {}) => toastListener?.({ id: ++toastId, tone: "success", message, ...opts }),
+  error: (message: string, opts: ToastOptions = {}) => toastListener?.({ id: ++toastId, tone: "error", message, ...opts }),
+  info: (message: string, opts: ToastOptions = {}) => toastListener?.({ id: ++toastId, tone: "info", message, ...opts }),
 };
 
 const icons = { success: CheckCircle2, error: AlertTriangle, info: Info } as const;
@@ -49,7 +52,7 @@ export function UiHosts() {
     };
     toastListener = (t) => {
       setToasts((l) => [...l.slice(-3), t]);
-      setTimeout(() => setToasts((l) => l.filter((x) => x.id !== t.id)), t.tone === "error" ? 7000 : 4000);
+      if (!t.action) setTimeout(() => setToasts((l) => l.filter((x) => x.id !== t.id)), t.tone === "error" ? 7000 : 4000);
     };
     return () => {
       askListener = null;
@@ -103,7 +106,19 @@ export function UiHosts() {
             >
               <Icon size={16} aria-hidden className={clsx("mt-0.5 shrink-0", t.tone === "success" && "text-brand", t.tone === "error" && "text-danger", t.tone === "info" && "text-muted")} />
               <p className="flex-1">{t.message}</p>
-              <button type="button" aria-label="Schließen" onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))} className="text-muted hover:text-text"><X size={14} aria-hidden /></button>
+              {t.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToasts((l) => l.filter((x) => x.id !== t.id));
+                    t.action!.onClick();
+                  }}
+                  className="hit-area relative shrink-0 rounded font-medium text-brand hover:underline"
+                >
+                  {t.action.label}
+                </button>
+              )}
+              <button type="button" aria-label="Schließen" onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))} className="hit-area relative -m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted hover:text-text"><X size={14} aria-hidden /></button>
             </div>
           );
         })}

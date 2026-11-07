@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useApi, useBusy } from "./use-api";
+import { FOCUS_REFRESH_MS, useApi, useBusy } from "./use-api";
 
 type Pending = { url: string; signal?: AbortSignal; resolve: (body: unknown, status?: number) => void };
 
@@ -93,6 +93,99 @@ describe("useApi", () => {
     await act(async () => vi.advanceTimersByTime(1));
     expect(calls.length).toBe(1);
     expect(calls[0].url).toBe("/api/q?x=abc");
+  });
+});
+
+describe("useApi refreshOnFocus", () => {
+  const setVisibility = (v: "visible" | "hidden") => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => v });
+  const returnToTab = () => {
+    setVisibility("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    setVisibility("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+
+  it("laedt bei Rueckkehr still neu, hoechstens alle 30 s und ohne Skeleton", async () => {
+    const now = vi.spyOn(Date, "now");
+    let t = 1_000_000;
+    now.mockImplementation(() => t);
+    const { calls } = stubFetch();
+    const { result } = renderHook(() => useApi<string>("/feed", { refreshOnFocus: true }));
+    await waitFor(() => expect(calls.length).toBe(1));
+    await act(async () => calls[0].resolve("alt"));
+
+    t += 10_000; // zu frueh
+    act(() => returnToTab());
+    expect(calls.length).toBe(1);
+
+    t += FOCUS_REFRESH_MS;
+    act(() => returnToTab());
+    expect(calls.length).toBe(2);
+    expect(result.current.loading).toBe(false); // still: kein Ladezustand
+    expect(result.current.data).toBe("alt");
+    await act(async () => calls[1].resolve("neu"));
+    expect(result.current.data).toBe("neu");
+
+    // wieder online zaehlt auch als Rueckkehr
+    t += FOCUS_REFRESH_MS;
+    act(() => window.dispatchEvent(new Event("online")));
+    expect(calls.length).toBe(3);
+    now.mockRestore();
+    setVisibility("visible");
+  });
+
+  it("ohne Daten, ohne Option oder bei verstecktem Tab passiert nichts; Fehler bleiben still", async () => {
+    const now = vi.spyOn(Date, "now");
+    let t = 5_000_000;
+    now.mockImplementation(() => t);
+    const { calls } = stubFetch();
+    const off = renderHook(() => useApi<string>("/a"));
+    const on = renderHook(() => useApi<string>("/b", { refreshOnFocus: true }));
+    await waitFor(() => expect(calls.length).toBe(2));
+    t += FOCUS_REFRESH_MS * 2;
+    act(() => returnToTab());
+    expect(calls.length).toBe(2); // /b hat noch keine Daten, /a ohne Option
+
+    await act(async () => calls[1].resolve("B"));
+    t += FOCUS_REFRESH_MS;
+    setVisibility("hidden");
+    act(() => window.dispatchEvent(new Event("online")));
+    expect(calls.length).toBe(2); // versteckt
+    setVisibility("visible");
+    act(() => window.dispatchEvent(new Event("online")));
+    expect(calls.length).toBe(3);
+    await act(async () => calls[2].resolve({ message: "Kaputt" }, 500));
+    expect(on.result.current.error).toBeNull();
+    expect(on.result.current.data).toBe("B");
+    off.unmount();
+    now.mockRestore();
+  });
+
+  it("merge fuehrt stille Aktualisierung mit vorhandenen Daten zusammen", async () => {
+    const { calls } = stubFetch();
+    const { result } = renderHook(() =>
+      useApi<number[]>("/liste", { merge: (prev, next) => [...next.filter((n) => !prev.includes(n)), ...prev] }),
+    );
+    await waitFor(() => expect(calls.length).toBe(1));
+    await act(async () => calls[0].resolve([2, 1]));
+    act(() => result.current.refresh());
+    await act(async () => calls[1].resolve([3, 2]));
+    expect(result.current.data).toEqual([3, 2, 1]);
+  });
+
+  it("refresh verwirft die Antwort, wenn waehrenddessen lokal geaendert wurde", async () => {
+    const { calls } = stubFetch();
+    const { result } = renderHook(() => useApi<string>("/zustand"));
+    await waitFor(() => expect(calls.length).toBe(1));
+    await act(async () => calls[0].resolve("alt"));
+    act(() => result.current.refresh());
+    act(() => result.current.setData("optimistisch"));
+    await act(async () => calls[1].resolve("server-vorher"));
+    expect(result.current.data).toBe("optimistisch");
+    // ohne lokale Aenderung gilt die Antwort wieder
+    act(() => result.current.refresh());
+    await act(async () => calls[2].resolve("server-neu"));
+    expect(result.current.data).toBe("server-neu");
   });
 });
 

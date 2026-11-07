@@ -4,9 +4,10 @@ import clsx from "clsx";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef } from "react";
 import type { ConversationSummary } from "@vereine/shared";
-import { NewChat } from "@/components/chat/new-chat";
+import { LazyNewChat as NewChat } from "@/components/lazy";
 import { Thread } from "@/components/chat/thread";
-import { Alert, Avatar, Badge, Button, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { MessageSquare } from "lucide-react";
+import { Alert, Avatar, Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton } from "@/components/ui";
 import { lockScroll } from "@/components/ui-client";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
@@ -41,7 +42,7 @@ function ChatView() {
   const active = params.get("c");
   const creating = !active && params.get("neu") === "1";
   const isDesktop = useIsDesktop();
-  const conversations = useApi<ConversationSummary[]>("/chat/conversations");
+  const conversations = useApi<ConversationSummary[]>("/chat/conversations", { refreshOnFocus: true });
   const list = conversations.data;
   const load = conversations.reload;
   useChatEvents(load);
@@ -148,8 +149,10 @@ function ChatView() {
             </li>
           )}
           {list?.length === 0 && (
-            <li className="p-4 text-sm text-muted">
-              Noch keine Unterhaltungen. Starte mit „Neuer Chat“ eine Nachricht an ein Vereinsmitglied oder den Vorstand.
+            <li className="p-3">
+              <EmptyState icon={MessageSquare} title="Noch keine Unterhaltungen." action={<Button onClick={startCreating}>Neuer Chat</Button>}>
+                Schreib einem Vereinsmitglied oder dem Vorstand.
+              </EmptyState>
             </li>
           )}
           {list?.map((c) => {
@@ -201,7 +204,11 @@ function ChatView() {
           ) : active && user ? (
             <Thread key={active} id={active} me={user} onBack={backToList} onChanged={load} focusTitle={!isDesktop} />
           ) : (
-            <p className="m-auto p-6 text-center text-sm text-muted">Wähle eine Unterhaltung oder starte einen neuen Chat.</p>
+            <div className="m-auto w-full max-w-sm p-6">
+              <EmptyState icon={MessageSquare} title="Keine Unterhaltung ausgewählt." action={<Button variant="secondary" onClick={startCreating}>Neuer Chat</Button>}>
+                Wähle links eine Unterhaltung oder starte einen neuen Chat.
+              </EmptyState>
+            </div>
           )}
         </div>
       </div>

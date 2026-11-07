@@ -166,6 +166,10 @@ export type FeedResponse = {
   /** Opaker Cursor fuer die naechste Seite; null = Ende. */
   nextCursor: string | null;
 };
+/** Profil-Fotos: persoenliche Beitraege mit Bildern (Keyset-Paging, max. 30 je Seite). */
+export const PROFILE_MEDIA_PAGE = 30;
+export const profileMediaQuerySchema = z.object({ cursor: z.string().max(500).optional() });
+export type ProfileMediaPage = { posts: FeedPost[]; nextCursor: string | null; locked: boolean };
 
 // --- Mitgliederverwaltung ----------------------------------------------------
 
@@ -248,6 +252,12 @@ export type EventItem = {
   canManage: boolean;
 };
 export type RsvpItem = { userId: string; name: string; status: RsvpStatus };
+/**
+ * Zusagen fuer alle, die den Termin sehen: bei internen/Team-Terminen sehen Vereinsmitglieder Anzeigename
+ * und Avatar der Zusagen; bei oeffentlichen Terminen nur die Anzahl (visible = false).
+ */
+export type EventAttendee = { userId: string; name: string; handle: string | null; avatarId: string | null };
+export type EventAttendees = { visible: boolean; total: number; people: EventAttendee[] };
 
 // --- Benachrichtigungen ------------------------------------------------------
 
@@ -270,7 +280,17 @@ export type NotificationItem = {
   readAt: string | null;
   createdAt: string;
 };
-export type NotificationsResponse = { unread: number; items: NotificationItem[] };
+export type NotificationsResponse = {
+  unread: number;
+  items: NotificationItem[];
+  /** Opaker Cursor fuer aeltere Eintraege; null = Ende. */
+  nextCursor: string | null;
+};
+export const notificationsQuerySchema = z.object({
+  limit: z.string().max(5).optional(),
+  cursor: z.string().max(500).optional(),
+});
+export const markNotificationsReadSchema = z.object({ ids: z.array(z.string().uuid()).max(100).optional() });
 export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string; handle?: string | null } };
 
 export const healthResponseSchema = z.object({
@@ -392,7 +412,8 @@ export type ProfileView = {
   clubs: { slug: string; name: string }[] | null;
   viewer: { isMe: boolean; follow: FollowState; canView: boolean };
 };
-export type PersonItem = { userId: string; handle: string; displayName: string; avatarId: string | null; follow: FollowState };
+/** isPrivate: privates Profil (Folgen braucht Freigabe), fuer den optimistischen Zustand "Angefragt". */
+export type PersonItem = { userId: string; handle: string; displayName: string; avatarId: string | null; follow: FollowState; isPrivate: boolean };
 export type FollowRequest = { userId: string; handle: string; displayName: string; avatarId: string | null; at: string };
 
 export const followDecisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });

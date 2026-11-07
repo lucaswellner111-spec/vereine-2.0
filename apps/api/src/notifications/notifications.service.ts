@@ -1,6 +1,7 @@
 import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { NotificationItem, NotificationsResponse } from "@vereine/shared";
+import { decodeCursor, encodeCursor } from "../common/cursor";
 import { DB, type Database } from "../db/db.module";
 import { JobsService } from "../jobs/jobs.service";
 import { notifications } from "../db/schema";
@@ -47,21 +48,32 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
-  async list(userId: string, limit = 30): Promise<NotificationsResponse> {
-    const [rows, [{ n }]] = await Promise.all([
+  /** Neueste zuerst, Keyset-Paging ueber (created_at, id). */
+  async list(userId: string, limit = 30, cursor?: string): Promise<NotificationsResponse> {
+    const after = decodeCursor(cursor);
+    const [found, [{ n }]] = await Promise.all([
       this.db
-        .select()
+        .select({ row: notifications, ts: sql<string>`${notifications.createdAt}::text` })
         .from(notifications)
-        .where(eq(notifications.userId, userId))
-        .orderBy(desc(notifications.createdAt))
-        .limit(limit),
+        .where(
+          and(
+            eq(notifications.userId, userId),
+            after ? sql`(${notifications.createdAt}, ${notifications.id}) < (${after.ts}::timestamptz, ${after.id}::uuid)` : undefined,
+          ),
+        )
+        .orderBy(desc(notifications.createdAt), desc(notifications.id))
+        .limit(limit + 1),
       this.db
         .select({ n: sql<number>`count(*)::int` })
         .from(notifications)
         .where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
     ]);
+    const page = found.slice(0, limit);
+    const last = page[page.length - 1];
+    const rows = page.map((f) => f.row);
     return {
       unread: n,
+      nextCursor: found.length > limit && last ? encodeCursor({ ts: last.ts, id: last.row.id }) : null,
       items: rows.map((r) => ({
         id: r.id,
         type: r.type as Type,

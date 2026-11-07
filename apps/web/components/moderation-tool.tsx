@@ -149,7 +149,7 @@ function CommentsPanel({ slug, onError }: { slug: string; onError: (m: string | 
   const list = useApi<ModerationCommentItem[]>(`/orgs/${slug}/moderation/comments`);
 
   async function remove(id: string) {
-    if (!(await ask("Kommentar endgültig löschen?", { confirmLabel: "Löschen" }))) return;
+    if (!(await ask("Der Kommentar wird gelöscht und kann nicht wiederhergestellt werden.", { title: "Kommentar endgültig löschen?", confirmLabel: "Endgültig löschen", danger: true }))) return;
     onError(null);
     try {
       await api(`/moderation/comments/${id}`, { method: "DELETE", body: {} });

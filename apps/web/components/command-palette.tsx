@@ -1,21 +1,22 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, CornerDownLeft, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, CornerDownLeft, Keyboard, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OrgSummary, PersonItem } from "@vereine/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
+import { OPEN_PALETTE_EVENT, openShortcuts, shortcutsBlocked } from "@/lib/shortcuts";
 import { applyTheme } from "@/lib/theme";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
-import { useModal } from "./ui-client";
+import { hasOpenEscapeLayer, useModal } from "./ui-client";
 
 type Entry = { id: string; label: string; hint?: string; icon: LucideIcon; group: string; run: () => void };
 
-export const OPEN_PALETTE_EVENT = "klubnest:open-palette";
-export const openCommandPalette = () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
+// Oeffnen per Ereignis (lib/shortcuts), damit die Palette spaet geladen werden kann
+export { OPEN_PALETTE_EVENT, openCommandPalette } from "@/lib/shortcuts";
 
 /**
  * Befehlspalette (Strg/Cmd + K oder "/"): schnelle Navigation, Darstellung wechseln, Vereine und Personen suchen.
@@ -42,7 +43,8 @@ export function CommandPalette() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         show();
-      } else if (e.key === "/" && !typing) {
+      } else if (e.key === "/" && !typing && !e.defaultPrevented && !shortcutsBlocked(hasOpenEscapeLayer())) {
+        // Einzeltaste: abschaltbar und gesperrt, solange ein Dialog offen ist (WCAG 2.1.4)
         e.preventDefault();
         show();
       }
@@ -81,17 +83,18 @@ export function CommandPalette() {
 
   const entries = useMemo<Entry[]>(() => {
     const base: Entry[] = [
-      { id: "feed", label: "Feed", icon: Newspaper, group: "Gehe zu", run: go("/feed") },
+      { id: "feed", label: "Feed", hint: "g f", icon: Newspaper, group: "Gehe zu", run: go("/feed") },
       { id: "vereine", label: "Vereine entdecken", icon: Building2, group: "Gehe zu", run: go("/vereine") },
       { id: "neu", label: "Verein gründen", icon: Plus, group: "Gehe zu", run: go("/vereine/neu") },
       { id: "personen", label: "Personen finden", icon: UserSearch, group: "Gehe zu", run: go("/personen") },
-      { id: "kalender", label: "Kalender", icon: CalendarDays, group: "Gehe zu", run: go("/kalender") },
-      { id: "chat", label: "Chat", icon: MessageSquare, group: "Gehe zu", run: go("/chat") },
+      { id: "kalender", label: "Kalender", hint: "g k", icon: CalendarDays, group: "Gehe zu", run: go("/kalender") },
+      { id: "chat", label: "Chat", hint: "g c", icon: MessageSquare, group: "Gehe zu", run: go("/chat") },
       ...itemsForRole(role).map((i) => ({ id: `v-${i.id}`, label: `Verwaltung: ${i.label}`, icon: i.icon, group: "Verwaltung", run: go(`/verwaltung/${i.id}`) })),
       ...SETTINGS_ITEMS.map((s) => ({ id: `s-${s.href}`, label: `Einstellungen: ${s.label}`, icon: s.icon, group: "Einstellungen", run: go(s.href) })),
       { id: "t-light", label: "Darstellung: Hell", icon: Sun, group: "Aktionen", run: () => applyTheme("light") },
       { id: "t-dark", label: "Darstellung: Dunkel", icon: Moon, group: "Aktionen", run: () => applyTheme("dark") },
       { id: "t-system", label: "Darstellung: Automatisch", icon: Monitor, group: "Aktionen", run: () => applyTheme("system") },
+      { id: "shortcuts", label: "Tastenkürzel anzeigen", hint: "?", icon: Keyboard, group: "Aktionen", run: openShortcuts },
       { id: "logout", label: "Abmelden", icon: LogOut, group: "Aktionen", run: () => void logout().then(() => router.replace("/login")) },
     ];
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -116,7 +119,7 @@ export function CommandPalette() {
 
   let lastGroup = "";
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/50 p-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Befehlspalette" onKeyDown={onPanelKeyDown} className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-overlay">
         <div className="flex items-center gap-2 border-b border-border px-3">
           <Search size={16} aria-hidden className="text-muted" />
@@ -138,7 +141,7 @@ export function CommandPalette() {
           />
           <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] text-muted sm:block">Esc</kbd>
         </div>
-        <ul id="palette-list" role="listbox" className="max-h-80 overflow-y-auto p-1.5">
+        <ul id="palette-list" role="listbox" className="max-h-80 overflow-y-auto overscroll-contain p-1.5">
           {entries.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Nichts gefunden.</li>}
           {entries.map((e, i) => {
             const header = e.group !== lastGroup ? e.group : null;

@@ -222,3 +222,31 @@ describe("fieldAria", () => {
     });
   });
 });
+
+describe("Escape-Stapel (zwei Ebenen im selben Render)", () => {
+  function Inner({ onEsc }: { onEsc: () => void }) {
+    useEscapeLayer(true, onEsc);
+    return null;
+  }
+  function Outer({ open, outer, inner }: { open: boolean; outer: () => void; inner: () => void }) {
+    useEscapeLayer(open, outer);
+    return open ? <Inner onEsc={inner} /> : null;
+  }
+
+  it("schliesst die innere Ebene zuerst, auch wenn beide gleichzeitig aufgehen", () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    const { rerender } = render(<Outer open={false} outer={outer} inner={inner} />);
+    rerender(<Outer open outer={outer} inner={inner} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
+});
+
+describe("Dialog", () => {
+  it("Panel ist immer per Skript fokussierbar (tabIndex -1)", () => {
+    render(<Dialog open onClose={() => undefined} title="Test" />);
+    expect(screen.getByRole("dialog").getAttribute("tabindex")).toBe("-1");
+  });
+});

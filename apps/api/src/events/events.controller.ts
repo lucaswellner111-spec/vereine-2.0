@@ -21,6 +21,7 @@ import {
   type EventItem,
   type PublicUser,
   type RsvpItem,
+  type EventAttendees,
   type TeamItem,
   type TeamMemberItem,
 } from "@vereine/shared";
@@ -73,6 +74,11 @@ export class EventsController {
   @Put("events/:id/rsvp")
   rsvp(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<EventItem> {
     return this.events.rsvp(user, id, parse(rsvpSchema, body).status);
+  }
+
+  @Get("events/:id/attendees")
+  attendees(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<EventAttendees> {
+    return this.events.attendees(user, id);
   }
 
   @Get("events/:id/participants")

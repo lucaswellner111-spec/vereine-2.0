@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { InvoiceDetail, InvoiceSummary } from "@vereine/shared";
 import { InvoiceStatusBadge } from "@/components/invoice-status";
-import { SettingsTabs } from "@/components/settings-tabs";
+import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, ArrowLink, Button, Card, EmptyState, ErrorState, LinkButton, ListSkeleton, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
@@ -26,8 +26,8 @@ export default function MyInvoicesPage() {
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Meine Rechnungen" subtitle="Rechnungen, die dir deine Vereine gestellt haben." />
-      <SettingsTabs active="/rechnungen" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {list.error && !rows ? (
         <ErrorState message={list.error} onRetry={list.reload} />

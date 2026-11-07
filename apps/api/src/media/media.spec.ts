@@ -217,6 +217,56 @@ describe("Medien: Upload, Verarbeitung, Auslieferung", () => {
     expect(await db.select().from(schema.media).where(eq(schema.media.id, ids[0]))).toHaveLength(0);
   });
 
+  it("Profil-Fotos: nur sichtbare persoenliche Beitraege mit Bild, ohne geloeschte, privat nur fuer Follower", async () => {
+    const handle = (await req(anna, "GET", "/profiles/me")).json().handle;
+    const f1 = (await upload(anna, "/media/post", "p1.png", await png())).json();
+    const f2 = (await upload(anna, "/media/post", "p2.png", await png())).json();
+    const withPhoto = (await req(anna, "POST", "/posts", { body: "Foto eins", mediaIds: [f1.id] })).json();
+    await req(anna, "POST", "/posts", { body: "nur Text" });
+    const gone = (await req(anna, "POST", "/posts", { body: "Foto zwei", mediaIds: [f2.id] })).json();
+    await req(anna, "DELETE", `/posts/${gone.id}`);
+
+    const res = await req(ben, "GET", `/profiles/${handle}/media`);
+    expect(res.statusCode).toBe(200);
+    const page = res.json();
+    expect(page.locked).toBe(false);
+    expect(page.nextCursor).toBeNull();
+    // kein Textbeitrag, kein geloeschter Beitrag, kein Vereinsbeitrag ("Vereinsfoto")
+    expect(page.posts.map((p: { id: string }) => p.id)).toEqual([withPhoto.id]);
+    expect(page.posts[0].media[0].id).toBe(f1.id);
+
+    // privates Profil: ben folgt nicht -> gesperrt; clara (bestaetigt) sieht die Fotos
+    await req(anna, "PUT", "/profiles/me", { visibility: "private" });
+    expect((await req(ben, "GET", `/profiles/${handle}/media`)).json()).toEqual({ posts: [], nextCursor: null, locked: true });
+    expect((await req(clara, "GET", `/profiles/${handle}/media`)).json().posts).toHaveLength(1);
+    await req(anna, "PUT", "/profiles/me", { visibility: "public" });
+
+    expect((await req(ben, "GET", `/profiles/${handle}/media?cursor=kaputt`)).statusCode).toBe(400);
+    expect((await req(ben, "GET", "/profiles/gibt-es-nicht/media")).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/profiles/${handle}/media` })).statusCode).toBe(401);
+  });
+
+  it("Profil-Fotos: Keyset-Paging mit hoechstens 30 Eintraegen je Seite", async () => {
+    const handle = (await req(clara, "GET", "/profiles/me")).json().handle;
+    const before = (await db.select().from(schema.media)).length;
+    for (let i = 0; i < 31; i++) {
+      const [row] = await db.insert(schema.posts).values({ authorId: clara.id, body: `F${i}`, createdAt: new Date(Date.now() - i * 1000) }).returning();
+      const [m] = await db.insert(schema.media).values({ ownerId: clara.id, kind: "post", width: 10, height: 10, bytes: 1 }).returning();
+      await db.insert(schema.postMedia).values({ postId: row.id, mediaId: m.id });
+    }
+    const first = (await req(ben, "GET", `/profiles/${handle}/media`)).json();
+    expect(first.posts).toHaveLength(30);
+    expect(first.posts[0].body).toBe("F0");
+    expect(first.nextCursor).toBeTruthy();
+    const second = (await req(ben, "GET", `/profiles/${handle}/media?cursor=${encodeURIComponent(first.nextCursor)}`)).json();
+    expect(second.posts.map((p: { body: string }) => p.body)).toEqual(["F30"]);
+    expect(second.nextCursor).toBeNull();
+    // Testdaten wieder entfernen (der Aufraeum-Test zaehlt verwaiste Uploads)
+    await db.execute(sql`delete from social.posts where author_id = ${clara.id} and body like 'F%'`);
+    await db.execute(sql`delete from social.media where owner_id = ${clara.id} and bytes = 1`);
+    expect((await db.select().from(schema.media)).length).toBe(before);
+  });
+
   it("Aufraeum-Job: unverwendete Uploads werden nach 24 h entfernt, junge bleiben", async () => {
     const old = (await upload(clara, "/media/post", "alt.png", await png())).json();
     const young = (await upload(clara, "/media/post", "jung.png", await png())).json();

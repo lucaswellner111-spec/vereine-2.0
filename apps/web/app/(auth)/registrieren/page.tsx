@@ -63,8 +63,8 @@ export default function RegisterPage() {
           gelesen.
         </Checkbox>
       </div>
-      <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Wird erstellt …" : "Konto erstellen"}
+      <Button type="submit" busy={busy} className="w-full">
+        Konto erstellen
       </Button>
       <p className="text-center text-sm text-muted">
         Schon registriert?{" "}

@@ -48,6 +48,8 @@ type Ctx = {
   refresh: () => void;
   /** Liste der verwaltbaren Vereine neu laden (nach Gruendung, Rollenwechsel). */
   reloadOrgs: () => void;
+  /** Fehler beim Laden der Vereinsliste (orgs bleibt dann null); Seiten zeigen "Erneut versuchen". */
+  orgsError: string | null;
   error: string | null;
   setError: (message: string | null) => void;
 };
@@ -61,6 +63,7 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   const [slug, setSlugState] = useState("");
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
   const pathname = usePathname();
 
   // Fehler gehoeren zur Seite bzw. zum Verein: beim Wechsel zuruecksetzen
@@ -69,6 +72,7 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   // Laedt die verwaltbaren Vereine; die bisherige Auswahl bleibt, wenn es den Verein noch gibt.
   // Erneut aufrufen, wenn sich Rollen aendern (z. B. nach "Verein gruenden"), damit die Navigation ohne Reload passt.
   const reloadOrgs = useCallback(() => {
+    setOrgsError(null);
     api<OrgSummary[]>("/orgs/managed")
       .then((list) => {
         setOrgs(list);
@@ -83,7 +87,8 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
           return list.some((o) => o.slug === wanted) ? wanted : (list[0]?.slug ?? "");
         });
       })
-      .catch(() => setOrgs((old) => old ?? []));
+      // Nicht als "keine Vereine" werten: Fehler merken, vorhandene Liste behalten
+      .catch((e) => setOrgsError(describeError(e)));
   }, []);
 
   useEffect(() => reloadOrgs(), [reloadOrgs]);
@@ -108,8 +113,8 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<Ctx>(
-    () => ({ orgs, slug, setSlug, detail, role: detail?.viewer.role ?? null, refresh, reloadOrgs, error, setError }),
-    [orgs, slug, setSlug, detail, refresh, reloadOrgs, error],
+    () => ({ orgs, slug, setSlug, detail, role: detail?.viewer.role ?? null, refresh, reloadOrgs, orgsError, error, setError }),
+    [orgs, slug, setSlug, detail, refresh, reloadOrgs, orgsError, error],
   );
   return <VerwaltungContext.Provider value={value}>{children}</VerwaltungContext.Provider>;
 }

@@ -178,14 +178,41 @@ export function TextareaField({ id, label, hint, error, className, ...props }: T
   );
 }
 
+type FileButtonProps = Omit<ComponentPropsWithRef<"input">, "type" | "size" | "className" | "children"> & {
+  variant?: Variant;
+  size?: Size;
+  className?: string;
+  children: ReactNode;
+};
+
+/**
+ * Datei-Auswahl im Button-Stil: echtes (unsichtbares) input[type=file] im label, daher per Tab
+ * erreichbar und per Enter/Leertaste bedienbar; der Fokusring liegt am label (focus-within).
+ */
+export function FileButton({ variant = "secondary", size = "md", className, children, disabled, ...props }: FileButtonProps) {
+  return (
+    <label
+      className={clsx(
+        buttonClasses({ variant, size }),
+        "cursor-pointer focus-within:ring-2 focus-within:ring-[var(--ring)]",
+        disabled && "pointer-events-none opacity-50",
+        className,
+      )}
+    >
+      <input type="file" {...props} disabled={disabled} className="sr-only" />
+      {children}
+    </label>
+  );
+}
+
 export function Checkbox({
   id,
   children,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { id: string; children: ReactNode }) {
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-start gap-2.5 text-sm">
-      <input id={id} type="checkbox" {...props} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)]" />
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-2.5 text-sm pointer-coarse:min-h-11 pointer-coarse:items-center">
+      <input id={id} type="checkbox" {...props} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)] pointer-coarse:mt-0 pointer-coarse:h-5 pointer-coarse:w-5" />
       <span>{children}</span>
     </label>
   );
@@ -301,7 +328,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50",
+        "hit-area relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50",
         checked ? "bg-brand" : "bg-border",
       )}
     >
@@ -324,6 +351,57 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * Kopf einer Detailseite (Profil, Verein, Termin): Bild/Avatar, h1, Badges, Untertitel, Aktionen.
+ * Der Zurueck-Link steht immer darueber (nicht Teil des Kopfs).
+ */
+export function DetailHeader({
+  media,
+  title,
+  titleClassName,
+  badges,
+  subtitle,
+  actions,
+  children,
+}: {
+  media?: ReactNode;
+  title: string;
+  /** nur fuer Zustandsoptik wie line-through bei abgesagt */
+  titleClassName?: string;
+  badges?: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-start gap-4 sm:gap-6">
+        {media}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className={clsx("min-w-0 max-w-full break-words text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]", titleClassName)}>{title}</h1>
+            {badges}
+          </div>
+          {subtitle && <div className="mt-1 break-words text-sm text-muted">{subtitle}</div>}
+          {children}
+        </div>
+        {/* Handy: Aktionen in eigener Zeile, damit sie den Namen nicht verdecken */}
+        {actions && <div className="flex basis-full flex-wrap gap-2 sm:basis-auto">{actions}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Abschnittsueberschrift innerhalb einer Seite (h2). */
+export function SectionTitle({ children, className, icon: Icon }: { children: ReactNode; className?: string; icon?: LucideIcon }) {
+  return (
+    <h2 className={clsx("flex items-center gap-2 text-base font-semibold", className)}>
+      {Icon && <Icon size={16} aria-hidden className="text-muted" />}
+      {children}
+    </h2>
   );
 }
 

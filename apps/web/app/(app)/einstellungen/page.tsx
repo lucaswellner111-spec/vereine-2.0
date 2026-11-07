@@ -5,20 +5,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Avatar, Button, Card, PageHeader } from "@/components/ui";
+import { Avatar, Button, Card, ListSkeleton, PageHeader } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
-import { useIsDesktop } from "@/lib/use-media-query";
+import { useIsDesktopState } from "@/lib/use-media-query";
 
 /** Ordnerliste der Einstellungen (Handy). Am Desktop steht das Untermenue in der Seitenleiste: direkt zum Profil. */
 export default function SettingsIndexPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const isDesktop = useIsDesktop();
+  const isDesktop = useIsDesktopState();
 
   useEffect(() => {
     if (isDesktop) router.replace("/einstellungen/profil");
   }, [isDesktop, router]);
+
+  // Bis klar ist, ob weitergeleitet wird, nichts Falsches aufblitzen lassen
+  if (isDesktop !== false) return <ListSkeleton rows={4} />;
 
   return (
     <>
@@ -41,7 +44,7 @@ export default function SettingsIndexPage() {
           </Link>
         ))}
       </Card>
-      <h2 className="mb-2 mt-6 text-sm font-semibold">Darstellung</h2>
+      <h2 className="mb-2 mt-6 text-base font-semibold">Darstellung</h2>
       <Card className="space-y-3">
         <p className="text-sm text-muted">Automatisch folgt der Einstellung deines Geräts.</p>
         <ThemeToggle fullWidth />

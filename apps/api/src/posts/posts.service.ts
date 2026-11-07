@@ -3,6 +3,8 @@ import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql, type SQL }
 import {
   isTagId,
   MAX_POST_TAGS,
+  PROFILE_MEDIA_PAGE,
+  type ProfileMediaPage,
   type CommentItem,
   type CreatePostInput,
   type FeedPost,
@@ -16,7 +18,7 @@ import { CACHE, type Cache } from "../cache/cache.module";
 import { decodeCursor, encodeCursor, type Cursor } from "../common/cursor";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
-import { comments, feedFeedback, follows, orgMembers, organizations, postLikes, posts, reports } from "../db/schema";
+import { comments, feedFeedback, follows, orgMembers, organizations, postLikes, postMedia, posts, reports } from "../db/schema";
 import { diversify, reasonFor, scorePost, type Relation } from "../feed/ranking";
 import { MediaService } from "../media/media.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -200,6 +202,25 @@ export class PostsService {
     return { posts: await this.hydrate(page.ids, viewer.id, await this.context(viewer.id)), nextCursor: page.nextCursor, locked: false };
   }
 
+  /** Profil-Fotos: nur persoenliche Beitraege mit Bildern, gleiche Sichtbarkeitsregel wie userPosts. */
+  async userMedia(viewer: PublicUser, handle: string, cursor?: string): Promise<ProfileMediaPage> {
+    const profile = await this.access.byHandle(handle);
+    if (!profile) throw new NotFoundException("Profil nicht gefunden.");
+    if (!(await this.access.canView(viewer.id, profile.userId))) return { posts: [], nextCursor: null, locked: true };
+    const page = await this.chronoPage(
+      and(
+        eq(posts.authorId, profile.userId),
+        isNull(posts.orgId),
+        isNull(posts.deletedAt),
+        isNull(posts.hiddenAt),
+        sql`exists (select 1 from ${postMedia} where ${postMedia.postId} = ${posts.id})`,
+      ),
+      decode(cursor),
+      PROFILE_MEDIA_PAGE,
+    );
+    return { posts: await this.hydrate(page.ids, viewer.id, await this.context(viewer.id)), nextCursor: page.nextCursor, locked: false };
+  }
+
   // --- Feedback ("Weniger davon") ------------------------------------------------------------
 
   async feedback(user: PublicUser, postId: string, kind: "hide" | "mute_author" | "mute_org"): Promise<void> {
@@ -348,18 +369,18 @@ export class PostsService {
   }
 
   /** Keyset-Paging (created_at, id) absteigend; Zeitstempel bleibt als Text mikrosekundengenau. */
-  private async chronoPage(where: SQL | undefined, after: Cursor | null) {
+  private async chronoPage(where: SQL | undefined, after: Cursor | null, size = PAGE) {
     const rows = await this.db
       .select({ id: posts.id, ts: sql<string>`${posts.createdAt}::text` })
       .from(posts)
       .where(and(where, after ? sql`(${posts.createdAt}, ${posts.id}) < (${after.ts}::timestamptz, ${after.id}::uuid)` : undefined))
       .orderBy(desc(posts.createdAt), desc(posts.id))
-      .limit(PAGE + 1);
-    const page = rows.slice(0, PAGE);
+      .limit(size + 1);
+    const page = rows.slice(0, size);
     const last = page[page.length - 1];
     return {
       ids: page.map((r) => r.id),
-      nextCursor: rows.length > PAGE && last ? encode({ ts: last.ts, id: last.id }) : null,
+      nextCursor: rows.length > size && last ? encode({ ts: last.ts, id: last.id }) : null,
     };
   }
 

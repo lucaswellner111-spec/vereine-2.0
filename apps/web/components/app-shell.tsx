@@ -8,13 +8,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { PublicUser } from "@vereine/shared";
 import { useAuth } from "@/lib/auth";
 import { ChatProvider, useChat } from "@/lib/chat";
+import { MyProfileProvider, myProfileHref, useMyProfile } from "@/lib/my-profile";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
 import { ShellChromeProvider, useShellChrome } from "@/lib/shell";
 import { itemsForRole, useVerwaltung, VerwaltungProvider } from "@/lib/verwaltung";
-import { CommandPalette, openCommandPalette } from "./command-palette";
+import { openCommandPalette } from "@/lib/shortcuts";
+import { LazyCommandPalette, LazyKeyboardShortcuts } from "./lazy";
 import { MobileMoreSheet } from "./mobile-more-sheet";
 import { NotificationBell } from "./notification-bell";
-import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
+import { OfflineBanner } from "./offline-banner";
+import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
 import { Avatar, Button, Select, Skeleton } from "./ui";
 
@@ -81,10 +84,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ChatProvider>
       <VerwaltungProvider>
-        <ShellChromeProvider>
-          <Shell user={user}>{children}</Shell>
-        </ShellChromeProvider>
-        <CommandPalette />
+        <MyProfileProvider>
+          <ShellChromeProvider>
+            <Shell user={user}>{children}</Shell>
+          </ShellChromeProvider>
+        </MyProfileProvider>
+        <LazyCommandPalette />
+        <LazyKeyboardShortcuts />
       </VerwaltungProvider>
     </ChatProvider>
   );
@@ -196,6 +202,10 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
   const router = useRouter();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Eigenes Profil (Handle, Avatar); ohne Handle fuehren die Links zu den Profil-Einstellungen
+  const me = useMyProfile().profile;
+  const profileHref = myProfileHref(me);
+  const avatarId = me?.avatarId ?? null;
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const moreActive = MORE_PREFIXES.some(isActive);
@@ -206,6 +216,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
 
   return (
     <div className="min-h-dvh">
+      <OfflineBanner immersive={immersive} />
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border bg-surface p-4 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
           <Logo className="text-lg" />
@@ -243,13 +254,17 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         </nav>
         <ThemeToggle compact className="mb-3 self-start" />
         <div className="rounded-lg border border-border p-2">
-          <div className="flex items-center gap-3">
-            <Avatar name={user.displayName} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.displayName}</p>
-              <p className="truncate text-xs text-muted">{user.email}</p>
-            </div>
-          </div>
+          <Link
+            href={profileHref}
+            aria-current={pathname === profileHref ? "page" : undefined}
+            className="-m-1 flex items-center gap-3 rounded-md p-1 hover:bg-surface-2"
+          >
+            <Avatar name={user.displayName} mediaId={avatarId} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{user.displayName}</span>
+              <span className="block truncate text-xs text-muted">Mein Profil</span>
+            </span>
+          </Link>
           <Button variant="ghost" size="sm" className="w-full" onClick={doLogout}>
             <LogOut size={14} aria-hidden /> Abmelden
           </Button>
@@ -267,10 +282,9 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           <button type="button" onClick={openCommandPalette} aria-label="Suchen" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
             <Search size={20} aria-hidden />
           </button>
-          <ThemeCycleButton />
           <NotificationBell />
-          <Link href="/einstellungen" aria-label="Einstellungen und Konto" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
-            <Avatar name={user.displayName} size={30} />
+          <Link href={profileHref} aria-label="Mein Profil" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+            <Avatar name={user.displayName} size={30} mediaId={avatarId} />
           </Link>
         </div>
       </header>
@@ -328,6 +342,8 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
         user={user}
+        profileHref={profileHref}
+        avatarId={avatarId}
         showVerwaltung={showVerwaltung}
         showPlattform={showPlattform}
         onLogout={doLogout}

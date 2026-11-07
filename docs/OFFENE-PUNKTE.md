@@ -81,3 +81,6 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Während der Lösch-Sperrfrist des einzigen Vorstands sind offene Einladungen des Vereins noch gültig → beim Löschen widerrufen.
 - Push: wer den (geheimen) Endpunkt eines fremden Geräts kennt, kann dessen Abo durch eigenes Anmelden entfernen; geringes Risiko, akzeptiert.
 
+## Oberfläche Paket Q2: offen (Stand 2026-11-07)
+- **Zusagen-Anzeige:** aktive Mitglieder sehen bei internen/Team-Terminen Namen und Profilbilder der Zusagen (ohne eigene Einwilligung). Mit DSB klären, ob Vereinszweck (Art. 6 Abs. 1 lit. b/f) reicht oder ein Opt-out („Meine Zusage nur als Zahl zeigen“) nötig ist.
+- Benachrichtigungen kommen per Polling (30 s, pausiert im Hintergrund); Live-Zustellung über den Socket fehlt noch.

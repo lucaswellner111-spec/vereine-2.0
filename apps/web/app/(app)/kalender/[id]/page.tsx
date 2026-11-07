@@ -1,15 +1,20 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarPlus, Clock, MapPin, Share2, Users } from "lucide-react";
+import { CalendarPlus, CalendarX2, Clock, ExternalLink, MapPin, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import type { EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
-import { Alert, ArrowLink, BackLink, Badge, Button, Card, CardSkeletons, ErrorState, LinkButton } from "@/components/ui";
+import type { EventAttendees, EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
+import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, SectionTitle } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
 import { RSVP_OPTIONS, RSVP_STATUS_LABEL, withRsvp } from "@/lib/events";
 import { shareLink } from "@/lib/share";
-import { ask } from "@/components/ui-hosts";
+import { ask, toast } from "@/components/ui-hosts";
+import { usePageTitle } from "@/lib/use-page-title";
+
+/** Reiner Link zur OpenStreetMap-Suche (nichts eingebettet, kein Request beim Laden). */
+const mapUrl = (place: string) => `https://www.openstreetmap.org/search?query=${encodeURIComponent(place)}`;
+const MAX_FACES = 12;
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
@@ -18,6 +23,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const { id } = use(params);
   const [event, setEvent] = useState<EventItem | null>(null);
   const [people, setPeople] = useState<RsvpItem[] | null>(null);
+  const [attendees, setAttendees] = useState<EventAttendees | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -27,12 +33,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     try {
       const e = await api<EventItem>(`/events/${id}`);
       setEvent(e);
-      if (e.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`));
+      const [list, att] = await Promise.all([
+        e.canManage ? api<RsvpItem[]>(`/events/${id}/participants`) : Promise.resolve(null),
+        api<EventAttendees>(`/events/${id}/attendees`).catch(() => null),
+      ]);
+      setPeople(list);
+      setAttendees(att);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) setNotFound(true);
       else setLoadError(describeError(err));
     }
   }, [id]);
+  usePageTitle(event?.title ?? null);
   useEffect(() => {
     void load();
   }, [load]);
@@ -44,6 +56,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     try {
       setEvent(await api<EventItem>(`/events/${id}/rsvp`, { method: "PUT", body: { status } }));
       if (event?.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`));
+      setAttendees(await api<EventAttendees>(`/events/${id}/attendees`).catch(() => null));
     } catch (e) {
       setEvent(before);
       setError(describeError(e));
@@ -52,10 +65,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   async function cancel(scope: "single" | "series") {
     const msg = scope === "series" ? "Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt." : "Termin absagen? Alle Zusagen werden benachrichtigt.";
-    if (!(await ask(msg, { confirmLabel: "Ja" }))) return;
+    const label = scope === "series" ? "Serie absagen" : "Termin absagen";
+    if (!(await ask(msg, { title: `${label}?`, confirmLabel: label, cancelLabel: "Nicht absagen", danger: true }))) return;
     setError(null);
     try {
       await api(`/events/${id}/cancel`, { method: "POST", body: { scope } });
+      toast.success(scope === "series" ? "Serie abgesagt." : "Termin abgesagt.");
       await load();
     } catch (e) {
       setError(describeError(e));
@@ -64,10 +79,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   if (notFound) {
     return (
-      <Card>
-        <p className="text-sm">Dieser Termin existiert nicht oder ist für dich nicht sichtbar.</p>
-        <ArrowLink href="/kalender" className="mt-2">Zum Kalender</ArrowLink>
-      </Card>
+      <EmptyState icon={CalendarX2} title="Diesen Termin gibt es nicht." action={<ArrowLink href="/kalender">Zum Kalender</ArrowLink>}>
+        Er wurde gelöscht oder ist für dich nicht sichtbar.
+      </EmptyState>
     );
   }
   if (!event) return loadError ? <ErrorState message={loadError} onRetry={() => void load()} /> : <CardSkeletons count={1} />;
@@ -80,18 +94,23 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       <BackLink href="/kalender">Kalender</BackLink>
 
       <Card className={clsx("space-y-5", event.canceled && "opacity-80")}>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className={clsx("text-2xl font-semibold tracking-tight", event.canceled && "line-through")}>{event.title}</h1>
-            {event.canceled && <Badge tone="danger">abgesagt</Badge>}
-            {event.seriesId && <Badge>Serie</Badge>}
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            <Link href={`/vereine/${event.orgSlug}`} className="hover:underline">{event.orgName}</Link>
-            {event.teamName && <> · <Badge tone="brand">{event.teamName}</Badge></>}
-            {" · "}{event.visibility === "public" ? "öffentlich" : "nur Mitglieder"}
-          </p>
-        </div>
+        <DetailHeader
+          title={event.title}
+          titleClassName={event.canceled ? "line-through" : undefined}
+          badges={
+            <>
+              {event.canceled && <Badge tone="danger">abgesagt</Badge>}
+              {event.seriesId && <Badge>Serie</Badge>}
+            </>
+          }
+          subtitle={
+            <>
+              <Link href={`/vereine/${event.orgSlug}`} className="hover:underline">{event.orgName}</Link>
+              {event.teamName && <> · <Badge tone="brand">{event.teamName}</Badge></>}
+              {" · "}{event.visibility === "public" ? "öffentlich" : "nur Mitglieder"}
+            </>
+          }
+        />
 
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div className="flex gap-3">
@@ -109,7 +128,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <MapPin size={18} aria-hidden className="mt-0.5 shrink-0 text-muted" />
               <div>
                 <dt className="sr-only">Wo</dt>
-                <dd className="font-medium">{event.location}</dd>
+                <dd>
+                  <span className="block font-medium">{event.location}</span>
+                  <a href={mapUrl(event.location)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center gap-1 text-brand hover:underline">
+                    Auf Karte öffnen <ExternalLink size={12} aria-hidden />
+                    <span className="sr-only">(OpenStreetMap, neues Fenster)</span>
+                  </a>
+                </dd>
               </div>
             </div>
           )}
@@ -119,7 +144,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
         {!event.canceled && (
           <div>
-            <h2 className="mb-2 text-sm font-semibold">Kommst du?</h2>
+            <SectionTitle className="mb-2">Kommst du?</SectionTitle>
             <div className="grid grid-cols-3 gap-2 sm:flex" role="group" aria-label="Teilnahme">
               {RSVP_OPTIONS.map((o) => (
                 <Button key={o.id} variant={event.myStatus === o.id ? "primary" : "secondary"} aria-pressed={event.myStatus === o.id} onClick={() => rsvp(o.id)}>
@@ -130,6 +155,30 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <p className="mt-2 text-xs text-muted">
               {event.counts.yes} Zusagen · {event.counts.maybe} vielleicht · {event.counts.no} Absagen
             </p>
+          </div>
+        )}
+
+        {attendees?.visible && attendees.people.length > 0 && (
+          <div>
+            <SectionTitle className="mb-2">Dabei sind</SectionTitle>
+            <ul className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label={`${attendees.total} Zusagen`}>
+              {attendees.people.slice(0, MAX_FACES).map((p) => (
+                <li key={p.userId}>
+                  {p.handle ? (
+                    <Link href={`/profil/${p.handle}`} className="flex items-center gap-1.5 rounded-full pr-2 text-sm hover:bg-surface-2">
+                      <Avatar name={p.name} mediaId={p.avatarId} size={28} />
+                      <span className="max-w-32 truncate">{p.name}</span>
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <Avatar name={p.name} mediaId={p.avatarId} size={28} />
+                      <span className="max-w-32 truncate">{p.name}</span>
+                    </span>
+                  )}
+                </li>
+              ))}
+              {attendees.people.length > MAX_FACES && <li className="text-sm text-muted">und {attendees.people.length - MAX_FACES} weitere</li>}
+            </ul>
           </div>
         )}
 
@@ -152,7 +201,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       {event.canManage && people && (
         <Card className="mt-4">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Users size={16} aria-hidden /> Teilnehmer</h2>
+          <SectionTitle icon={Users} className="mb-3">Teilnehmer (nur für die Verwaltung)</SectionTitle>
           {people.length === 0 ? (
             <p className="text-sm text-muted">Noch keine Rückmeldungen.</p>
           ) : (

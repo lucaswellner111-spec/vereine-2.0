@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import type { PersonItem } from "@vereine/shared";
-import { Alert, ArrowLink, Avatar, Button, Card, EmptyState, ErrorState, Input, ListSkeleton, PageHeader } from "@/components/ui";
+import { ArrowLink, Avatar, Button, Card, EmptyState, ErrorState, ListSkeleton, PageHeader } from "@/components/ui";
+import { BackButton, SearchField } from "@/components/ui-client";
 import { api, describeError } from "@/lib/api";
+import { toast } from "@/components/ui-hosts";
+import { nextFollowState } from "@/lib/follow";
 import { useApi } from "@/lib/use-api";
 import { useDesktopAutoFocus } from "@/lib/use-media-query";
 
@@ -13,20 +16,30 @@ export default function PeoplePage() {
   const term = q.trim();
   const active = term.length >= 2;
   const people = useApi<PersonItem[]>(active ? `/profiles/search?q=${encodeURIComponent(term)}` : null, { debounceMs: 250, keepPrevious: true });
-  const [error, setError] = useState<string | null>(null);
+  // Sperre je Person: ein laufendes Folgen blockiert nur diesen Eintrag
+  const following = useRef(new Set<string>());
   const searchRef = useRef<HTMLInputElement>(null);
   // kein autoFocus am Handy (Tastatur wuerde sofort aufgehen)
   useDesktopAutoFocus(searchRef);
 
-  async function follow(p: PersonItem) {
-    setError(null);
+  const setFollow = (userId: string, follow: PersonItem["follow"]) =>
+    people.setData((list) => (list ?? []).map((x) => (x.userId === userId ? { ...x, follow } : x)));
+
+  // Optimistisch umschalten; private Profile zeigen sofort "Angefragt"
+  const follow = async (p: PersonItem) => {
+    if (following.current.has(p.userId)) return;
+    following.current.add(p.userId);
+    setFollow(p.userId, nextFollowState(p.follow, p.isPrivate));
     try {
       const updated = await api<{ viewer: { follow: PersonItem["follow"] } }>(`/profiles/${p.handle}/follow`, p.follow === "none" ? { method: "POST", body: {} } : { method: "DELETE" });
-      people.setData((list) => (list ?? []).map((x) => (x.userId === p.userId ? { ...x, follow: updated.viewer.follow } : x)));
+      setFollow(p.userId, updated.viewer.follow);
     } catch (e) {
-      setError(describeError(e));
+      setFollow(p.userId, p.follow);
+      toast.error(describeError(e));
+    } finally {
+      following.current.delete(p.userId);
     }
-  }
+  };
 
   let content;
   if (!active)
@@ -45,7 +58,7 @@ export default function PeoplePage() {
               <Avatar name={p.displayName} mediaId={p.avatarId} />
               <span className="min-w-0"><span className="block truncate text-sm font-medium">{p.displayName}</span><span className="block truncate text-xs text-muted">@{p.handle}</span></span>
             </Link>
-            <Button size="sm" variant={p.follow === "none" ? "primary" : "secondary"} onClick={() => follow(p)}>
+            <Button size="sm" variant={p.follow === "none" ? "primary" : "secondary"} onClick={() => void follow(p)}>
               {p.follow === "following" ? "Du folgst" : p.follow === "requested" ? "Angefragt" : "Folgen"}
             </Button>
           </div>
@@ -55,20 +68,11 @@ export default function PeoplePage() {
 
   return (
     <>
+      <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>
       <PageHeader title="Personen finden" subtitle="Suche nach Name oder @Benutzername und folge Menschen aus deinen Vereinen." />
       <div className="mb-4">
-        <label htmlFor="people-q" className="sr-only">Suche</label>
-        <Input
-          id="people-q"
-          type="search"
-          ref={searchRef}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Mindestens 2 Zeichen …"
-          className="w-full"
-        />
+        <SearchField id="people-q" label="Personen suchen" inputRef={searchRef} value={q} onChange={setQ} placeholder="Mindestens 2 Zeichen …" />
       </div>
-      {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       {content}
     </>
   );

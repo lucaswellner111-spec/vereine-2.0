@@ -51,6 +51,14 @@ describe("MobileMoreSheet", () => {
     expect(dialog.textContent).toContain("erika@example.org");
   });
 
+  it("Kopf verlinkt aufs eigene Profil, ohne Handle auf die Profil-Einstellungen", () => {
+    const { unmount } = renderSheet({ profileHref: "/profil/erika" });
+    expect(screen.getByRole("link", { name: /Mein Profil/ }).getAttribute("href")).toBe("/profil/erika");
+    unmount();
+    renderSheet();
+    expect(screen.getByRole("link", { name: /Mein Profil/ }).getAttribute("href")).toBe("/einstellungen/profil");
+  });
+
   it("Verwaltung und Plattform nur, wenn erlaubt", () => {
     const { unmount } = renderSheet();
     expect(screen.queryByRole("link", { name: "Verwaltung" })).toBeNull();

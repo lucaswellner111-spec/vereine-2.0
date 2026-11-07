@@ -1,16 +1,19 @@
 "use client";
 
-import { Images, Lock } from "lucide-react";
+import { Images, Lock, UserX } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useRef, useState, type ReactNode } from "react";
-import type { FeedPost, PersonItem, ProfileView } from "@vereine/shared";
+import type { FeedPost, PersonItem, ProfileMediaPage, ProfileView } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
-import { Alert, ArrowLink, Avatar, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton, ListSkeleton } from "@/components/ui";
-import { Dialog, SegmentedControl, tabPanelProps } from "@/components/ui-client";
+import { Alert, ArrowLink, Avatar, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, ListSkeleton } from "@/components/ui";
+import { BackButton, Dialog, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl } from "@/lib/media";
-import { useApi, useBusy } from "@/lib/use-api";
+import { optimisticFollow } from "@/lib/follow";
+import { useApi, useBusy, type ApiState } from "@/lib/use-api";
+import { useInfiniteScroll, useMoreFailed } from "@/lib/use-infinite-scroll";
+import { usePageTitle } from "@/lib/use-page-title";
 
 type Tab = "fotos" | "beitraege" | "follower" | "folgt";
 const TABS: { value: Tab; label: string }[] = [
@@ -26,10 +29,15 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   const profile = useApi<ProfileView>(`/profiles/${handle}`);
   const postsPath = `/profiles/${handle}/posts`;
   const posts = useApi<PostsPage>(postsPath);
-  const pathRef = useRef(postsPath);
-  pathRef.current = postsPath;
+  const mediaPath = `/profiles/${handle}/media`;
+  const photos = useApi<ProfileMediaPage>(mediaPath);
+  const pathRef = useRef(handle);
+  pathRef.current = handle;
   const [moreBusy, runMore] = useBusy();
+  const [followBusy, runFollow] = useBusy();
+  usePageTitle(profile.data?.displayName ?? null);
   const [tab, setTab] = useState<Tab>("fotos");
+  const [moreFailed, setMoreFailed] = useMoreFailed(`${handle}/${tab}`);
   const peopleTab = tab === "follower" || tab === "folgt";
   const people = useApi<PersonItem[]>(peopleTab ? `/profiles/${handle}/${tab === "follower" ? "followers" : "following"}` : null);
   const [error, setError] = useState<string | null>(null);
@@ -41,38 +49,54 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
     setOpen(null);
   }, [handle]);
 
-  const loadMore = () =>
+  /** Naechste Seite der Beitraege bzw. Fotos anhaengen (Cursor-Paging). */
+  const appendPage = <P extends { posts: FeedPost[]; nextCursor: string | null }>(state: ApiState<P>, path: string) =>
     runMore(async () => {
-      const cursor = posts.data?.nextCursor;
+      const cursor = state.data?.nextCursor;
       if (!cursor) return;
-      const requested = postsPath;
+      const requested = handle;
       try {
-        const r = await api<PostsPage>(`${requested}?cursor=${encodeURIComponent(cursor)}`);
+        const r = await api<P>(`${path}?cursor=${encodeURIComponent(cursor)}`);
         if (pathRef.current !== requested) return;
-        posts.setData((prev) => (prev ? { ...r, posts: [...prev.posts, ...r.posts] } : r));
+        state.setData((prev) => (prev ? { ...r, posts: [...prev.posts, ...r.posts.filter((x) => !prev.posts.some((y) => y.id === x.id))] } : r));
       } catch (e) {
+        setMoreFailed(true); // Sentinel sperren, sonst Endlosschleife
+        toast.error(describeError(e));
+      }
+    });
+  const pagedTab = tab === "fotos" ? photos : tab === "beitraege" ? posts : null;
+  const loadMore = () => (tab === "fotos" ? appendPage(photos, mediaPath) : appendPage(posts, postsPath));
+  const sentinelRef = useInfiniteScroll({ hasMore: !!pagedTab?.data?.nextCursor && !moreFailed, loading: moreBusy, onLoadMore: () => void loadMore() });
+
+  // Optimistisch: sofort umschalten, bei Fehler zurueck; useBusy verhindert Doppelklicks
+  const toggleFollow = () =>
+    runFollow(async () => {
+      const p = profile.data;
+      if (!p) return;
+      setError(null);
+      profile.setData(optimisticFollow(p));
+      try {
+        const following = p.viewer.follow !== "none";
+        const updated = await api<ProfileView>(`/profiles/${handle}/follow`, following ? { method: "DELETE" } : { method: "POST", body: {} });
+        profile.setData(updated);
+        if (updated.viewer.canView !== p.viewer.canView) {
+          posts.reload();
+          photos.reload();
+        }
+      } catch (e) {
+        profile.setData(p);
         toast.error(describeError(e));
       }
     });
 
-  async function toggleFollow() {
-    const p = profile.data;
-    if (!p) return;
-    setError(null);
-    try {
-      const following = p.viewer.follow !== "none";
-      const updated = await api<ProfileView>(`/profiles/${handle}/follow`, following ? { method: "DELETE" } : { method: "POST", body: {} });
-      profile.setData(updated);
-      if (updated.viewer.canView) posts.reload();
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
-
-  const dropPost = (id: string) => posts.setData((d) => (d ? { ...d, posts: d.posts.filter((x) => x.id !== id) } : d));
+  const dropPost = (id: string) => {
+    const drop = <P extends { posts: FeedPost[] }>(d: P | null) => (d ? { ...d, posts: d.posts.filter((x) => x.id !== id) } : d);
+    posts.setData(drop);
+    photos.setData(drop);
+  };
 
   if (profile.errorStatus === 404 || profile.errorStatus === 400) {
-    return <EmptyState title="Dieses Profil gibt es nicht." action={<ArrowLink href="/personen">Personen suchen</ArrowLink>} />;
+    return <EmptyState icon={UserX} title="Dieses Profil gibt es nicht." action={<ArrowLink href="/personen">Personen suchen</ArrowLink>} />;
   }
   if (profile.error && !profile.data) return <ErrorState message={profile.error} onRetry={profile.reload} />;
   if (!profile.data) return <CardSkeletons count={1} />;
@@ -80,16 +104,15 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   const p = profile.data;
   const v = p.viewer;
   const list = posts.data?.posts ?? null;
-  const withMedia = (list ?? []).filter((x) => x.media.length > 0);
 
-  const postsBody = (render: (items: FeedPost[]) => ReactNode) =>
-    posts.error && !posts.data ? <ErrorState message={posts.error} onRetry={posts.reload} /> : list === null ? <CardSkeletons count={2} /> : render(list);
+  const pageBody = (state: Pick<ApiState<{ posts: FeedPost[] }>, "data" | "error" | "reload">, render: (items: FeedPost[]) => ReactNode) =>
+    state.error && !state.data ? <ErrorState message={state.error} onRetry={state.reload} /> : state.data === null ? <CardSkeletons count={2} /> : render(state.data.posts);
 
   let content;
   if (!v.canView && (tab === "fotos" || tab === "beitraege")) {
     content = <EmptyState icon={Lock} title="Dieses Profil ist privat.">Folge {p.displayName}, um die Beiträge zu sehen.</EmptyState>;
   } else if (tab === "fotos") {
-    content = postsBody(() =>
+    content = pageBody(photos, (withMedia) =>
       withMedia.length === 0 ? (
         <EmptyState title="Noch keine Fotos." />
       ) : (
@@ -100,7 +123,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={mediaUrl(x.media[0].id, "thumb")} alt="" loading="lazy" className="h-full w-full object-cover" />
                 {x.media.length > 1 && (
-                  <span className="absolute right-1 top-1 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 text-[11px] text-white">
+                  <span className="absolute right-1 top-1 inline-flex items-center gap-0.5 rounded bg-scrim px-1.5 text-[11px] text-on-scrim">
                     <Images size={12} aria-hidden />
                     {x.media.length}
                     <span className="sr-only"> Bilder</span>
@@ -113,7 +136,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
       ),
     );
   } else if (tab === "beitraege") {
-    content = postsBody((items) =>
+    content = pageBody(posts, (items) =>
       items.length === 0 ? (
         <EmptyState title="Noch keine Beiträge." />
       ) : (
@@ -145,31 +168,29 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
 
   return (
     <>
+      {!v.isMe && <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>}
       <Card className="mb-4">
-        <div className="flex flex-wrap items-start gap-4 sm:gap-6">
-          <Avatar name={p.displayName} size={96} mediaId={p.avatarId} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold">{p.displayName}</h1>
-              {p.visibility === "private" && <Badge>privat</Badge>}
-            </div>
-            <p className="text-sm text-muted">@{p.handle}{p.location && ` · ${p.location}`}</p>
-            <ul className="mt-3 flex gap-5 text-sm">
-              <li><strong>{p.counts.posts}</strong> <span className="text-muted">Beiträge</span></li>
-              <li><button type="button" onClick={() => setTab("follower")} className="hover:underline"><strong>{p.counts.followers}</strong> <span className="text-muted">Follower</span></button></li>
-              <li><button type="button" onClick={() => setTab("folgt")} className="hover:underline"><strong>{p.counts.following}</strong> <span className="text-muted">Folgt</span></button></li>
-            </ul>
-          </div>
-          <div className="flex gap-2">
-            {v.isMe ? (
+        <DetailHeader
+          media={<Avatar name={p.displayName} size={96} mediaId={p.avatarId} />}
+          title={p.displayName}
+          badges={p.visibility === "private" && <Badge>privat</Badge>}
+          subtitle={<>@{p.handle}{p.location && ` · ${p.location}`}</>}
+          actions={
+            v.isMe ? (
               <LinkButton href="/einstellungen/profil" variant="secondary">Profil bearbeiten</LinkButton>
             ) : (
-              <Button variant={v.follow === "none" ? "primary" : "secondary"} onClick={toggleFollow}>
+              <Button variant={v.follow === "none" ? "primary" : "secondary"} aria-busy={followBusy || undefined} onClick={toggleFollow}>
                 {v.follow === "following" ? "Du folgst" : v.follow === "requested" ? "Angefragt" : "Folgen"}
               </Button>
-            )}
-          </div>
-        </div>
+            )
+          }
+        >
+          <ul className="mt-3 flex gap-5 text-sm">
+            <li><strong>{p.counts.posts}</strong> <span className="text-muted">Beiträge</span></li>
+            <li><button type="button" onClick={() => setTab("follower")} className="hover:underline"><strong>{p.counts.followers}</strong> <span className="text-muted">Follower</span></button></li>
+            <li><button type="button" onClick={() => setTab("folgt")} className="hover:underline"><strong>{p.counts.following}</strong> <span className="text-muted">Folgt</span></button></li>
+          </ul>
+        </DetailHeader>
         {p.bio && <p className="mt-4 whitespace-pre-wrap break-words text-sm">{p.bio}</p>}
         {p.clubs && p.clubs.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-2" aria-label="Vereine">
@@ -188,9 +209,10 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
 
       <div {...tabPanelProps("profil", "profil-panel", tab)} className="focus:outline-none">
         {content}
-        {(tab === "fotos" || tab === "beitraege") && posts.data?.nextCursor && v.canView && (
+        {pagedTab?.data?.nextCursor && v.canView && <div ref={sentinelRef} aria-hidden />}
+        {pagedTab?.data?.nextCursor && v.canView && (
           <div className="mt-4 text-center">
-            <Button variant="secondary" busy={moreBusy} onClick={loadMore}>Mehr laden</Button>
+            <Button variant="secondary" busy={moreBusy} onClick={() => { setMoreFailed(false); void loadMore(); }}>Mehr laden</Button>
           </div>
         )}
       </div>

@@ -20,6 +20,8 @@ export function MobileMoreSheet({
   open,
   onClose,
   user,
+  profileHref = "/einstellungen/profil",
+  avatarId = null,
   showVerwaltung,
   showPlattform,
   onLogout,
@@ -27,6 +29,9 @@ export function MobileMoreSheet({
   open: boolean;
   onClose: () => void;
   user: PublicUser;
+  /** Eigenes Profil (/profil/{handle}); ohne Handle die Profil-Einstellungen. */
+  profileHref?: string;
+  avatarId?: string | null;
   showVerwaltung: boolean;
   showPlattform: boolean;
   onLogout: () => void;
@@ -53,13 +58,19 @@ export function MobileMoreSheet({
 
   return (
     <Dialog open={open} onClose={onClose} title="Mehr" placement="sheet" size="sm" className="pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-      <div className="flex items-center gap-3 rounded-lg bg-surface-2 p-3">
-        <Avatar name={user.displayName} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{user.displayName}</p>
-          <p className="truncate text-xs text-muted">{user.email}</p>
-        </div>
-      </div>
+      <Link
+        href={profileHref}
+        onClick={onClose}
+        aria-current={isCurrent(profileHref) ? "page" : undefined}
+        className="flex items-center gap-3 rounded-lg bg-surface-2 p-3 hover:bg-border/40"
+      >
+        <span className="sr-only">Mein Profil: </span>
+        <Avatar name={user.displayName} mediaId={avatarId} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{user.displayName}</span>
+          <span className="block truncate text-xs text-muted">{user.email}</span>
+        </span>
+      </Link>
       <nav aria-label="Weitere Bereiche" className="mt-3">
         <ul className="space-y-0.5">
           {links.map(({ href, label, icon: Icon }) => {

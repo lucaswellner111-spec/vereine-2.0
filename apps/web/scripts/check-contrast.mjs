@@ -72,6 +72,10 @@ const PAIRS = [
   ["brand", "brand/0.2@surface", 4.5, "Chip-Hover auf Karte"],
   ["danger", "danger/0.1@surface", 4.5, "Fehler-Hinweis auf Karte"],
   ["muted", "accent/0.1@bg", 4.5, "Zweittext auf Akzent-Hinweis"],
+  // Abdunklung (Lightbox, Bild-Badges): Text auf Scrim, auch ueber hellem Bild (Worst Case: weiss darunter)
+  ["on-scrim", "scrim/0.85@surface", 4.5, "Text in der Lightbox"],
+  ["on-scrim", "scrim/0.6@on-scrim", 4.5, "Badge auf hellem Foto"],
+  ["on-scrim", "on-scrim/0.15@scrim", 4.5, "Lightbox-Knopf"],
 ];
 let failed = 0;
 for (const [name, set] of [["Hell", light], ["Dunkel", dark]]) {

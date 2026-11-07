@@ -140,7 +140,7 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
                             size="sm"
                             variant="ghost"
                             onClick={async () => {
-                              if (!(await ask("Entwurf löschen?", { confirmLabel: "Löschen" }))) return;
+                              if (!(await ask("Der Entwurf wird endgültig gelöscht.", { title: "Entwurf löschen?", confirmLabel: "Endgültig löschen", danger: true }))) return;
                               await run(() => api(`/invoices/${i.id}`, { method: "DELETE" }));
                             }}
                           >

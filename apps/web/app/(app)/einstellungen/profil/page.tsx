@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { FollowRequest, MutedItem, ProfileView } from "@vereine/shared";
-import { SettingsTabs } from "@/components/settings-tabs";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Alert, Avatar, Button, Card, CardSkeletons, Checkbox, ErrorState, Field, LinkButton, PageHeader, TextareaField } from "@/components/ui";
+import { SettingsBackLink } from "@/components/settings-back-link";
+import { Upload } from "lucide-react";
+import { Alert, Avatar, Button, Card, CardSkeletons, Checkbox, ErrorState, Field, FileButton, LinkButton, PageHeader, TextareaField, Toggle } from "@/components/ui";
+import { setShortcutsEnabled, shortcutsEnabled } from "@/lib/shortcuts";
+import { toast } from "@/components/ui-hosts";
+import { useMyProfile } from "@/lib/my-profile";
 import { api, describeError } from "@/lib/api";
 import { removeAvatar, uploadImage } from "@/lib/media";
 import { useAuth } from "@/lib/auth";
@@ -20,9 +23,12 @@ export default function ProfileSettingsPage() {
   const [muted, setMuted] = useState<MutedItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const reloadMine = useMyProfile().reload;
+  // erst nach dem Mounten lesen (localStorage gibt es beim Server-Rendern nicht)
+  const [shortcutsOn, setShortcutsOn] = useState(true);
+  useEffect(() => setShortcutsOn(shortcutsEnabled()), []);
 
   /** Profil laden; das Formular nur beim ersten Laden und nach dem Speichern ueberschreiben (sonst gehen Eingaben verloren). */
   const loadProfile = useCallback(async ({ resetForm }: { resetForm: boolean }) => {
@@ -43,11 +49,11 @@ export default function ProfileSettingsPage() {
 
   const run = async (fn: () => Promise<unknown>, after: () => Promise<void>, ok?: string) => {
     setError(null);
-    setNotice(null);
     try {
       await fn();
-      if (ok) setNotice(ok);
+      if (ok) toast.success(ok);
       await after();
+      reloadMine(); // Avatar/Handle in Kopfleiste und Seitenleiste aktualisieren
     } catch (e) {
       setError(describeError(e));
     }
@@ -68,10 +74,9 @@ export default function ProfileSettingsPage() {
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Profil" subtitle="So sehen dich andere." action={profile && <LinkButton href={`/profil/${profile.handle}`} variant="secondary">Profil ansehen</LinkButton>} />
-      <SettingsTabs active="/einstellungen/profil" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
       {!profile && loadError ? (
         <ErrorState message={loadError} onRetry={loadAll} />
@@ -83,20 +88,15 @@ export default function ProfileSettingsPage() {
             <div className="flex flex-wrap items-center gap-4">
               <Avatar name={profile.displayName} size={80} mediaId={profile.avatarId} />
               <div className="space-y-2">
-                <input ref={fileRef} id="avatar" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => onAvatar(e.target.files?.[0])} />
                 <div className="flex flex-wrap gap-2">
-                  <label htmlFor="avatar" className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-brand px-4 text-sm font-medium text-brand-contrast hover:bg-brand-hover">Bild hochladen</label>
+                  <FileButton ref={fileRef} id="avatar" variant="primary" accept="image/jpeg,image/png,image/webp" onChange={(e) => onAvatar(e.target.files?.[0])}>
+                    <Upload size={16} aria-hidden /> Bild hochladen
+                  </FileButton>
                   {profile.avatarId && <Button variant="secondary" onClick={() => run(() => removeAvatar(), () => loadProfile({ resetForm: false }), "Profilbild entfernt.")}>Entfernen</Button>}
                 </div>
                 <p className="text-xs text-muted">JPEG, PNG oder WebP, bis 8 MB. Standortdaten (EXIF) werden entfernt.</p>
               </div>
             </div>
-          </Card>
-
-          <h2 className="mb-2 font-semibold">Darstellung</h2>
-          <Card className="mb-6 space-y-3">
-            <p className="text-sm text-muted">Automatisch folgt der Einstellung deines Geräts. Die Wahl gilt nur in diesem Browser.</p>
-            <ThemeToggle fullWidth className="sm:w-auto" />
           </Card>
 
           <Card className="mb-6">
@@ -116,6 +116,23 @@ export default function ProfileSettingsPage() {
               </fieldset>
               <Button type="submit" busy={busy}>Speichern</Button>
             </form>
+          </Card>
+
+          <Card className="mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Tastenkürzel</p>
+                <p className="text-xs text-muted">Einzelne Tasten wie „g f“, „n“, „/“ und „?“. Gilt nur für diesen Browser.</p>
+              </div>
+              <Toggle
+                checked={shortcutsOn}
+                label="Tastenkürzel"
+                onChange={(on) => {
+                  setShortcutsEnabled(on);
+                  setShortcutsOn(on);
+                }}
+              />
+            </div>
           </Card>
 
           <h2 className="mb-2 font-semibold">Folgeanfragen {requests.length > 0 && `(${requests.length})`}</h2>

@@ -8,11 +8,25 @@ import { useEffect, useState, type RefObject } from "react";
  * Ohne matchMedia (alte Browser, jsdom) bleibt der Wert false.
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+  return useMediaQueryState(query) ?? false;
+}
+
+/**
+ * Wie useMediaQuery, aber null, solange der Wert noch nicht bekannt ist (Server, erstes Rendern).
+ * Fuer Seiten, die am Desktop sofort weiterleiten: bis zur Entscheidung nichts Falsches zeigen.
+ */
+export function useMediaQueryState(query: string): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(null);
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      setMatches(false);
+      return;
+    }
     const mql = window.matchMedia(query);
-    if (!mql) return;
+    if (!mql) {
+      setMatches(false);
+      return;
+    }
     const update = () => setMatches(mql.matches);
     update();
     if (typeof mql.addEventListener === "function") {
@@ -31,6 +45,11 @@ export const DESKTOP_QUERY = "(min-width: 768px)";
 
 export function useIsDesktop(): boolean {
   return useMediaQuery(DESKTOP_QUERY);
+}
+
+/** null = noch unbekannt, sonst true ab Tablet-Breite. */
+export function useIsDesktopState(): boolean | null {
+  return useMediaQueryState(DESKTOP_QUERY);
 }
 
 /**

@@ -7,6 +7,8 @@ import {
   reportSchema,
   deleteCommentSchema,
   moderatePostSchema,
+  profileMediaQuerySchema,
+  type ProfileMediaPage,
   resolveReportSchema,
   type ReportItem,
   type ModerationCommentItem,
@@ -102,6 +104,13 @@ export class PostsController {
     @Query("cursor") cursor?: string,
   ): Promise<{ posts: FeedPost[]; nextCursor: string | null; locked: boolean }> {
     return this.posts.userPosts(user, handle.toLowerCase(), cursor);
+  }
+
+  /** Profil-Fotos: nur Beitraege mit Bildern, Sichtbarkeit wie die Beitragsliste. */
+  @Get("profiles/:handle/media")
+  userMedia(@CurrentUser() user: PublicUser, @Param("handle") handle: string, @Query() query: unknown): Promise<ProfileMediaPage> {
+    const { cursor } = parse(profileMediaQuerySchema, query ?? {});
+    return this.posts.userMedia(user, handle.toLowerCase(), cursor);
   }
 
   @Post("posts/:id/feedback")

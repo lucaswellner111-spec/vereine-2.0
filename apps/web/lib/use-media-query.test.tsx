@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useIsDesktop, useMediaQuery } from "./use-media-query";
+import { renderHook } from "@testing-library/react";
+import { useIsDesktop, useMediaQuery, useMediaQueryState } from "./use-media-query";
 
 const original = window.matchMedia;
 
@@ -13,6 +14,21 @@ function Probe({ query }: { query?: string }) {
   const value = query ? useMediaQuery(query) : useIsDesktop();
   return <p>{value ? "ja" : "nein"}</p>;
 }
+
+describe("useMediaQueryState", () => {
+  it("ist erst null und danach bekannt (ohne matchMedia: false)", () => {
+    // @ts-expect-error bewusst entfernt
+    window.matchMedia = undefined;
+    const seen: (boolean | null)[] = [];
+    renderHook(() => {
+      const v = useMediaQueryState("(min-width: 768px)");
+      seen.push(v);
+      return v;
+    });
+    expect(seen[0]).toBeNull();
+    expect(seen[seen.length - 1]).toBe(false);
+  });
+});
 
 describe("useMediaQuery", () => {
   it("ohne matchMedia: false", () => {

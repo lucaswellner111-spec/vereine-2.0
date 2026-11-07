@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PUSH_HOST_ERROR, type PrivatePushState } from "@vereine/shared";
-import { SettingsTabs } from "@/components/settings-tabs";
+import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, Badge, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { ApiError, api, describeError } from "@/lib/api";
 
@@ -88,8 +88,8 @@ export default function NotificationSettingsPage() {
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Mitteilungen" subtitle="Benachrichtigungen auf diesem Gerät, auch wenn Klubnest geschlossen ist." />
-      <SettingsTabs active="/einstellungen/mitteilungen" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       {hint && <div className="mb-4"><Alert tone="info">{hint}</Alert></div>}
       <Card className="space-y-4">
@@ -107,7 +107,7 @@ export default function NotificationSettingsPage() {
         ) : (
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone={active ? "brand" : "neutral"}>{active ? "An diesem Gerät aktiv" : "An diesem Gerät aus"}</Badge>
-            {active ? <Button variant="secondary" onClick={disable} disabled={busy}>Ausschalten</Button> : <Button onClick={enable} disabled={busy}>Mitteilungen aktivieren</Button>}
+            {active ? <Button variant="secondary" onClick={disable} busy={busy}>Ausschalten</Button> : <Button onClick={enable} busy={busy}>Mitteilungen aktivieren</Button>}
             <span className="text-xs text-muted">{state.devices} {state.devices === 1 ? "Gerät" : "Geräte"} insgesamt</span>
           </div>
         )}

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, Copy, MoreHorizontal, X, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Check, Copy, MoreHorizontal, Search, X, type LucideIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -14,6 +14,8 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { useSwipe } from "@/lib/use-swipe";
 import { Button, Input } from "./ui";
 import { toast } from "./ui-hosts";
 
@@ -49,6 +51,9 @@ const escapeLayers: EscapeLayer[] = [];
 let escapeListening = false;
 let nextEscapeId = 0;
 
+/** Ist gerade eine Ebene (Dialog, Menue, Popover) offen? Globale Kuerzel ruhen dann. */
+export const hasOpenEscapeLayer = () => escapeLayers.length > 0;
+
 function onWindowEscape(e: globalThis.KeyboardEvent) {
   if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
   const top = escapeLayers[escapeLayers.length - 1];
@@ -65,10 +70,16 @@ function onWindowEscape(e: globalThis.KeyboardEvent) {
 export function useEscapeLayer(active: boolean, onEscape: () => void) {
   const ref = useRef(onEscape);
   ref.current = onEscape;
+  // Reihenfolge nach dem Rendern vergeben (Eltern vor Kindern): Effekte laufen Kind-zuerst, sonst waere
+  // bei zwei im selben Render geoeffneten Ebenen die aeussere oben.
+  const order = useRef(0);
+  if (active && order.current === 0) order.current = ++nextEscapeId;
+  if (!active) order.current = 0;
   useEffect(() => {
     if (!active) return;
-    const layer: EscapeLayer = { id: ++nextEscapeId, ref };
+    const layer: EscapeLayer = { id: order.current || ++nextEscapeId, ref };
     escapeLayers.push(layer);
+    escapeLayers.sort((a, b) => a.id - b.id);
     if (!escapeListening) {
       window.addEventListener("keydown", onWindowEscape);
       escapeListening = true;
@@ -196,11 +207,14 @@ function DialogPanel({
   const titleId = useId();
   const descId = useId();
   const { onKeyDown } = useModal(panelRef, { open, onClose, initialFocusRef });
+  // Sheet am Handy: Griffleiste nach unten wischen schliesst (ab 80 px)
+  const isSheet = placement === "sheet";
+  const swipe = useSwipe({ axis: "y", threshold: 80, onSwipe: (d) => d === "down" && onClose(), enabled: isSheet });
 
   return (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex justify-center bg-black/50 p-4",
+        "fixed inset-0 z-50 flex justify-center bg-scrim/50 p-4",
         placement === "sheet" ? "items-end sm:items-center" : "items-center",
       )}
       onMouseDown={(e) => {
@@ -210,18 +224,26 @@ function DialogPanel({
       <div
         ref={panelRef}
         role={role}
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         onKeyDown={onKeyDown}
+        style={swipe.offset ? { transform: `translateY(${swipe.offset}px)` } : undefined}
         className={clsx(
-          "relative w-full rounded-xl border border-border bg-surface p-5 shadow-overlay max-h-[90dvh] overflow-y-auto",
+          "relative w-full rounded-xl border border-border bg-surface p-5 shadow-overlay max-h-[90dvh] overflow-y-auto overscroll-contain",
           size === "sm" && "max-w-sm",
           size === "md" && "max-w-lg",
           size === "lg" && "max-w-2xl",
           className,
         )}
       >
+        {isSheet && (
+          // Griffleiste (nur Handy): Ziehen nach unten schliesst; per Tastatur bleibt Escape/Schliessen-Knopf
+          <div aria-hidden className="-mx-5 -mt-5 mb-1 flex h-6 touch-none cursor-grab items-center justify-center sm:hidden" {...swipe.handlers}>
+            <span className="h-1 w-10 rounded-full bg-border" />
+          </div>
+        )}
         <h2 id={titleId} className={clsx(hideTitle ? "sr-only" : "pr-8 text-base font-semibold")}>
           {title}
         </h2>
@@ -241,6 +263,74 @@ function DialogPanel({
           <X size={16} aria-hidden />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------- Zurueck per Verlauf ----------
+
+/**
+ * Zurueck-Knopf im Stil von BackLink: geht im Verlauf zurueck, ohne Verlauf (Direktaufruf) zu fallback.
+ * Fuer Seiten ohne festen Elternbereich (fremdes Profil, Bereiche aus dem "Mehr"-Sheet).
+ */
+export function BackButton({ fallback, children, className }: { fallback: string; children: ReactNode; className?: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => (window.history.length > 1 ? router.back() : router.push(fallback))}
+      className={clsx("mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted hover:text-text", className)}
+    >
+      <ArrowLeft size={16} aria-hidden />
+      {children}
+    </button>
+  );
+}
+
+// ---------- Suchfeld ----------
+
+type SearchFieldProps = {
+  id: string;
+  /** Beschriftung fuer Screenreader (sichtbar ist nur der Platzhalter). */
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
+};
+
+/** Suchfeld mit Lupe und Loeschen-Knopf; Escape leert ebenfalls (Browser-Standard bei type=search). */
+export function SearchField({ id, label, value, onChange, placeholder, className, inputRef }: SearchFieldProps) {
+  const own = useRef<HTMLInputElement>(null);
+  const ref = inputRef ?? own;
+  return (
+    <div className={clsx("relative", className)}>
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <Search size={16} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+      <Input
+        ref={ref}
+        id={id}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className="w-full pl-9 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label="Suche leeren"
+          onClick={() => {
+            onChange("");
+            ref.current?.focus();
+          }}
+          className="hit-area absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <X size={14} aria-hidden />
+        </button>
+      )}
     </div>
   );
 }

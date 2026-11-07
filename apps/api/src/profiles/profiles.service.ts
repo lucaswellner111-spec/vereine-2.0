@@ -161,6 +161,7 @@ export class ProfilesService {
         displayName: names.get(id) ?? "Gelöschter Nutzer",
         avatarId: profs.get(id)!.avatarMediaId,
         follow: states.get(id) ?? "none",
+        isPrivate: profs.get(id)!.visibility === "private",
       }));
   }
 

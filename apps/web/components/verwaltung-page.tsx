@@ -12,10 +12,11 @@ export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; 
  * und Fehleranzeige. Der Inhalt bekommt Verein, Rolle und Hilfsfunktionen.
  */
 export function VerwaltungPage({ id, children }: { id: string; children: (ctx: VerwaltungCtx) => ReactNode }) {
-  const { orgs, slug, setSlug, detail, role, refresh, error, setError } = useVerwaltung();
+  const { orgs, slug, setSlug, detail, role, refresh, reloadOrgs, orgsError, error, setError } = useVerwaltung();
   const item = VERWALTUNG_ITEMS.find((i) => i.id === id);
   const title = item?.label ?? "Verwaltung";
 
+  if (orgs === null && orgsError) return <ErrorState message={orgsError} onRetry={reloadOrgs} />;
   if (orgs === null) return <CardSkeletons count={2} />;
   if (orgs.length === 0) {
     return (

@@ -2,16 +2,23 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CalendarFeedCreated, CalendarFeedStatus } from "@vereine/shared";
-import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { SettingsBackLink } from "@/components/settings-back-link";
+import { CalendarPlus } from "lucide-react";
+import { Alert, Button, Card, ErrorState, LinkButton, PageHeader, Skeleton } from "@/components/ui";
 import { CopyField } from "@/components/ui-client";
+import { ask, toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
+import { useBusy } from "@/lib/use-api";
+
+/** webcal:// aus der https-Adresse: Kalender-Apps (Apple, Outlook) oeffnen das Abo direkt. */
+const webcal = (url: string) => url.replace(/^https?:\/\//, "webcal://");
 
 export default function CalendarSettingsPage() {
   const [status, setStatus] = useState<CalendarFeedStatus | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, run] = useBusy();
 
   const load = useCallback(() => {
     setLoadError(null);
@@ -19,32 +26,38 @@ export default function CalendarSettingsPage() {
   }, []);
   useEffect(load, [load]);
 
-  async function create() {
-    setError(null);
-    try {
-      const res = await api<CalendarFeedCreated>("/calendar-feed", { method: "POST" });
-      setLink(`${window.location.origin}/api/calendar/${res.token}.ics`);
-      setStatus({ enabled: true, createdAt: res.createdAt });
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const create = () =>
+    run(async () => {
+      // Ersetzen eines aktiven Links nur nach Rueckfrage: Kalender mit dem alten Link bekommen nichts mehr
+      if (status?.enabled && !(await ask("Der alte Link hört auf zu funktionieren. Kalender, die ihn nutzen, musst du neu verbinden.", { title: "Neuen Abo-Link erzeugen?", confirmLabel: "Neuen Link erzeugen", danger: true }))) return;
+      setError(null);
+      try {
+        const res = await api<CalendarFeedCreated>("/calendar-feed", { method: "POST" });
+        setLink(`${window.location.origin}/api/calendar/${res.token}.ics`);
+        setStatus({ enabled: true, createdAt: res.createdAt });
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
-  async function disable() {
-    setError(null);
-    try {
-      await api("/calendar-feed", { method: "DELETE" });
-      setLink(null);
-      setStatus({ enabled: false, createdAt: null });
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const disable = () =>
+    run(async () => {
+      if (!(await ask("Der Link funktioniert danach nicht mehr; deine Termine verschwinden aus dem abonnierten Kalender.", { title: "Abo beenden?", confirmLabel: "Abo beenden", danger: true }))) return;
+      setError(null);
+      try {
+        await api("/calendar-feed", { method: "DELETE" });
+        setLink(null);
+        setStatus({ enabled: false, createdAt: null });
+        toast.success("Kalender-Abo beendet.");
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
   return (
     <>
+      <SettingsBackLink />
       <PageHeader title="Kalender" subtitle="Deine Termine in Google Kalender, Apple Kalender, Outlook & Co." />
-      <SettingsTabs active="/einstellungen/kalender" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <Card className="space-y-4">
         <p className="text-sm text-muted">
@@ -56,8 +69,8 @@ export default function CalendarSettingsPage() {
           <div role="status" aria-label="Lade" className="flex gap-2"><Skeleton className="h-10 w-44" /></div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button onClick={create}>{status.enabled ? "Neuen Link erzeugen" : "Abo-Link erzeugen"}</Button>
-            {status.enabled && <Button variant="secondary" onClick={disable}>Abo beenden</Button>}
+            <Button onClick={create} busy={busy}>{status.enabled ? "Neuen Link erzeugen" : "Abo-Link erzeugen"}</Button>
+            {status.enabled && <Button variant="secondary" onClick={disable} disabled={busy}>Abo beenden</Button>}
           </div>
         )}
         {status?.enabled && !link && (
@@ -69,6 +82,9 @@ export default function CalendarSettingsPage() {
           <div className="space-y-2">
             <Alert tone="success">Kopiere den Link jetzt und füge ihn im Kalenderprogramm als „Kalender abonnieren“ (per URL) ein. Er wird nicht noch einmal angezeigt.</Alert>
             <CopyField label="Abo-Link" value={link} />
+            <LinkButton native variant="secondary" href={webcal(link)}>
+              <CalendarPlus size={16} aria-hidden /> In Kalender-App abonnieren
+            </LinkButton>
           </div>
         )}
       </Card>

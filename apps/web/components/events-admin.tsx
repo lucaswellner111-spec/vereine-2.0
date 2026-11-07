@@ -135,7 +135,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                         size="sm"
                         variant="ghost"
                         onClick={async () =>
-                          await ask("Termin absagen? Alle Zusagen werden benachrichtigt.") &&
+                          await ask(`„${ev.title}“ absagen? Alle Zusagen werden benachrichtigt.`, { title: "Termin absagen?", confirmLabel: "Termin absagen", cancelLabel: "Nicht absagen", danger: true }) &&
                           run(async () => {
                             await api(`/events/${ev.id}/cancel`, { method: "POST", body: {} });
                             load();
@@ -150,7 +150,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                         size="sm"
                         variant="ghost"
                         onClick={async () =>
-                          await ask("Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt.") &&
+                          await ask("Diesen und alle folgenden Termine der Serie absagen? Alle Zusagen werden benachrichtigt.", { title: "Serie absagen?", confirmLabel: "Serie absagen", cancelLabel: "Nicht absagen", danger: true }) &&
                           run(async () => {
                             await api(`/events/${ev.id}/cancel`, { method: "POST", body: { scope: "series" } });
                             load();

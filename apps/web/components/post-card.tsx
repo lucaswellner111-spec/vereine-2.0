@@ -8,7 +8,7 @@ import type { CommentItem, FeedPost } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { mediaUrl } from "@/lib/media";
-import { Lightbox } from "./lightbox";
+import { LazyLightbox } from "./lazy";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
 import { Alert, Avatar, Badge, Button, Card, Input } from "./ui";
@@ -183,7 +183,7 @@ export function PostCard({
             {!post.org && post.author.handle && <span className="text-xs text-muted">@{post.author.handle}</span>}
             <span className="text-xs text-muted">{timeAgo(post.createdAt)}</span>
             {post.kind === "event" && <Badge tone="brand">Termin</Badge>}
-            {post.kind === "donation" && <Badge tone="accent">Spendenaktion</Badge>}
+            {/* Spenden sind noch nicht gebaut ("Kommt später"): kein Badge "Spendenaktion" anzeigen */}
           </div>
 
           {post.body && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{post.body}</p>}
@@ -278,7 +278,7 @@ export function PostCard({
           )}
         </div>
       </div>
-      {lightbox !== null && <Lightbox ids={mediaIds} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />}
+      {lightbox !== null && <LazyLightbox ids={mediaIds} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />}
 
       <Dialog
         open={panel === "less"}

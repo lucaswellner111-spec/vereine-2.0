@@ -5,21 +5,23 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { ArrowLink, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
-import { useIsDesktop } from "@/lib/use-media-query";
+import { useIsDesktopState } from "@/lib/use-media-query";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
 
 export default function VerwaltungIndexPage() {
-  const { orgs, slug, setSlug, detail, role, refresh, error, setError } = useVerwaltung();
+  const { orgs, slug, setSlug, detail, role, refresh, reloadOrgs, orgsError, error, setError } = useVerwaltung();
   const router = useRouter();
   const items = itemsForRole(role);
-  const isDesktop = useIsDesktop();
+  const isDesktop = useIsDesktopState();
 
   // Auf grossen Bildschirmen steht das Menue in der Seitenleiste: direkt zum ersten Bereich.
   useEffect(() => {
     if (items.length > 0 && isDesktop) router.replace(`/verwaltung/${items[0].id}`);
   }, [items.length, isDesktop]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (orgs === null) return <CardSkeletons count={2} />;
+  if (orgs === null && orgsError) return <ErrorState message={orgsError} onRetry={reloadOrgs} />;
+  // Unbekannt oder Desktop mit Bereichen (Weiterleitung laeuft): Skeleton statt kurz aufblitzender Liste
+  if (orgs === null || isDesktop === null || (isDesktop && items.length > 0)) return <CardSkeletons count={2} />;
   if (orgs.length === 0) {
     return (
       <>
