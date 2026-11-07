@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, CornerDownLeft, Heart, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, CornerDownLeft, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OrgSummary, PersonItem } from "@vereine/shared";
@@ -91,7 +91,6 @@ export function CommandPalette() {
       { id: "personen", label: "Personen finden", icon: UserSearch, group: "Gehe zu", run: go("/personen") },
       { id: "kalender", label: "Kalender", icon: CalendarDays, group: "Gehe zu", run: go("/kalender") },
       { id: "chat", label: "Chat", icon: MessageSquare, group: "Gehe zu", run: go("/chat") },
-      { id: "spenden", label: "Spenden", icon: Heart, group: "Gehe zu", run: go("/spenden") },
       ...itemsForRole(role).map((i) => ({ id: `v-${i.id}`, label: `Verwaltung: ${i.label}`, icon: i.icon, group: "Verwaltung", run: go(`/verwaltung/${i.id}`) })),
       ...SETTINGS_ITEMS.map((s) => ({ id: `s-${s.href}`, label: `Einstellungen: ${s.label}`, icon: s.icon, group: "Einstellungen", run: go(s.href) })),
       { id: "t-light", label: "Darstellung: Hell", icon: Sun, group: "Aktionen", run: () => applyTheme("light") },

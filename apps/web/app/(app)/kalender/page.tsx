@@ -1,25 +1,28 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { EventItem } from "@vereine/shared";
 import { EventCard } from "@/components/event-card";
-import { Alert, Card, PageHeader, CardSkeletons } from "@/components/ui";
-import { api, describeError } from "@/lib/api";
+import { ArrowLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select } from "@/components/ui";
+import { SegmentedControl } from "@/components/ui-client";
+import { useApi } from "@/lib/use-api";
+
+type Range = "all" | "today" | "week" | "month";
+const RANGES: { value: Range; label: string }[] = [
+  { value: "all", label: "Alle" },
+  { value: "today", label: "Heute" },
+  { value: "week", label: "7 Tage" },
+  { value: "month", label: "Monat" },
+];
 
 const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long" });
 
 export default function CalendarPage() {
-  const [events, setEvents] = useState<EventItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    api<EventItem[]>("/events").then(setEvents).catch((e) => setError(describeError(e)));
-  }, []);
-  useEffect(load, [load]);
+  const list = useApi<EventItem[]>("/events");
+  const events = list.data;
 
   const [org, setOrg] = useState("");
-  const [range, setRange] = useState<"all" | "today" | "week" | "month">("all");
+  const [range, setRange] = useState<Range>("all");
   const orgs = useMemo(() => [...new Map((events ?? []).map((e) => [e.orgSlug, e.orgName])).entries()], [events]);
 
   const filtered = useMemo(() => {
@@ -43,40 +46,31 @@ export default function CalendarPage() {
   return (
     <>
       <PageHeader title="Kalender" subtitle="Deine kommenden Termine aus allen Vereinen und Teams." />
-      {error && <Alert>{error}</Alert>}
       {events && events.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="flex gap-1.5" role="group" aria-label="Zeitraum">
-            {([["all", "Alle"], ["today", "Heute"], ["week", "7 Tage"], ["month", "Monat"]] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={range === id}
-                onClick={() => setRange(id)}
-                className={`h-9 rounded-full px-3.5 text-sm font-medium ${range === id ? "bg-brand text-brand-contrast" : "border border-border bg-surface text-muted hover:text-text"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl aria-label="Zeitraum" mode="radio" variant="pills" options={RANGES} value={range} onChange={setRange} />
           {orgs.length > 1 && (
             <>
               <label htmlFor="cal-org" className="sr-only">Verein</label>
-              <select id="cal-org" value={org} onChange={(e) => setOrg(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-3 text-sm">
+              <Select id="cal-org" size="sm" value={org} onChange={(e) => setOrg(e.target.value)}>
                 <option value="">Alle Vereine</option>
                 {orgs.map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
-              </select>
+              </Select>
             </>
           )}
         </div>
       )}
-      {events === null ? (
+      {list.error && !events ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : events === null ? (
         <CardSkeletons count={2} />
       ) : events.length === 0 || filtered.length === 0 ? (
-        <Card>
-          <p className="text-sm">{events.length === 0 ? "Keine kommenden Termine. Folge Vereinen oder werde Mitglied, um ihre Termine zu sehen." : "Keine Termine in diesem Zeitraum."}</p>
-          <Link href="/vereine" className="mt-3 inline-block text-sm font-medium text-brand hover:underline">Vereine entdecken →</Link>
-        </Card>
+        <EmptyState
+          title={events.length === 0 ? "Keine kommenden Termine." : "Keine Termine in diesem Zeitraum."}
+          action={<ArrowLink href="/vereine">Vereine entdecken</ArrowLink>}
+        >
+          {events.length === 0 ? "Folge Vereinen oder werde Mitglied, um ihre Termine zu sehen." : undefined}
+        </EmptyState>
       ) : (
         <div className="space-y-6">
           {byDay.map(([day, items]) => (
@@ -85,7 +79,7 @@ export default function CalendarPage() {
               <ul className="space-y-3">
                 {items.map((e) => (
                   <li key={e.id}>
-                    <EventCard event={e} onChange={(u) => setEvents((l) => (l ?? []).map((x) => (x.id === u.id ? u : x)))} />
+                    <EventCard event={e} onChange={(u) => list.setData((l) => (l ?? []).map((x) => (x.id === u.id ? u : x)))} />
                   </li>
                 ))}
               </ul>

@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ChevronRight } from "lucide-react";
-import { Card, PageHeader, CardSkeletons } from "@/components/ui";
+import { ArrowLink, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
 
 export default function VerwaltungIndexPage() {
-  const { orgs, slug, setSlug, detail, role } = useVerwaltung();
+  const { orgs, slug, setSlug, detail, role, refresh, error, setError } = useVerwaltung();
   const router = useRouter();
   const items = itemsForRole(role);
 
@@ -22,25 +22,32 @@ export default function VerwaltungIndexPage() {
     return (
       <>
         <PageHeader title="Verwaltung" subtitle="Hier verwaltest du deine Vereine." />
-        <Card>
-          <p className="text-sm">Du bist noch in keinem Vorstand, Kassenwart oder in der Moderation eines Vereins.</p>
-          <Link href="/vereine/neu" className="mt-3 inline-block text-sm font-medium text-brand hover:underline">Verein gründen →</Link>
-        </Card>
+        <EmptyState title="Du bist noch in keinem Vorstand, Kassenwart oder in der Moderation eines Vereins." action={<ArrowLink href="/vereine/neu">Verein gründen</ArrowLink>} />
       </>
     );
   }
   return (
     <>
-      <PageHeader title="Verwaltung" subtitle={detail?.name ?? "Lade …"} />
+      <PageHeader title="Verwaltung" subtitle={detail?.name ?? <Skeleton className="mt-1 h-4 w-40" />} />
       {orgs.length > 1 && (
         <div className="mb-4">
           <label htmlFor="org" className="sr-only">Verein</label>
-          <select id="org" value={slug} onChange={(e) => setSlug(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
+          <Select id="org" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full">
             {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
-          </select>
+          </Select>
         </div>
       )}
-      <Card className="divide-y divide-border p-0">
+      {error && !detail && (
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            refresh();
+          }}
+          className="mb-4"
+        />
+      )}
+      <Card flush className="divide-y divide-border">
         {items.map(({ id, label, icon: Icon }) => (
           <Link key={id} href={`/verwaltung/${id}`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-surface-2">
             <Icon size={18} aria-hidden className="text-muted" />

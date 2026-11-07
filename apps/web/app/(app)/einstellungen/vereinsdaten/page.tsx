@@ -1,30 +1,31 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { MyMembership, SelfMemberProfileInput } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, Field, PageHeader, CardSkeletons } from "@/components/ui";
+import { Alert, ArrowLink, Button, Card, CardSkeletons, EmptyState, ErrorState, Field, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
+import { useApi } from "@/lib/use-api";
 import { dateDe } from "@/lib/money";
 
 export default function MyClubDataPage() {
-  const [list, setList] = useState<MyMembership[] | null>(null);
+  const memberships = useApi<MyMembership[]>("/me/memberships");
+  const list = memberships.data;
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<MyMembership[]>("/me/memberships").then(setList).catch((e) => setError(describeError(e)));
-  }, []);
 
   return (
     <>
-      <PageHeader title="Meine Vereinsdaten" subtitle="Diese Angaben sehen nur Vorstand und Kassenwart deines Vereins." />
+      <PageHeader title="Meine Mitgliedsdaten" subtitle="Diese Angaben sehen nur Vorstand und Kassenwart deines Vereins." />
       <SettingsTabs active="/einstellungen/vereinsdaten" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {list === null ? (
+      {memberships.error && !list ? (
+        <ErrorState message={memberships.error} onRetry={memberships.reload} />
+      ) : list === null ? (
         <CardSkeletons count={2} />
       ) : list.length === 0 ? (
-        <Card><p className="text-sm text-muted">Du bist in keinem Verein Mitglied. Hier erscheinen deine Vereinsdaten, sobald du beigetreten bist. <Link href="/vereine" className="text-brand hover:underline">Vereine entdecken →</Link></p></Card>
+        <EmptyState title="Du bist in keinem Verein Mitglied." action={<ArrowLink href="/vereine">Vereine entdecken</ArrowLink>}>
+          Hier erscheinen deine Mitgliedsdaten, sobald du beigetreten bist.
+        </EmptyState>
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted">Alles ist freiwillig; dein Verein darf nur Angaben verlangen, die er für die Mitgliedschaft braucht. Beim Austritt oder Löschen deines Kontos werden sie gelöscht.</p>

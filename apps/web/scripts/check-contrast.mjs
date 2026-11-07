@@ -10,8 +10,15 @@ const block = (selector) => {
   return css.slice(open + 1, css.indexOf("}", open));
 };
 const tokens = (b) => Object.fromEntries([...b.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)].map((m) => [m[1], m[2]]));
-const light = tokens(block(":root {"));
-const dark = tokens(block(':root[data-theme="dark"]'));
+// Helle Werte: :root-Block bis zum eingebetteten "@variant dark {"; dunkle Werte: einmal im "@variant dark {"-Block.
+const rootStart = css.indexOf(":root {");
+const variantStart = css.indexOf("@variant dark {", rootStart);
+if (rootStart < 0 || variantStart < 0) {
+  console.error('FAIL ":root {" oder "@variant dark {" nicht in globals.css gefunden');
+  process.exit(1);
+}
+const light = tokens(css.slice(rootStart, variantStart));
+const dark = tokens(block("@variant dark {"));
 
 const lum = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));

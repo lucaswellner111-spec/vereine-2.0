@@ -4,12 +4,17 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { ChatContact, ConversationDetail, OrgMemberName, OrgSummary } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Alert, Avatar, Button, Field } from "../ui";
+import { useApi } from "@/lib/use-api";
+import { Alert, Avatar, Button, ErrorState, Field, Input, ListSkeleton, SelectField } from "../ui";
+import { SegmentedControl, tabPanelProps } from "../ui-client";
+
+type Tab = "direct" | "group";
 
 export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => void; onClose: () => void }) {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"direct" | "group">("direct");
-  const [contacts, setContacts] = useState<ChatContact[] | null>(null);
+  const [tab, setTab] = useState<Tab>("direct");
+  const contactList = useApi<ChatContact[]>("/chat/contacts");
+  const contacts = contactList.data;
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +25,6 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<ChatContact[]>("/chat/contacts").then(setContacts).catch((e) => setError(describeError(e)));
     api<OrgSummary[]>("/orgs/mine").then((o) => {
       setOrgs(o);
       if (o[0]) setOrg(o[0].slug);
@@ -67,34 +71,38 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
         <p className="text-sm font-medium">Neuer Chat</p>
         <Button variant="ghost" size="sm" onClick={onClose}>Schließen</Button>
       </header>
-      <div className="flex gap-1 p-3 pb-0" role="tablist">
-        {(["direct", "group"] as const).map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            disabled={t === "group" && orgs.length === 0}
-            onClick={() => setTab(t)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${tab === t ? "bg-brand text-brand-contrast" : "text-muted hover:text-text"}`}
-          >
-            {t === "direct" ? "Direktnachricht" : "Gruppe"}
-          </button>
-        ))}
+      <div className="p-3 pb-0">
+        <SegmentedControl
+          aria-label="Chat-Art"
+          mode="tabs"
+          idBase="newchat"
+          panelId="newchat-panel"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "direct", label: "Direktnachricht" },
+            { value: "group", label: "Gruppe", disabled: orgs.length === 0 },
+          ]}
+        />
       </div>
       {error && <div className="p-3 pb-0"><Alert>{error}</Alert></div>}
 
+      <div {...tabPanelProps("newchat", "newchat-panel", tab)} className="flex min-h-0 flex-1 flex-col focus:outline-none">
       {tab === "direct" ? (
         <div className="flex min-h-0 flex-1 flex-col p-3">
           <label htmlFor="contact-q" className="sr-only">Person suchen</label>
-          <input
+          <Input
             id="contact-q"
+            type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Person oder Verein suchen …"
-            className="mb-2 h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            className="mb-2 w-full"
           />
-          {contacts === null ? (
-            <p className="text-sm text-muted" role="status">Lade …</p>
+          {contactList.error && !contacts ? (
+            <ErrorState message={contactList.error} onRetry={contactList.reload} />
+          ) : contacts === null ? (
+            <ListSkeleton rows={3} />
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted">
               Du kannst Mitgliedern deiner Vereine und dem Vorstand von Vereinen schreiben, denen du folgst. Tritt einem Verein bei, um Kontakte zu sehen.
@@ -117,12 +125,9 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
         </div>
       ) : (
         <form onSubmit={createGroup} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          <div className="space-y-1.5">
-            <label htmlFor="g-org" className="text-sm font-medium">Verein</label>
-            <select id="g-org" value={org} onChange={(e) => setOrg(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
-              {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
-            </select>
-          </div>
+          <SelectField id="g-org" label="Verein" value={org} onChange={(e) => setOrg(e.target.value)}>
+            {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
+          </SelectField>
           <Field id="g-title" label="Gruppenname" required minLength={2} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
           <fieldset className="min-h-0">
             <legend className="mb-1 text-sm font-medium">Mitglieder ({picked.size})</legend>
@@ -141,9 +146,10 @@ export function NewChat({ onCreated, onClose }: { onCreated: (id: string) => voi
               </ul>
             )}
           </fieldset>
-          <Button type="submit" disabled={busy || title.trim().length < 2}>Gruppe anlegen</Button>
+          <Button type="submit" busy={busy} disabled={title.trim().length < 2}>Gruppe anlegen</Button>
         </form>
       )}
+      </div>
     </div>
   );
 }

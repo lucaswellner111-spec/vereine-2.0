@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, ChevronDown, Flag, Search, Heart, LayoutDashboard, LogOut, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, ChevronDown, Flag, Search, LayoutDashboard, LogOut, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,7 +14,7 @@ import { CommandPalette, openCommandPalette } from "./command-palette";
 import { NotificationBell } from "./notification-bell";
 import { ThemeCycleButton, ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
-import { Avatar, Button } from "./ui";
+import { Avatar, Button, Select, Skeleton } from "./ui";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -23,7 +23,6 @@ const nav: NavItem[] = [
   { href: "/vereine", label: "Vereine", icon: Building2 },
   { href: "/kalender", label: "Kalender", icon: CalendarDays },
   { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/spenden", label: "Spenden", icon: Heart },
   { href: "/verwaltung", label: "Verwaltung", icon: LayoutDashboard },
 ];
 
@@ -59,8 +58,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-dvh items-center justify-center text-sm text-muted" role="status">
-        Lade …
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4" role="status" aria-label="Lade">
+        <Logo className="text-lg" />
+        <Skeleton className="h-2 w-40 rounded-full" />
       </div>
     );
   }
@@ -76,28 +76,51 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Menuepunkt "Verwaltung" mit aufklappbarem Register der Unterpunkte (nur Bereiche, die die Rolle nutzen darf). */
-function VerwaltungGroup({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) {
-  const { orgs, slug, setSlug, role } = useVerwaltung();
-  const children = itemsForRole(role);
+type SubItem = { href: string; label: string; icon: LucideIcon };
+
+/**
+ * Menuepunkt mit aufklappbarem Register der Unterpunkte. Solange man im Bereich ist (active),
+ * ist das Register immer offen; sonst klappt es per Knopf auf (Zustand bleibt beim Navigieren erhalten).
+ * Ohne Unterpunkte gibt es keinen Aufklapp-Knopf.
+ */
+function NavGroup({
+  id,
+  href,
+  label,
+  icon: Icon,
+  active,
+  currentHref,
+  items,
+  header,
+}: {
+  id: string;
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  /** aktueller Pfad, um den Hauptlink als aktuelle Seite zu markieren */
+  currentHref?: string;
+  items: SubItem[];
+  header?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
-  // Unter /verwaltung ist das Register immer offen; sonst klappt es per Klick auf.
   const expanded = active || open;
-  const Icon = item.icon;
+  const pathname = usePathname();
+  const hasItems = items.length > 0;
 
   return (
     <div>
       <div className={clsx("flex items-center rounded-lg", active && "bg-brand/15")}>
-        <Link href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={clsx(linkClass(false), "flex-1", active && "text-brand hover:bg-transparent")}>
+        <Link href={href} aria-current={currentHref === href ? "page" : undefined} className={clsx(linkClass(false), "flex-1", active && "text-brand hover:bg-transparent")}>
           <Icon size={18} aria-hidden />
-          {item.label}
+          {label}
         </Link>
-        {children.length > 0 && (
+        {hasItems && (
           <button
             type="button"
             aria-expanded={expanded}
-            aria-controls="verwaltung-register"
-            aria-label={expanded ? "Verwaltung einklappen" : "Verwaltung aufklappen"}
+            aria-controls={`${id}-register`}
+            aria-label={expanded ? `${label} einklappen` : `${label} aufklappen`}
             onClick={() => setOpen((o) => !o)}
             className={clsx("mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-text", active && "text-brand")}
           >
@@ -105,23 +128,15 @@ function VerwaltungGroup({ item, active, pathname }: { item: NavItem; active: bo
           </button>
         )}
       </div>
-      {expanded && children.length > 0 && (
-        <div id="verwaltung-register" className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
-          {orgs && orgs.length > 1 && (
-            <div className="pb-1 pr-1">
-              <label htmlFor="nav-org" className="sr-only">Verein</label>
-              <select id="nav-org" value={slug} onChange={(e) => setSlug(e.target.value)} className="h-8 w-full rounded-md border border-border bg-surface px-2 text-xs">
-                {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
-              </select>
-            </div>
-          )}
-          {children.map(({ id, label, icon: SubIcon }) => {
-            const href = `/verwaltung/${id}`;
-            const current = pathname === href || pathname.startsWith(href + "/");
+      {expanded && hasItems && (
+        <div id={`${id}-register`} className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
+          {header}
+          {items.map(({ href: subHref, label: subLabel, icon: SubIcon }) => {
+            const current = pathname === subHref || pathname.startsWith(subHref + "/");
             return (
               <Link
-                key={id}
-                href={href}
+                key={subHref}
+                href={subHref}
                 aria-current={current ? "page" : undefined}
                 className={clsx(
                   "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
@@ -129,7 +144,7 @@ function VerwaltungGroup({ item, active, pathname }: { item: NavItem; active: bo
                 )}
               >
                 <SubIcon size={15} aria-hidden />
-                {label}
+                {subLabel}
               </Link>
             );
           })}
@@ -139,49 +154,20 @@ function VerwaltungGroup({ item, active, pathname }: { item: NavItem; active: bo
   );
 }
 
-/** Menuepunkt "Einstellungen" mit aufklappbarem Register (immer offen, solange man in den Einstellungen ist). */
-function SettingsGroup({ pathname }: { pathname: string }) {
-  const inSettings = pathname.startsWith("/einstellungen") || pathname === "/rechnungen";
-  const [open, setOpen] = useState(false);
-  const expanded = inSettings || open;
-  return (
-    <div>
-      <div className={clsx("flex items-center rounded-lg", inSettings && "bg-brand/15")}>
-        <Link href="/einstellungen/profil" className={clsx(linkClass(false), "flex-1", inSettings && "text-brand hover:bg-transparent")}>
-          <Settings size={18} aria-hidden />
-          Einstellungen
-        </Link>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls="einstellungen-register"
-          aria-label={expanded ? "Einstellungen einklappen" : "Einstellungen aufklappen"}
-          onClick={() => setOpen((o) => !o)}
-          className={clsx("mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-text", inSettings && "text-brand")}
-        >
-          <ChevronDown size={16} aria-hidden className={clsx("transition-transform", expanded && "rotate-180")} />
-        </button>
+/** Verwaltung: Unterpunkte je nach Rolle, Vereinsauswahl nur bei mehr als einem Verein. */
+function VerwaltungNav({ item, active, pathname }: { item: NavItem; active: boolean; pathname: string }) {
+  const { orgs, slug, setSlug, role } = useVerwaltung();
+  const items = itemsForRole(role).map((i) => ({ href: `/verwaltung/${i.id}`, label: i.label, icon: i.icon }));
+  const header =
+    orgs && orgs.length > 1 ? (
+      <div className="pb-1 pr-1">
+        <label htmlFor="nav-org" className="sr-only">Verein</label>
+        <Select id="nav-org" size="sm" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full">
+          {orgs.map((o) => <option key={o.slug} value={o.slug}>{o.name}</option>)}
+        </Select>
       </div>
-      {expanded && (
-        <div id="einstellungen-register" className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
-          {SETTINGS_ITEMS.map(({ href, label, icon: SubIcon }) => {
-            const current = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={current ? "page" : undefined}
-                className={clsx("flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors", current ? "bg-brand/15 font-medium text-brand" : "text-muted hover:bg-surface-2 hover:text-text")}
-              >
-                <SubIcon size={15} aria-hidden />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+    ) : null;
+  return <NavGroup id="verwaltung" href={item.href} label={item.label} icon={item.icon} active={active} currentHref={pathname} items={items} header={header} />;
 }
 
 function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
@@ -212,7 +198,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Hauptnavigation">
           {items.map((item) =>
             item.href === "/verwaltung" ? (
-              <VerwaltungGroup key={item.href} item={item} active={isActive(item.href)} pathname={pathname} />
+              <VerwaltungNav key={item.href} item={item} active={isActive(item.href)} pathname={pathname} />
             ) : (
               <Link key={item.href} href={item.href} aria-current={isActive(item.href) ? "page" : undefined} className={linkClass(isActive(item.href))}>
                 <item.icon size={18} aria-hidden />
@@ -221,7 +207,14 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
               </Link>
             ),
           )}
-          <SettingsGroup pathname={pathname} />
+          <NavGroup
+            id="einstellungen"
+            href="/einstellungen/profil"
+            label="Einstellungen"
+            icon={Settings}
+            active={pathname.startsWith("/einstellungen") || pathname === "/rechnungen"}
+            items={SETTINGS_ITEMS}
+          />
         </nav>
         <ThemeToggle compact className="mb-3 self-start" />
         <div className="rounded-lg border border-border p-2">

@@ -1,22 +1,19 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { InvoiceDetail, InvoiceSummary } from "@vereine/shared";
 import { InvoiceStatusBadge } from "@/components/invoice-status";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
+import { Alert, ArrowLink, Button, Card, EmptyState, ErrorState, LinkButton, ListSkeleton, PageHeader } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
+import { useApi } from "@/lib/use-api";
 import { dateDe, eurCents } from "@/lib/money";
 
 export default function MyInvoicesPage() {
-  const [rows, setRows] = useState<InvoiceSummary[] | null>(null);
+  const list = useApi<InvoiceSummary[]>("/billing/mine");
+  const rows = list.data;
   const [open, setOpen] = useState<InvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<InvoiceSummary[]>("/billing/mine").then(setRows).catch((e) => setError(describeError(e)));
-  }, []);
 
   async function show(id: string) {
     setError(null);
@@ -32,12 +29,14 @@ export default function MyInvoicesPage() {
       <PageHeader title="Meine Rechnungen" subtitle="Rechnungen, die dir deine Vereine gestellt haben." />
       <SettingsTabs active="/rechnungen" />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {rows === null ? (
-        <CardSkeletons count={2} />
+      {list.error && !rows ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : rows === null ? (
+        <ListSkeleton rows={3} />
       ) : rows.length === 0 ? (
-        <Card><p className="text-sm text-muted">Du hast keine Rechnungen. <Link href="/vereine" className="text-brand hover:underline">Vereine entdecken →</Link></p></Card>
+        <EmptyState title="Du hast keine Rechnungen." action={<ArrowLink href="/vereine">Vereine entdecken</ArrowLink>} />
       ) : (
-        <Card className="divide-y divide-border p-0">
+        <Card flush className="divide-y divide-border">
           {rows.map((i) => (
             <div key={i.id} className="flex flex-wrap items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
@@ -47,7 +46,7 @@ export default function MyInvoicesPage() {
               <span className="text-sm font-medium">{eurCents(i.totalCents)}</span>
               <InvoiceStatusBadge status={i.displayStatus} />
               <Button size="sm" variant="secondary" onClick={() => (open?.id === i.id ? setOpen(null) : show(i.id))}>{open?.id === i.id ? "Schließen" : "Ansehen"}</Button>
-              <a href={`/api/invoices/${i.id}/pdf`} className="inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-xs hover:bg-surface-2">PDF</a>
+              <LinkButton native size="sm" variant="secondary" href={`/api/invoices/${i.id}/pdf`}>PDF</LinkButton>
               {open?.id === i.id && (
                 <div className="w-full rounded-lg bg-surface-2 p-3 text-sm">
                   <ul className="space-y-1">

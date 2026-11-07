@@ -45,7 +45,9 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
         { id: "data", label: "Vereinsdaten eintragen", hint: "Anschrift und IBAN erscheinen auf Rechnungen.", href: "/verwaltung/vereinsdaten", done: !!profile && (profile.address.length > 0 || profile.iban.length > 0) },
         { id: "fees", label: "Beitragsklassen anlegen", hint: "Grundlage für Beiträge und Rechnungen.", href: "/verwaltung/beitraege", done: classes.length > 0 },
       ]);
-    });
+    })
+      // Ohne Vereinsdaten keine Checkliste (sie ist nur eine Hilfe, kein Pflichtbereich)
+      .catch(() => alive && setSteps(null));
     return () => {
       alive = false;
     };

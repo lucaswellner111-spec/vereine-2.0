@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { FeeClassItem, FeeInterval, MemberRecord, MemberRegistryPage, OrgDashboard } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
-import { Alert, Badge, Button, Card, ConceptNote, Field, CardSkeletons } from "./ui";
+import { ROLE_LABEL } from "@/lib/labels";
+import { useApi, useBusy } from "@/lib/use-api";
+import { Alert, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, TextareaField } from "./ui";
 import { ask } from "./ui-hosts";
 
 const intervalLabel: Record<FeeInterval, string> = { monthly: "monatlich", quarterly: "vierteljährlich", halfyearly: "halbjährlich", yearly: "jährlich" };
-const roleLabel = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" } as const;
 const PAGE = 50;
 
 // --- Übersicht -------------------------------------------------------------------------
 
-export function DashboardPanel({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
-  const [d, setD] = useState<OrgDashboard | null>(null);
-  useEffect(() => {
-    setD(null);
-    api<OrgDashboard>(`/orgs/${slug}/dashboard`).then(setD).catch((e) => onError(describeError(e)));
-  }, [slug, onError]);
+/** Ladefehler erscheinen lokal (ErrorState); onError bleibt fuer Aktionsfehler (hier keine). */
+export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | null) => void }) {
+  const dash = useApi<OrgDashboard>(`/orgs/${slug}/dashboard`);
+  const d = dash.data;
+  if (dash.error && !d) return <ErrorState message={dash.error} onRetry={dash.reload} />;
   if (!d) return <CardSkeletons count={2} />;
   const maxJoins = Math.max(1, ...d.joinsByMonth.map((m) => m.joins));
   const stat = (label: string, value: string, hint?: string) => (
@@ -81,36 +81,32 @@ export function DashboardPanel({ slug, onError }: { slug: string; onError: (m: s
 // --- Beitragsklassen ------------------------------------------------------------------------
 
 export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canEdit: boolean; onError: (m: string | null) => void }) {
-  const [rows, setRows] = useState<FeeClassItem[] | null>(null);
+  const list = useApi<FeeClassItem[]>(`/orgs/${slug}/fee-classes`);
+  const rows = list.data;
   const [form, setForm] = useState({ name: "", amount: "", interval: "yearly" as FeeInterval, description: "" });
+  const [adding, runAdd] = useBusy();
 
-  const load = useCallback(() => {
-    api<FeeClassItem[]>(`/orgs/${slug}/fee-classes`).then(setRows).catch((e) => onError(describeError(e)));
-  }, [slug, onError]);
-  useEffect(() => {
-    setRows(null);
-    load();
-  }, [load]);
-
-  async function add(e: FormEvent) {
+  function add(e: FormEvent) {
     e.preventDefault();
     const cents = parseEuroToCents(form.amount);
     if (cents === null) return onError("Bitte einen gültigen Betrag eingeben, z. B. 120 oder 12,50.");
-    onError(null);
-    try {
-      setRows(await api<FeeClassItem[]>(`/orgs/${slug}/fee-classes`, { method: "POST", body: { name: form.name, amountCents: cents, interval: form.interval, description: form.description } }));
-      setForm({ name: "", amount: "", interval: "yearly", description: "" });
-    } catch (err) {
-      onError(describeError(err));
-    }
+    void runAdd(async () => {
+      onError(null);
+      try {
+        list.setData(await api<FeeClassItem[]>(`/orgs/${slug}/fee-classes`, { method: "POST", body: { name: form.name, amountCents: cents, interval: form.interval, description: form.description } }));
+        setForm({ name: "", amount: "", interval: "yearly", description: "" });
+      } catch (err) {
+        onError(describeError(err));
+      }
+    });
   }
 
   async function remove(c: FeeClassItem) {
-    if (!(await ask(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`, { confirmLabel: "Ja" }))) return;
+    if (!(await ask(`„${c.name}“ löschen? ${c.members} Mitglieder verlieren diese Zuordnung.`, { confirmLabel: "Löschen" }))) return;
     onError(null);
     try {
       await api(`/orgs/${slug}/fee-classes/${c.id}`, { method: "DELETE" });
-      load();
+      list.reload();
     } catch (err) {
       onError(describeError(err));
     }
@@ -118,28 +114,27 @@ export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canE
 
   return (
     <div className="space-y-4">
-      <ConceptNote>Beitragsklassen sind die Grundlage für den Beitragslauf (Serienrechnungen), der als Nächstes folgt. Betrag je Intervall.</ConceptNote>
+      <p className="text-xs text-muted">Betrag je Intervall.</p>
       {canEdit && (
         <Card>
           <form onSubmit={add} className="grid gap-3 sm:grid-cols-[1fr_8rem_9rem_auto] sm:items-end">
             <Field id="fc-name" label="Name" required minLength={2} maxLength={60} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="z. B. Erwachsene" />
             <Field id="fc-amount" label="Betrag (€)" required inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-            <div className="space-y-1.5">
-              <label htmlFor="fc-int" className="text-sm font-medium">Intervall</label>
-              <select id="fc-int" value={form.interval} onChange={(e) => setForm({ ...form, interval: e.target.value as FeeInterval })} className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm">
-                {Object.entries(intervalLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <Button type="submit">Anlegen</Button>
+            <SelectField id="fc-int" label="Intervall" value={form.interval} onChange={(e) => setForm({ ...form, interval: e.target.value as FeeInterval })}>
+              {Object.entries(intervalLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectField>
+            <Button type="submit" busy={adding}>Anlegen</Button>
           </form>
         </Card>
       )}
-      {rows === null ? (
+      {list.error && !rows ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : rows === null ? (
         <CardSkeletons count={2} />
       ) : rows.length === 0 ? (
-        <Card><p className="text-sm text-muted">Noch keine Beitragsklassen.</p></Card>
+        <EmptyState title="Noch keine Beitragsklassen." />
       ) : (
-        <Card className="divide-y divide-border p-0">
+        <Card flush className="divide-y divide-border">
           {rows.map((c) => (
             <div key={c.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
               <span className="min-w-0 flex-1 font-medium">{c.name}</span>
@@ -157,27 +152,19 @@ export function FeeClassesAdmin({ slug, canEdit, onError }: { slug: string; canE
 // --- Mitgliederliste ------------------------------------------------------------------------
 
 export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdmin: boolean; onError: (m: string | null) => void }) {
-  const [page, setPage] = useState<MemberRegistryPage | null>(null);
-  const [classes, setClasses] = useState<FeeClassItem[]>([]);
   const [q, setQ] = useState("");
   const [cls, setCls] = useState("");
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<MemberRecord | null>(null);
-
-  const load = useCallback(() => {
-    const p = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
-    if (q.trim()) p.set("q", q.trim());
-    if (cls) p.set("feeClassId", cls);
-    api<MemberRegistryPage>(`/orgs/${slug}/member-registry?${p}`).then(setPage).catch((e) => onError(describeError(e)));
-  }, [slug, q, cls, offset, onError]);
-
-  useEffect(() => {
-    const t = setTimeout(load, 250);
-    return () => clearTimeout(t);
-  }, [load]);
-  useEffect(() => {
-    api<FeeClassItem[]>(`/orgs/${slug}/fee-classes`).then(setClasses).catch(() => setClasses([]));
-  }, [slug]);
+  const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+  if (q.trim()) params.set("q", q.trim());
+  if (cls) params.set("feeClassId", cls);
+  const registry = useApi<MemberRegistryPage>(`/orgs/${slug}/member-registry?${params}`, { debounceMs: 250, keepPrevious: true });
+  const page = registry.data;
+  const load = registry.reload;
+  const classList = useApi<FeeClassItem[]>(`/orgs/${slug}/fee-classes`);
+  const classes = classList.data ?? [];
+  useEffect(() => setOpen(null), [slug]);
 
   async function show(userId: string) {
     onError(null);
@@ -192,22 +179,24 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="mr-q" className="sr-only">Suche</label>
-        <input id="mr-q" type="search" placeholder="Name, Nummer oder Ort" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="h-9 w-56 rounded-lg border border-border bg-surface px-3 text-sm" />
+        <Input id="mr-q" size="sm" type="search" placeholder="Name, Nummer oder Ort" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="w-56" />
         <label htmlFor="mr-cls" className="sr-only">Beitragsklasse</label>
-        <select id="mr-cls" value={cls} onChange={(e) => { setCls(e.target.value); setOffset(0); }} className="h-9 rounded-lg border border-border bg-surface px-3 text-sm">
+        <Select id="mr-cls" size="sm" value={cls} onChange={(e) => { setCls(e.target.value); setOffset(0); }}>
           <option value="">Alle Beitragsklassen</option>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        {isAdmin && <a href={`/api/orgs/${slug}/member-registry.csv`} className="ml-auto inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm hover:bg-surface-2">CSV-Export</a>}
+        </Select>
+        {isAdmin && <LinkButton native size="sm" variant="secondary" href={`/api/orgs/${slug}/member-registry.csv`} className="ml-auto">CSV-Export</LinkButton>}
       </div>
       {isAdmin && <p className="text-xs text-muted">Der Export wird protokolliert. Gib Mitgliederdaten nur an Personen weiter, die sie für Vereinszwecke brauchen.</p>}
 
-      {page === null ? (
+      {registry.error && !page ? (
+        <ErrorState message={registry.error} onRetry={registry.reload} />
+      ) : page === null ? (
         <CardSkeletons count={2} />
       ) : page.items.length === 0 ? (
-        <Card><p className="text-sm text-muted">Keine Mitglieder gefunden.</p></Card>
+        <EmptyState title="Keine Mitglieder gefunden." />
       ) : (
-        <Card className="overflow-x-auto p-0">
+        <Card flush className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border text-xs text-muted">
               <tr><th className="p-3 font-medium">Nr.</th><th className="p-3 font-medium">Name</th><th className="p-3 font-medium">Rolle</th><th className="p-3 font-medium">Ort</th><th className="p-3 font-medium">Beitragsklasse</th><th className="p-3 font-medium">Eintritt</th><th className="p-3" /></tr>
@@ -217,7 +206,7 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
                 <tr key={m.userId} className="border-b border-border last:border-0">
                   <td className="p-3 font-mono text-xs">{m.memberNo}</td>
                   <td className="p-3">{m.name} {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
-                  <td className="p-3 text-muted">{roleLabel[m.role]}</td>
+                  <td className="p-3 text-muted">{ROLE_LABEL[m.role]}</td>
                   <td className="p-3 text-muted">{m.city || "–"}</td>
                   <td className="p-3 text-muted">{m.feeClassName ?? "–"}</td>
                   <td className="p-3 text-muted">{dateDe(m.joinedOn)}</td>
@@ -301,19 +290,22 @@ function MemberEditor({ slug, record, classes, canEdit, onError, onClose, onSave
             <Field id="me-gmail" label="E-Mail Erziehungsberechtigte(r)" type="email" disabled={!canEdit} value={f.guardianEmail} onChange={set("guardianEmail")} />
           </>
         )}
-        <div className="space-y-1.5">
-          <label htmlFor="me-class" className="text-sm font-medium">Beitragsklasse</label>
-          <select id="me-class" disabled={!canEdit} value={f.feeClassId ?? ""} onChange={(e) => setF({ ...f, feeClassId: e.target.value || null })} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm disabled:opacity-60">
-            <option value="">Keine</option>
-            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
+        <SelectField id="me-class" label="Beitragsklasse" disabled={!canEdit} value={f.feeClassId ?? ""} onChange={(e) => setF({ ...f, feeClassId: e.target.value || null })}>
+          <option value="">Keine</option>
+          {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </SelectField>
         <Field id="me-joined" label="Eintritt" type="date" required disabled={!canEdit} value={f.joinedOn} onChange={set("joinedOn")} />
-        <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="me-notes" className="text-sm font-medium">Interne Notiz</label>
-          <textarea id="me-notes" rows={2} maxLength={500} disabled={!canEdit} value={f.notes} onChange={set("notes")} className="w-full resize-none rounded-lg border border-border bg-bg p-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60" />
-          <p className="text-xs text-muted">Keine sensiblen Angaben (z. B. Gesundheit). Die Person darf ihre Daten inklusive Notiz per Auskunft einsehen.</p>
-        </div>
+        <TextareaField
+          id="me-notes"
+          label="Interne Notiz"
+          rows={2}
+          maxLength={500}
+          disabled={!canEdit}
+          value={f.notes}
+          onChange={set("notes")}
+          hint="Keine sensiblen Angaben (z. B. Gesundheit). Die Person darf ihre Daten inklusive Notiz per Auskunft einsehen."
+          className="sm:col-span-2"
+        />
         {canEdit ? (
           <div className="flex items-center gap-3 sm:col-span-2">
             <Button type="submit">Speichern</Button>

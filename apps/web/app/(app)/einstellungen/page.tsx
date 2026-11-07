@@ -30,7 +30,7 @@ export default function SettingsIndexPage() {
           </div>
         </Card>
       )}
-      <Card className="divide-y divide-border p-0">
+      <Card flush className="divide-y divide-border">
         {SETTINGS_ITEMS.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className="flex min-h-12 items-center gap-3 px-4 text-sm font-medium hover:bg-surface-2">
             <Icon size={18} aria-hidden className="text-muted" />

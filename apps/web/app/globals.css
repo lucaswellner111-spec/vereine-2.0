@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Dunkel = explizit data-theme="dark" oder automatisch per Geraete-Einstellung (ausser data-theme="light"). */
+@custom-variant dark {
+  &[data-theme="dark"] {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:not([data-theme="light"]) {
+      @slot;
+    }
+  }
+}
+
 /*
  * Design-Tokens. Drei Darstellungen:
  *  - Automatisch (kein data-theme): folgt der Geraete-Einstellung (prefers-color-scheme)
@@ -25,29 +37,10 @@
   --ring: #1b6e4566;
   --shadow: 0 1px 2px rgb(20 32 26 / 0.06);
   --overlay: 0 8px 24px rgb(20 32 26 / 0.14);
-}
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #0e1410;
-  --surface: #161e18;
-  --surface-2: #1e2820;
-  --border: #2c382e;
-  --text: #e7eee8;
-  --muted: #9aab9e;
-  --brand: #4cc08a;
-  --brand-hover: #67d09d;
-  --brand-contrast: #07140d;
-  --accent: #f0b35a;
-  --danger: #f08a7c;
-  --on-danger: #2a0b06;
-  --ring: #4cc08a66;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
-  --overlay: 0 8px 24px rgb(0 0 0 / 0.5);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  /* Dunkle Werte stehen nur hier (einmal): gelten fuer data-theme="dark"
+     und fuer "Automatisch" bei dunkler Geraete-Einstellung, siehe @custom-variant dark oben. */
+  @variant dark {
     color-scheme: dark;
     --bg: #0e1410;
     --surface: #161e18;

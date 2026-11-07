@@ -1,12 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ConversationSummary } from "@vereine/shared";
 import { NewChat } from "@/components/chat/new-chat";
 import { Thread } from "@/components/chat/thread";
-import { Alert, Avatar, Badge, Button, PageHeader } from "@/components/ui";
-import { api, describeError } from "@/lib/api";
+import { Alert, Avatar, Badge, Button, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
 import { useChat, useChatEvents } from "@/lib/chat";
 
@@ -17,16 +17,11 @@ const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 export default function ChatPage() {
   const { user } = useAuth();
   const { live } = useChat();
-  const [list, setList] = useState<ConversationSummary[] | null>(null);
+  const conversations = useApi<ConversationSummary[]>("/chat/conversations");
+  const list = conversations.data;
+  const load = conversations.reload;
   const [active, setActive] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    api<ConversationSummary[]>("/chat/conversations").then(setList).catch((e) => setError(describeError(e)));
-  }, []);
-
-  useEffect(load, [load]);
   useChatEvents(load);
 
   // Desktop: erste Unterhaltung direkt oeffnen; Mobil: erst die Liste zeigen.
@@ -48,11 +43,28 @@ export default function ChatPage() {
         subtitle={live ? "Verbunden – Nachrichten kommen sofort an." : "Nachrichten werden regelmäßig abgerufen."}
         action={<Button onClick={() => { setCreating(true); setActive(null); }}>Neuer Chat</Button>}
       />
-      {error && <div className="mb-3"><Alert>{error}</Alert></div>}
+      {conversations.error && list && <div className="mb-3"><Alert>{conversations.error}</Alert></div>}
 
       <div className="grid h-[calc(100dvh-14rem)] min-h-[26rem] overflow-hidden rounded-xl border border-border bg-surface md:grid-cols-[17rem_1fr]">
         <ul className={clsx("min-h-0 overflow-y-auto border-border md:block md:border-r", showList ? "block" : "hidden")} aria-label="Unterhaltungen">
-          {list === null && <li className="p-4 text-sm text-muted" role="status">Lade …</li>}
+          {list === null && conversations.error && (
+            <li className="p-3">
+              <ErrorState message={conversations.error} onRetry={load} />
+            </li>
+          )}
+          {list === null && !conversations.error && (
+            <li role="status" aria-label="Lade" className="space-y-3 p-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="h-9 w-9 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </li>
+          )}
           {list?.length === 0 && (
             <li className="p-4 text-sm text-muted">
               Noch keine Unterhaltungen. Starte mit „Neuer Chat“ eine Nachricht an ein Vereinsmitglied oder den Vorstand.

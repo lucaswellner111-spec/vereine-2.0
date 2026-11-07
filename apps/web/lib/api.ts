@@ -8,12 +8,13 @@ export class ApiError extends Error {
   }
 }
 
-type Options = { method?: string; body?: unknown };
+type Options = { method?: string; body?: unknown; signal?: AbortSignal };
 
 /** Duenner Fetch-Wrapper. Alle Aufrufe gehen same-origin an /api (Caddy bzw. Next-Rewrite -> NestJS). */
-export async function api<T = void>(path: string, { method = "GET", body }: Options = {}): Promise<T> {
+export async function api<T = void>(path: string, { method = "GET", body, signal }: Options = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
+    signal,
     credentials: "same-origin",
     headers: body !== undefined ? { "content-type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,

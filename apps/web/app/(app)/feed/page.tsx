@@ -2,56 +2,75 @@
 
 import clsx from "clsx";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Camera, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { FeedPost, FeedResponse, MediaRef, OrgSummary } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
 import { MAX_POST_TAGS, tagLabel } from "@vereine/shared";
 import { TagPicker } from "@/components/tag-picker";
-import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
+import { Alert, ArrowLink, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
+import { SegmentedControl, tabPanelProps } from "@/components/ui-client";
+import { toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl, uploadImage } from "@/lib/media";
+import { useApi, useBusy } from "@/lib/use-api";
 
 const hints = {
   ranked: "Sortiert nach Beziehung, Interaktion, Vorlieben und Aktualität – den Grund siehst du unter „Warum sehe ich das?“.",
   chrono: "Rein chronologisch, ohne Personalisierung.",
 };
+type Mode = "ranked" | "chrono";
+const MODES: { value: Mode; label: string }[] = [
+  { value: "ranked", label: "Für dich" },
+  { value: "chrono", label: "Neueste" },
+];
 
 export default function FeedPage() {
-  const [mode, setMode] = useState<"ranked" | "chrono">("ranked");
-  const [feed, setFeed] = useState<FeedResponse | null>(null);
+  // useSearchParams braucht eine Suspense-Grenze, sonst bricht next build ab
+  return (
+    <Suspense fallback={<CardSkeletons count={2} />}>
+      <Feed />
+    </Suspense>
+  );
+}
+
+function Feed() {
+  const filterTag = useSearchParams().get("tag") ?? "";
+  const [mode, setMode] = useState<Mode>("ranked");
+  const path = `/feed?mode=${mode}${filterTag ? `&tag=${encodeURIComponent(filterTag)}` : ""}`;
+  const feed = useApi<FeedResponse>(path);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const [moreBusy, runMore] = useBusy();
+
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [target, setTarget] = useState(""); // "" = persoenlich, sonst Vereins-Slug
   const [draft, setDraft] = useState("");
   const [images, setImages] = useState<MediaRef[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useBusy();
   const [tags, setTags] = useState<string[]>([]); // Tags des neuen Beitrags
-  const [filterTag, setFilterTag] = useState(""); // aktiver Tag-Filter (?tag=)
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const load = useCallback(async (m: "ranked" | "chrono", cursor?: string, tag = filterTag) => {
-    try {
-      const res = await api<FeedResponse>(`/feed?mode=${m}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
-      setFeed((prev) => (cursor && prev ? { ...res, posts: [...prev.posts, ...res.posts] } : res));
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }, [filterTag]);
-
-  // Tag aus dem Link (/feed?tag=fussball) uebernehmen
-  useEffect(() => {
-    setFilterTag(new URLSearchParams(window.location.search).get("tag") ?? "");
-  }, []);
-
-  useEffect(() => {
-    void load(mode);
-  }, [mode, load]);
 
   useEffect(() => {
     api<OrgSummary[]>("/orgs/mine").then(setOrgs).catch(() => setOrgs([]));
   }, []);
+
+  const loadMore = () =>
+    runMore(async () => {
+      const cursor = feed.data?.nextCursor;
+      if (!cursor) return;
+      const requested = path;
+      try {
+        const res = await api<FeedResponse>(`${requested}&cursor=${encodeURIComponent(cursor)}`);
+        if (pathRef.current !== requested) return; // Ansicht wurde inzwischen gewechselt
+        feed.setData((prev) => (prev ? { ...res, posts: [...prev.posts, ...res.posts] } : res));
+      } catch (e) {
+        toast.error(describeError(e));
+      }
+    });
 
   async function pickImages(files: FileList | null) {
     if (!files?.length) return;
@@ -70,38 +89,65 @@ export default function FeedPage() {
     }
   }
 
-  async function publish() {
-    if (!draft.trim() && images.length === 0) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api<FeedPost>("/posts", {
-        method: "POST",
-        body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id), tags },
-      });
-      setDraft("");
-      setImages([]);
-      setTags([]);
-      await load(mode);
-    } catch (e) {
-      setError(describeError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const publish = () =>
+    run(async () => {
+      if (!draft.trim() && images.length === 0) return;
+      setError(null);
+      try {
+        await api<FeedPost>("/posts", {
+          method: "POST",
+          body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id), tags },
+        });
+        setDraft("");
+        setImages([]);
+        setTags([]);
+        feed.reload();
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
-  const effective = feed?.mode ?? "chrono";
-  const rankedLocked = feed !== null && !feed.personalized && mode === "ranked";
+  const data = feed.data;
+  const effective = data?.mode ?? "chrono";
+  const rankedLocked = data !== null && !data.personalized && mode === "ranked";
   // Ohne Einwilligung ist faktisch "Neueste" aktiv; der Tab soll das zeigen.
   const activeTab = rankedLocked ? "chrono" : mode;
-  const dropPost = (id: string) => setFeed((f) => (f ? { ...f, posts: f.posts.filter((x) => x.id !== id) } : f));
+  const dropPost = (id: string) => feed.setData((f) => (f ? { ...f, posts: f.posts.filter((x) => x.id !== id) } : f));
+
+  let list;
+  if (feed.error && !data) list = <ErrorState message={feed.error} onRetry={feed.reload} />;
+  else if (!data) list = <CardSkeletons count={2} />;
+  else if (!data.posts.length)
+    list = (
+      <EmptyState
+        title="Hier ist noch nichts."
+        action={
+          <div className="flex flex-wrap justify-center gap-4">
+            <ArrowLink href="/vereine">Vereine entdecken</ArrowLink>
+            <ArrowLink href="/personen">Personen finden</ArrowLink>
+          </div>
+        }
+      >
+        Folge Vereinen oder Personen oder schreibe den ersten Beitrag.
+      </EmptyState>
+    );
+  else
+    list = (
+      <ul className="space-y-4">
+        {data.posts.map((p) => (
+          <li key={p.id}>
+            <PostCard post={p} onDeleted={dropPost} onHidden={dropPost} />
+          </li>
+        ))}
+      </ul>
+    );
 
   return (
     <>
       <PageHeader
         title="Feed"
         subtitle={hints[effective]}
-        action={<Link href="/personen" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-2">Personen finden</Link>}
+        action={<LinkButton href="/personen" variant="secondary">Personen finden</LinkButton>}
       />
 
       {filterTag && (
@@ -109,25 +155,22 @@ export default function FeedPage() {
           <span className="text-muted">Gefiltert nach</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-brand/15 px-2.5 py-1 text-xs font-medium text-brand">
             {tagLabel(filterTag)}
-            <Link href="/feed" aria-label="Filter entfernen" onClick={() => setFilterTag("")}><X size={12} aria-hidden /></Link>
+            <Link href="/feed" aria-label="Filter entfernen"><X size={12} aria-hidden /></Link>
           </span>
           <Link href={`/vereine?tag=${encodeURIComponent(filterTag)}`} className="text-brand hover:underline">Vereine dazu</Link>
         </div>
       )}
 
-      <div role="tablist" aria-label="Feed-Sortierung" className="mb-4 inline-flex rounded-lg border border-border bg-surface p-1">
-        {([["ranked", "Für dich"], ["chrono", "Neueste"]] as const).map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={activeTab === id}
-            onClick={() => setMode(id)}
-            className={clsx("rounded-md px-3 py-1.5 text-sm font-medium", activeTab === id ? "bg-brand text-brand-contrast" : "text-muted hover:text-text")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label="Feed-Sortierung"
+        mode="tabs"
+        idBase="feed"
+        panelId="feed-panel"
+        options={MODES}
+        value={activeTab}
+        onChange={setMode}
+        className="mb-4"
+      />
 
       {rankedLocked && (
         <div className="mb-4">
@@ -141,14 +184,14 @@ export default function FeedPage() {
 
       <Card className="mb-4">
         <label htmlFor="composer" className="sr-only">Neuer Beitrag</label>
-        <textarea
+        <Textarea
           id="composer"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
           maxLength={1000}
           placeholder="Was gibt es Neues?"
-          className="w-full resize-none rounded-lg border border-border bg-bg p-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+          className="w-full"
         />
         {images.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-2" aria-label="Angehängte Bilder">
@@ -160,9 +203,9 @@ export default function FeedPage() {
                   type="button"
                   aria-label="Bild entfernen"
                   onClick={() => setImages((l) => l.filter((x) => x.id !== img.id))}
-                  className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-danger text-xs leading-5 text-on-danger"
+                  className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-danger text-on-danger"
                 >
-                  ×
+                  <X size={12} aria-hidden />
                 </button>
               </li>
             ))}
@@ -174,7 +217,7 @@ export default function FeedPage() {
             <label
               htmlFor="file"
               className={clsx(
-                "inline-flex h-8 cursor-pointer items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium hover:bg-surface-2",
+                "inline-flex h-9 cursor-pointer items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium hover:bg-surface-2",
                 (uploading || images.length >= 4) && "pointer-events-none opacity-50",
               )}
             >
@@ -182,43 +225,27 @@ export default function FeedPage() {
               {uploading ? "Lädt hoch …" : `Bild${images.length ? ` (${images.length}/4)` : ""}`}
             </label>
             <label htmlFor="target" className="text-xs text-muted">Posten als</label>
-            <select id="target" value={target} onChange={(e) => setTarget(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs">
+            <Select id="target" size="sm" value={target} onChange={(e) => setTarget(e.target.value)}>
               <option value="">Ich selbst</option>
               {orgs.map((o) => (
                 <option key={o.slug} value={o.slug}>{o.name}</option>
               ))}
-            </select>
+            </Select>
             <span className="text-xs text-muted">{draft.length}/1000</span>
           </div>
           <TagPicker label="Tags (optional)" value={tags} onChange={setTags} max={MAX_POST_TAGS} hint={target ? "Ohne Auswahl übernimmt der Beitrag die Tags des Vereins." : undefined} />
-          <Button size="sm" onClick={publish} disabled={(!draft.trim() && images.length === 0) || busy || uploading}>Veröffentlichen</Button>
+          <Button size="sm" onClick={publish} busy={busy} disabled={(!draft.trim() && images.length === 0) || uploading}>Veröffentlichen</Button>
         </div>
       </Card>
 
-      {feed === null ? (
-        <CardSkeletons count={2} />
-      ) : feed.posts.length === 0 ? (
-        <Card>
-          <p className="text-sm">Hier ist noch nichts. Folge Vereinen oder Personen oder schreibe den ersten Beitrag.</p>
-          <div className="mt-3 flex gap-4 text-sm font-medium text-brand">
-            <Link href="/vereine" className="hover:underline">Vereine entdecken →</Link>
-            <Link href="/personen" className="hover:underline">Personen finden →</Link>
+      <div {...tabPanelProps("feed", "feed-panel", activeTab)} className="focus:outline-none">
+        {list}
+        {data?.nextCursor && (
+          <div className="mt-4 text-center">
+            <Button variant="secondary" busy={moreBusy} onClick={loadMore}>Mehr laden</Button>
           </div>
-        </Card>
-      ) : (
-        <ul className="space-y-4">
-          {feed.posts.map((p) => (
-            <li key={p.id}>
-              <PostCard post={p} onDeleted={dropPost} onHidden={dropPost} />
-            </li>
-          ))}
-        </ul>
-      )}
-      {feed?.nextCursor && (
-        <div className="mt-4 text-center">
-          <Button variant="secondary" onClick={() => load(mode, feed.nextCursor!)}>Mehr laden</Button>
-        </div>
-      )}
+        )}
+      </div>
     </>
   );
 }

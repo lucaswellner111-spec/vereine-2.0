@@ -1,90 +1,91 @@
 "use client";
 
-import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useRef, useState } from "react";
 import { MAX_ORG_TAGS, type FeedPost, type OrgDetail } from "@vereine/shared";
 import { TagChips } from "@/components/tag-chips";
 import { TagPicker } from "@/components/tag-picker";
 import { PostCard } from "@/components/post-card";
-import { Alert, Avatar, Badge, Button, Card } from "@/components/ui";
-import { api, ApiError, describeError } from "@/lib/api";
+import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState } from "@/components/ui";
+import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { ask } from "@/components/ui-hosts";
+import { ROLE_LABEL } from "@/lib/labels";
+import { useApi, useBusy } from "@/lib/use-api";
+import { ask, toast } from "@/components/ui-hosts";
 
-const roleLabel = { admin: "Vorstand", treasurer: "Kassenwart", moderator: "Moderation", member: "Mitglied" } as const;
+type PostsPage = { posts: FeedPost[]; nextCursor: string | null };
 
 export default function OrgPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const { user } = useAuth();
-  const [org, setOrg] = useState<OrgDetail | null>(null);
-  const [posts, setPosts] = useState<FeedPost[] | null>(null);
-  const [next, setNext] = useState<string | null>(null);
+  const org = useApi<OrgDetail>(`/orgs/${slug}`);
+  const postsPath = `/orgs/${slug}/posts`;
+  const posts = useApi<PostsPage>(postsPath);
+  const pathRef = useRef(postsPath);
+  pathRef.current = postsPath;
+  const [moreBusy, runMore] = useBusy();
   const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
   const [editTags, setEditTags] = useState<string[] | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const [o, p] = await Promise.all([
-        api<OrgDetail>(`/orgs/${slug}`),
-        api<{ posts: FeedPost[]; nextCursor: string | null }>(`/orgs/${slug}/posts`),
-      ]);
-      setOrg(o);
-      setPosts(p.posts);
-      setNext(p.nextCursor);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) setNotFound(true);
-      else setError(describeError(e));
-    }
-  }, [slug]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function act(fn: () => Promise<OrgDetail>) {
     setError(null);
     try {
-      setOrg(await fn());
+      org.setData(await fn());
     } catch (e) {
       setError(describeError(e));
     }
   }
 
-  async function loadMore() {
-    if (!next) return;
-    try {
-      const p = await api<{ posts: FeedPost[]; nextCursor: string | null }>(`/orgs/${slug}/posts?cursor=${encodeURIComponent(next)}`);
-      setPosts((l) => [...(l ?? []), ...p.posts]);
-      setNext(p.nextCursor);
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const loadMore = () =>
+    runMore(async () => {
+      const cursor = posts.data?.nextCursor;
+      if (!cursor) return;
+      const requested = postsPath;
+      try {
+        const p = await api<PostsPage>(`${requested}?cursor=${encodeURIComponent(cursor)}`);
+        if (pathRef.current !== requested) return;
+        posts.setData((prev) => (prev ? { ...p, posts: [...prev.posts, ...p.posts] } : p));
+      } catch (e) {
+        toast.error(describeError(e));
+      }
+    });
 
-  if (notFound) {
-    return (
-      <Card>
-        <p className="text-sm">Dieser Verein existiert nicht.</p>
-        <Link href="/vereine" className="mt-2 inline-block text-sm text-brand hover:underline">Zur Übersicht</Link>
-      </Card>
+  if (org.errorStatus === 404) {
+    return <EmptyState title="Dieser Verein existiert nicht." action={<ArrowLink href="/vereine">Zur Übersicht</ArrowLink>} />;
+  }
+  if (org.error && !org.data) return <ErrorState message={org.error} onRetry={org.reload} />;
+  if (!org.data) return <CardSkeletons count={1} />;
+
+  const o = org.data;
+  const { viewer } = o;
+  const dropPost = (id: string) => posts.setData((d) => (d ? { ...d, posts: d.posts.filter((x) => x.id !== id) } : d));
+
+  let postList;
+  if (posts.error && !posts.data) postList = <ErrorState message={posts.error} onRetry={posts.reload} />;
+  else if (!posts.data) postList = <CardSkeletons count={2} />;
+  else if (!posts.data.posts.length)
+    postList = <EmptyState title="Noch keine Beiträge.">{viewer.role === "admin" ? "Schreibe den ersten im Feed („Posten als“)." : undefined}</EmptyState>;
+  else
+    postList = (
+      <ul className="space-y-4">
+        {posts.data.posts.map((p) => (
+          <li key={p.id}>
+            <PostCard post={p} onDeleted={dropPost} />
+          </li>
+        ))}
+      </ul>
     );
-  }
-  if (!org) return <p className="text-sm text-muted" role="status">{error ?? "Lade …"}</p>;
-
-  const { viewer } = org;
 
   return (
     <>
-      <Link href="/vereine" className="mb-3 inline-block text-sm text-muted hover:text-text">← Alle Vereine</Link>
+      <BackLink href="/vereine">Alle Vereine</BackLink>
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-4">
-          <Avatar name={org.name} size={64} />
+          <Avatar name={o.name} size={64} />
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold">{org.name}</h1>
+            <h1 className="text-xl font-semibold">{o.name}</h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted">
-              {org.city} <Badge>{org.category}</Badge>
-              {viewer.role && <Badge tone="brand">{roleLabel[viewer.role]}</Badge>}
+              {o.city} <Badge>{o.category}</Badge>
+              {viewer.role && <Badge tone="brand">{ROLE_LABEL[viewer.role]}</Badge>}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -104,10 +105,12 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  if (!(await ask("Mitgliedschaft wirklich beenden?", { confirmLabel: "Ja" }))) return;
+                  if (!(await ask("Mitgliedschaft wirklich beenden?", { confirmLabel: "Austreten" }))) return;
+                  setError(null);
                   try {
                     await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
-                    await load();
+                    org.reload();
+                    posts.reload();
                   } catch (e) {
                     setError(describeError(e));
                   }
@@ -118,13 +121,13 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
             )}
           </div>
         </div>
-        {org.about && <p className="mt-4 text-sm">{org.about}</p>}
+        {o.about && <p className="mt-4 text-sm">{o.about}</p>}
         {editTags === null ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <TagChips tags={org.tags} to="/vereine" />
+            <TagChips tags={o.tags} to="/vereine" />
             {viewer.role === "admin" && (
-              <button type="button" onClick={() => setEditTags(org.tags)} className="text-xs font-medium text-brand hover:underline">
-                {org.tags.length ? "Tags bearbeiten" : "Sportarten und Themen festlegen"}
+              <button type="button" onClick={() => setEditTags(o.tags)} className="text-xs font-medium text-brand hover:underline">
+                {o.tags.length ? "Tags bearbeiten" : "Sportarten und Themen festlegen"}
               </button>
             )}
           </div>
@@ -132,33 +135,21 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           <div className="mt-3 space-y-3">
             <TagPicker label="Sportarten und Themen" value={editTags} onChange={setEditTags} max={MAX_ORG_TAGS} />
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => act(async () => { const o = await api<OrgDetail>(`/orgs/${slug}/tags`, { method: "PUT", body: { tags: editTags } }); setEditTags(null); return o; })}>Speichern</Button>
+              <Button size="sm" onClick={() => act(async () => { const r = await api<OrgDetail>(`/orgs/${slug}/tags`, { method: "PUT", body: { tags: editTags } }); setEditTags(null); return r; })}>Speichern</Button>
               <Button size="sm" variant="ghost" onClick={() => setEditTags(null)}>Abbrechen</Button>
             </div>
           </div>
         )}
-        <p className="mt-2 text-xs text-muted">{org.members} {org.members === 1 ? "Mitglied" : "Mitglieder"} · {org.followers} Follower</p>
+        <p className="mt-2 text-xs text-muted">{o.members} {o.members === 1 ? "Mitglied" : "Mitglieder"} · {o.followers} Follower</p>
       </Card>
 
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <h2 className="mb-3 mt-6 font-semibold">Beiträge</h2>
-      {posts === null ? (
-        <p className="text-sm text-muted">Lade …</p>
-      ) : posts.length === 0 ? (
-        <p className="text-sm text-muted">Noch keine Beiträge.{viewer.role === "admin" && " Schreibe den ersten im Feed („Posten als“)."}</p>
-      ) : (
-        <ul className="space-y-4">
-          {posts.map((p) => (
-            <li key={p.id}>
-              <PostCard post={p} onDeleted={(id) => setPosts((l) => (l ?? []).filter((x) => x.id !== id))} />
-            </li>
-          ))}
-        </ul>
-      )}
-      {next && (
+      {postList}
+      {posts.data?.nextCursor && (
         <div className="mt-4 text-center">
-          <Button variant="secondary" onClick={loadMore}>Mehr laden</Button>
+          <Button variant="secondary" busy={moreBusy} onClick={loadMore}>Mehr laden</Button>
         </div>
       )}
     </>

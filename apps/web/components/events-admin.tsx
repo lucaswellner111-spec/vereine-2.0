@@ -1,30 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ChangeEvent } from "react";
-import type { EventItem, RsvpItem, TeamItem } from "@vereine/shared";
+import { Check, CircleHelp, X } from "lucide-react";
+import { useEffect, useState, type ChangeEvent } from "react";
+import type { EventItem, RsvpItem, RsvpStatus, TeamItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Badge, Button, Card, Field, CardSkeletons } from "./ui";
+import { RSVP_STATUS_LABEL } from "@/lib/events";
+import { useApi, useBusy } from "@/lib/use-api";
+import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, Field, SelectField, TextareaField } from "./ui";
 import { ask } from "./ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const RSVP_ICON: Record<RsvpStatus, typeof Check> = { yes: Check, maybe: CircleHelp, no: X };
 const empty = { title: "", startsAt: "", endsAt: "", location: "", description: "", teamId: "", visibility: "members", repeat: "none", count: "8" };
 
 export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const [form, setForm] = useState(empty);
-  const [events, setEvents] = useState<EventItem[] | null>(null);
-  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const list = useApi<EventItem[]>(`/orgs/${slug}/events`);
+  const events = list.data;
+  const teamList = useApi<TeamItem[]>(`/orgs/${slug}/teams`);
+  const teams = teamList.data ?? [];
   const [people, setPeople] = useState<{ id: string; list: RsvpItem[] } | null>(null);
+  const [creating, runCreate] = useBusy();
+  const load = list.reload;
 
-  const load = useCallback(() => {
-    api<EventItem[]>(`/orgs/${slug}/events`).then(setEvents).catch((e) => onError(describeError(e)));
-    api<TeamItem[]>(`/orgs/${slug}/teams`).then(setTeams).catch(() => setTeams([]));
-  }, [slug, onError]);
-
-  useEffect(() => {
-    setEvents(null);
-    setPeople(null);
-    load();
-  }, [load]);
+  useEffect(() => setPeople(null), [slug]);
 
   const run = async (fn: () => Promise<unknown>) => {
     onError(null);
@@ -45,7 +44,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
           className="grid gap-3 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(async () => {
+            void runCreate(() => run(async () => {
               await api(`/orgs/${slug}/events`, {
                 method: "POST",
                 body: {
@@ -61,7 +60,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
               });
               setForm(empty);
               load();
-            });
+            }));
           }}
         >
           <div className="sm:col-span-2">
@@ -70,53 +69,36 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
           <Field id="ev-start" label="Beginn" type="datetime-local" required value={form.startsAt} onChange={set("startsAt")} />
           <Field id="ev-end" label="Ende (optional)" type="datetime-local" value={form.endsAt} onChange={set("endsAt")} />
           <Field id="ev-loc" label="Ort" maxLength={120} value={form.location} onChange={set("location")} />
-          <div className="space-y-1.5">
-            <label htmlFor="ev-team" className="text-sm font-medium">Für</label>
-            <select id="ev-team" value={form.teamId} onChange={set("teamId")} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
-              <option value="">Alle Mitglieder</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="ev-vis" className="text-sm font-medium">Sichtbarkeit</label>
-            <select id="ev-vis" value={form.visibility} onChange={set("visibility")} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
-              <option value="members">Intern (nur Mitglieder / Team)</option>
-              <option value="public">Öffentlich (auch Follower)</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="ev-repeat" className="text-sm font-medium">Wiederholung</label>
-            <select id="ev-repeat" value={form.repeat} onChange={set("repeat")} className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm">
-              <option value="none">Einmalig</option>
-              <option value="weekly">Jede Woche</option>
-              <option value="biweekly">Alle 2 Wochen</option>
-              <option value="monthly">Jeden Monat</option>
-            </select>
-          </div>
+          <SelectField id="ev-team" label="Für" value={form.teamId} onChange={set("teamId")}>
+            <option value="">Alle Mitglieder</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </SelectField>
+          <SelectField id="ev-vis" label="Sichtbarkeit" value={form.visibility} onChange={set("visibility")}>
+            <option value="members">Intern (nur Mitglieder / Team)</option>
+            <option value="public">Öffentlich (auch Follower)</option>
+          </SelectField>
+          <SelectField id="ev-repeat" label="Wiederholung" value={form.repeat} onChange={set("repeat")}>
+            <option value="none">Einmalig</option>
+            <option value="weekly">Jede Woche</option>
+            <option value="biweekly">Alle 2 Wochen</option>
+            <option value="monthly">Jeden Monat</option>
+          </SelectField>
           {form.repeat !== "none" && <Field id="ev-count" label="Anzahl Termine (2–52)" type="number" min={2} max={52} required value={form.count} onChange={set("count")} />}
-          <div className="space-y-1.5 sm:col-span-2">
-            <label htmlFor="ev-desc" className="text-sm font-medium">Beschreibung</label>
-            <textarea
-              id="ev-desc"
-              rows={2}
-              maxLength={1000}
-              value={form.description}
-              onChange={set("description")}
-              className="w-full resize-none rounded-lg border border-border bg-surface p-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            />
-          </div>
+          <TextareaField id="ev-desc" label="Beschreibung" rows={2} maxLength={1000} value={form.description} onChange={set("description")} className="sm:col-span-2" />
           <div className="sm:col-span-2">
-            <Button type="submit">Termin anlegen</Button>
+            <Button type="submit" busy={creating}>Termin anlegen</Button>
           </div>
         </form>
       </Card>
 
-      {events === null ? (
+      {list.error && !events ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : events === null ? (
         <CardSkeletons count={2} />
       ) : events.length === 0 ? (
-        <Card><p className="text-sm text-muted">Keine kommenden Termine.</p></Card>
+        <EmptyState title="Keine kommenden Termine." />
       ) : (
         <ul className="space-y-3">
           {events.map((ev) => (
@@ -183,12 +165,16 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                 {people?.id === ev.id && (
                   <ul className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3 text-sm">
                     {people.list.length === 0 && <li className="text-xs text-muted">Noch keine Rückmeldungen.</li>}
-                    {people.list.map((p) => (
-                      <li key={p.userId} className="rounded-full bg-surface-2 px-3 py-1">
-                        {p.name}{" "}
-                        <span className="text-xs text-muted">{p.status === "yes" ? "✓" : p.status === "maybe" ? "?" : "✗"}</span>
-                      </li>
-                    ))}
+                    {people.list.map((p) => {
+                      const Icon = RSVP_ICON[p.status];
+                      return (
+                        <li key={p.userId} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-3 py-1">
+                          {p.name}
+                          <Icon size={12} aria-hidden className="text-muted" />
+                          <span className="sr-only">{RSVP_STATUS_LABEL[p.status]}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </Card>

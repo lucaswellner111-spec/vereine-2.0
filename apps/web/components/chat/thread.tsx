@@ -1,22 +1,18 @@
 "use client";
 
 import clsx from "clsx";
+import { ArrowLeft, MoreHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { ChatMessage, ConversationDetail, MessagePage, PublicUser } from "@vereine/shared";
 import { CHAT_MAX_BODY } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useChat, useChatEvents } from "@/lib/chat";
-import { Alert, Avatar, Badge, Button } from "../ui";
-import { ask } from "@/components/ui-hosts";
+import { REPORT_REASONS } from "@/lib/labels";
+import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea } from "../ui";
+import { ask, toast } from "@/components/ui-hosts";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
-const REPORT_REASONS = [
-  { id: "spam", label: "Spam" },
-  { id: "hate", label: "Hass / Hetze" },
-  { id: "illegal", label: "Illegal" },
-  { id: "other", label: "Sonstiges" },
-] as const;
 
 export function Thread({
   id,
@@ -130,7 +126,24 @@ export function Thread({
   };
 
   if (!detail) {
-    return <p className="m-auto text-sm text-muted" role="status">{error ?? "Lade …"}</p>;
+    return error ? (
+      <div className="m-auto w-full max-w-sm p-4">
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            void loadLatest();
+          }}
+        />
+      </div>
+    ) : (
+      <div role="status" aria-label="Lade" className="flex flex-1 flex-col gap-3 p-4">
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-10 w-2/3 self-start rounded-2xl" />
+        <Skeleton className="h-10 w-1/2 self-end rounded-2xl" />
+        <Skeleton className="h-10 w-3/5 self-start rounded-2xl" />
+      </div>
+    );
   }
 
   const other = detail.kind === "direct" ? detail.members.find((m) => m.userId !== me.id) : undefined;
@@ -139,7 +152,7 @@ export function Thread({
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label={`Unterhaltung mit ${detail.title}`}>
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <Button variant="ghost" size="sm" className="md:hidden" onClick={onBack} aria-label="Zurück zur Liste">←</Button>
+        <Button variant="ghost" size="sm" className="md:hidden" onClick={onBack} aria-label="Zurück zur Liste"><ArrowLeft size={16} aria-hidden /></Button>
         <Avatar name={detail.title} size={32} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{detail.title}</p>
@@ -164,9 +177,12 @@ export function Thread({
                         type="button"
                         aria-label={`${m.name} entfernen`}
                         className="ml-1 text-muted hover:text-danger"
-                        onClick={() => run(async () => { await api(`/chat/conversations/${id}/members/${m.userId}`, { method: "DELETE" }); await loadLatest(); })}
+                        onClick={async () => {
+                          if (!(await ask(`${m.name} aus der Gruppe entfernen?`, { confirmLabel: "Entfernen" }))) return;
+                          await run(async () => { await api(`/chat/conversations/${id}/members/${m.userId}`, { method: "DELETE" }); await loadLatest(); });
+                        }}
                       >
-                        ×
+                        <X size={14} aria-hidden />
                       </button>
                     )}
                   </li>
@@ -175,32 +191,32 @@ export function Thread({
               {detail.iAmOwner && (
                 <div className="flex flex-wrap items-center gap-2">
                   <label htmlFor="retention" className="text-xs text-muted">Nachrichten löschen nach</label>
-                  <select
+                  <Select
                     id="retention"
+                    size="sm"
                     value={detail.retentionDays ?? ""}
                     onChange={(e) =>
                       run(async () => setDetail(await api<ConversationDetail>(`/chat/conversations/${id}/retention`, { method: "PUT", body: { days: e.target.value ? Number(e.target.value) : null } })))
                     }
-                    className="h-8 rounded-lg border border-border bg-bg px-2 text-xs"
                   >
                     <option value="">Standard ({365} Tage)</option>
                     {[7, 30, 90, 180, 365, 730].map((d) => (
                       <option key={d} value={d}>{d} Tage</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               )}
               <Button
                 variant="danger"
                 size="sm"
-                onClick={async () =>
-                  await ask("Gruppe verlassen?") &&
-                  run(async () => {
+                onClick={async () => {
+                  if (!(await ask("Gruppe verlassen?", { confirmLabel: "Verlassen" }))) return;
+                  await run(async () => {
                     await api(`/chat/conversations/${id}/members/${me.id}`, { method: "DELETE" });
                     onChanged();
                     onBack();
-                  })
-                }
+                  });
+                }}
               >
                 Gruppe verlassen
               </Button>
@@ -211,7 +227,11 @@ export function Thread({
                 <Button
                   variant={detail.blocked ? "secondary" : "danger"}
                   size="sm"
-                  onClick={() => run(async () => { await api(`/chat/blocks/${other.userId}`, { method: detail.blocked ? "DELETE" : "PUT", body: detail.blocked ? undefined : {} }); await loadLatest(); })}
+                  onClick={async () => {
+                    // Nur beim Blockieren nachfragen; Entblocken geht sofort
+                    if (!detail.blocked && !(await ask(`${other.name} blockieren? Ihr könnt euch dann nicht mehr schreiben.`, { confirmLabel: "Blockieren" }))) return;
+                    await run(async () => { await api(`/chat/blocks/${other.userId}`, { method: detail.blocked ? "DELETE" : "PUT", body: detail.blocked ? undefined : {} }); await loadLatest(); });
+                  }}
                 >
                   {detail.blocked ? `${other.name} entblocken` : `${other.name} blockieren`}
                 </Button>
@@ -259,19 +279,23 @@ export function Thread({
                       aria-label="Nachrichtenoptionen"
                       aria-expanded={menu === m.id}
                       onClick={() => setMenu(menu === m.id ? null : m.id)}
-                      className="rounded px-1 text-muted opacity-60 hover:opacity-100 focus:opacity-100"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded text-muted opacity-60 hover:opacity-100 focus:opacity-100"
                     >
-                      ⋯
+                      <MoreHorizontal size={16} aria-hidden />
                     </button>
                     {menu === m.id && (
                       <div className={clsx("absolute bottom-6 z-10 w-40 rounded-lg border border-border bg-surface p-1 text-sm shadow-lg", m.mine ? "right-0" : "left-0")}>
                         {m.mine ? (
-                          <button className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={() => run(async () => { await api(`/chat/messages/${m.id}`, { method: "DELETE" }); setMenu(null); await loadLatest(); })}>
+                          <button className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={async () => {
+                            setMenu(null);
+                            if (!(await ask("Nachricht löschen?", { confirmLabel: "Löschen" }))) return;
+                            await run(async () => { await api(`/chat/messages/${m.id}`, { method: "DELETE" }); await loadLatest(); });
+                          }}>
                             Löschen
                           </button>
                         ) : (
                           REPORT_REASONS.map((r) => (
-                            <button key={r.id} className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={() => run(async () => { await api(`/chat/messages/${m.id}/report`, { method: "POST", body: { reason: r.id } }); setMenu(null); setError(null); alert("Danke, die Nachricht wurde gemeldet."); })}>
+                            <button key={r.id} className="block w-full rounded px-2 py-1.5 text-left hover:bg-surface-2" onClick={() => run(async () => { await api(`/chat/messages/${m.id}/report`, { method: "POST", body: { reason: r.id } }); setMenu(null); setError(null); toast.success("Danke, die Nachricht wurde gemeldet."); })}>
                               Melden: {r.label}
                             </button>
                           ))
@@ -291,7 +315,7 @@ export function Thread({
 
       <form onSubmit={send} className="flex gap-2 border-t border-border p-3">
         <label htmlFor="msg" className="sr-only">Nachricht</label>
-        <textarea
+        <Textarea
           id="msg"
           value={text}
           rows={1}
@@ -305,7 +329,7 @@ export function Thread({
             }
           }}
           placeholder={detail.blocked ? "Du hast diese Person blockiert." : "Nachricht schreiben … (Enter sendet)"}
-          className="max-h-32 min-h-10 flex-1 resize-none rounded-lg border border-border bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-60"
+          className="max-h-32 min-h-10 flex-1"
         />
         <Button type="submit" disabled={!text.trim() || sending || detail.blocked}>Senden</Button>
       </form>

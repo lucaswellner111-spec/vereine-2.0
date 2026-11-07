@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Heart, MessageCircle, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { CommentItem, FeedPost } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -11,7 +11,8 @@ import { mediaUrl } from "@/lib/media";
 import { Lightbox } from "./lightbox";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
-import { Alert, Avatar, Badge, Button, Card } from "./ui";
+import { Alert, Avatar, Badge, Button, Card, Input } from "./ui";
+import { REPORT_REASONS, type ReportReason } from "@/lib/labels";
 
 const timeAgo = (iso: string) => {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -22,25 +23,24 @@ const timeAgo = (iso: string) => {
   return `vor ${Math.round(hours / 24)} Tg.`;
 };
 
-const reasons = [
-  { id: "spam", label: "Spam" },
-  { id: "hate", label: "Hass / Hetze" },
-  { id: "illegal", label: "Illegal" },
-  { id: "other", label: "Sonstiges" },
-] as const;
-
 export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPost; onDeleted: (id: string) => void; onHidden?: (id: string) => void }) {
   const { user } = useAuth();
   const [post, setPost] = useState(initial);
+  // Neue Daten vom Elternteil (z. B. nach reload) uebernehmen, ohne Effekt-Schleife
+  const [seen, setSeen] = useState(initial);
+  if (initial !== seen) {
+    setSeen(initial);
+    setPost(initial);
+  }
   const [why, setWhy] = useState(false);
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<CommentItem[] | null>(null);
   const [draft, setDraft] = useState("");
   const [panel, setPanel] = useState<"none" | "report" | "less">("none");
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
+  const liking = useRef(false);
   const run = async (fn: () => Promise<void>) => {
     setError(null);
     try {
@@ -53,6 +53,9 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
   // Optimistisch: Herz und Zahl aendern sich sofort, bei Fehler wird zurueckgesetzt.
   const like = () =>
     run(async () => {
+      // Sperre gegen schnelle Doppelklicks (sonst zwei Anfragen, Zaehler springt)
+      if (liking.current) return;
+      liking.current = true;
       const before = post;
       setPost((p) => ({ ...p, likedByMe: !p.likedByMe, likes: p.likes + (p.likedByMe ? -1 : 1) }));
       try {
@@ -61,6 +64,8 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
       } catch (e) {
         setPost(before);
         throw e;
+      } finally {
+        liking.current = false;
       }
     });
 
@@ -95,26 +100,28 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
     }
   };
 
-  const report = (reason: (typeof reasons)[number]["id"]) =>
+  const report = (reason: ReportReason) =>
     run(async () => {
       await api(`/posts/${post.id}/report`, { method: "POST", body: { reason } });
       setPanel("none");
-      setNotice("Danke, wir prüfen die Meldung.");
+      toast.success("Danke, wir prüfen die Meldung.");
     });
 
   const less = (kind: "hide" | "mute_author" | "mute_org") =>
     run(async () => {
       await api(`/posts/${post.id}/feedback`, { method: "POST", body: { kind } });
       setPanel("none");
+      toast.success(kind === "hide" ? "Beitrag ausgeblendet." : "Gespeichert. Du siehst weniger davon.");
       onHidden?.(post.id);
-      setNotice(kind === "hide" ? "Beitrag ausgeblendet." : "Gespeichert. Du siehst weniger davon.");
     });
 
-  const remove = () =>
-    run(async () => {
+  const remove = async () => {
+    if (!(await ask("Beitrag löschen? Das lässt sich nicht rückgängig machen.", { confirmLabel: "Löschen" }))) return;
+    await run(async () => {
       await api(`/posts/${post.id}`, { method: "DELETE" });
       onDeleted(post.id);
     });
+  };
 
   const authorHref = post.author.handle ? `/profil/${post.author.handle}` : null;
   const mediaIds = post.media.map((m) => m.id);
@@ -190,7 +197,7 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
           {why && <p className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">{post.reason}</p>}
           {panel === "report" && (
             <div className="mt-2 flex flex-wrap gap-2 rounded-lg bg-surface-2 p-2" role="group" aria-label="Grund der Meldung">
-              {reasons.map((r) => (
+              {REPORT_REASONS.map((r) => (
                 <Button key={r.id} variant="secondary" size="sm" onClick={() => report(r.id)}>{r.label}</Button>
               ))}
             </div>
@@ -205,7 +212,6 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
               )}
             </div>
           )}
-          {notice && <div className="mt-2"><Alert tone="success">{notice}</Alert></div>}
           {error && <div className="mt-2"><Alert>{error}</Alert></div>}
 
           {open && (
@@ -237,13 +243,14 @@ export function PostCard({ post: initial, onDeleted, onHidden }: { post: FeedPos
               </ul>
               <form onSubmit={addComment} className="mt-3 flex gap-2">
                 <label htmlFor={`c-${post.id}`} className="sr-only">Kommentar</label>
-                <input
+                <Input
                   id={`c-${post.id}`}
+                  size="sm"
                   value={draft}
                   maxLength={500}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="Kommentar schreiben …"
-                  className="h-9 flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  className="min-w-0 flex-1"
                 />
                 <Button type="submit" size="sm" disabled={!draft.trim()}>Senden</Button>
               </form>

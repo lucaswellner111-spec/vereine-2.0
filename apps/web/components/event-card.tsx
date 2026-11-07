@@ -5,14 +5,8 @@ import Link from "next/link";
 import { useState } from "react";
 import type { EventItem, RsvpStatus } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { withRsvp } from "@/lib/events";
+import { RSVP_OPTIONS, withRsvp } from "@/lib/events";
 import { Alert, Badge, Button, Card } from "./ui";
-
-const rsvpOptions: { id: RsvpStatus; label: string }[] = [
-  { id: "yes", label: "Zusagen" },
-  { id: "maybe", label: "Vielleicht" },
-  { id: "no", label: "Absagen" },
-];
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 
@@ -68,7 +62,7 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
 
       {!event.canceled && (
         <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Teilnahme">
-          {rsvpOptions.map((o) => (
+          {RSVP_OPTIONS.map((o) => (
             <Button
               key={o.id}
               size="sm"

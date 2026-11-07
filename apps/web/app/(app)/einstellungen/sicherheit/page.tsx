@@ -1,40 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { SessionInfo } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Badge, Button, Card, Field, PageHeader } from "@/components/ui";
+import { Alert, Badge, Button, Card, ErrorState, Field, ListSkeleton, PageHeader } from "@/components/ui";
 import { TwoFactorCard } from "@/components/two-factor-card";
 import { api, describeError } from "@/lib/api";
+import { useApi, useBusy } from "@/lib/use-api";
 import { ask } from "@/components/ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default function SecurityPage() {
-  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const list = useApi<SessionInfo[]>("/auth/sessions");
+  const sessions = list.data;
+  const [pwBusy, runPw] = useBusy();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    api<SessionInfo[]>("/auth/sessions").then(setSessions).catch((e) => setError(describeError(e)));
-  }, []);
-  useEffect(load, [load]);
-
-  async function changePassword(e: FormEvent) {
+  function changePassword(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setNotice(null);
-    try {
-      await api("/auth/password", { method: "PUT", body: { currentPassword: current, newPassword: next } });
-      setCurrent("");
-      setNext("");
-      setNotice("Passwort geändert. Alle anderen Geräte wurden abgemeldet.");
-      load();
-    } catch (err) {
-      setError(describeError(err));
-    }
+    void runPw(async () => {
+      setError(null);
+      setNotice(null);
+      try {
+        await api("/auth/password", { method: "PUT", body: { currentPassword: current, newPassword: next } });
+        setCurrent("");
+        setNext("");
+        setNotice("Passwort geändert. Alle anderen Geräte wurden abgemeldet.");
+        list.reload();
+      } catch (err) {
+        setError(describeError(err));
+      }
+    });
   }
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -42,7 +42,7 @@ export default function SecurityPage() {
     setNotice(null);
     try {
       await fn();
-      load();
+      list.reload();
     } catch (e) {
       setError(describeError(e));
     }
@@ -62,7 +62,7 @@ export default function SecurityPage() {
         <form onSubmit={changePassword} className="max-w-sm space-y-3">
           <Field id="cur" label="Aktuelles Passwort" type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
           <Field id="new" label="Neues Passwort" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={next} onChange={(e) => setNext(e.target.value)} hint="Mindestens 12 Zeichen. Ein Satz aus mehreren Wörtern ist ideal." />
-          <Button type="submit" disabled={!current || next.length < 12}>Passwort ändern</Button>
+          <Button type="submit" busy={pwBusy} disabled={!current || next.length < 12}>Passwort ändern</Button>
         </form>
       </Card>
 
@@ -72,15 +72,21 @@ export default function SecurityPage() {
           variant="secondary"
           size="sm"
           disabled={(sessions?.length ?? 0) < 2}
-          onClick={async () => await ask("Alle anderen Geräte abmelden?") && run(() => api("/auth/sessions/revoke-others", { method: "POST", body: {} }))}
+          onClick={async () => {
+            if (!(await ask("Alle anderen Geräte abmelden?", { confirmLabel: "Abmelden" }))) return;
+            await run(() => api("/auth/sessions/revoke-others", { method: "POST", body: {} }));
+          }}
         >
           Alle anderen abmelden
         </Button>
       </div>
-      <Card className="divide-y divide-border p-0">
-        {sessions === null ? (
-          <p className="p-4 text-sm text-muted" role="status">Lade …</p>
-        ) : (
+      {list.error && !sessions ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : sessions === null ? (
+        <ListSkeleton rows={2} />
+      ) : (
+      <Card flush className="divide-y divide-border">
+        {(
           sessions.map((s) => (
             <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
               <div>
@@ -96,6 +102,7 @@ export default function SecurityPage() {
           ))
         )}
       </Card>
+      )}
     </>
   );
 }

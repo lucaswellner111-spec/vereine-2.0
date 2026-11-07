@@ -1,27 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { MemberItem, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { Button, Card, Field, CardSkeletons } from "./ui";
+import { useApi, useBusy } from "@/lib/use-api";
+import { Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Select } from "./ui";
 import { ask } from "./ui-hosts";
 
 export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
-  const [teams, setTeams] = useState<TeamItem[] | null>(null);
+  const list = useApi<TeamItem[]>(`/orgs/${slug}/teams`);
+  const teams = list.data;
+  const load = list.reload;
+  const [creating, runCreate] = useBusy();
   const [name, setName] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMemberItem[]>([]);
   const [candidates, setCandidates] = useState<MemberItem[]>([]);
 
-  const load = useCallback(() => {
-    api<TeamItem[]>(`/orgs/${slug}/teams`).then(setTeams).catch((e) => onError(describeError(e)));
-  }, [slug, onError]);
-
-  useEffect(() => {
-    setTeams(null);
-    setOpen(null);
-    load();
-  }, [load]);
+  useEffect(() => setOpen(null), [slug]);
 
   const run = async (fn: () => Promise<unknown>) => {
     onError(null);
@@ -57,24 +54,24 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(async () => {
+            void runCreate(() => run(async () => {
               await api(`/orgs/${slug}/teams`, { method: "POST", body: { name } });
               setName("");
               load();
-            });
+            }));
           }}
         >
-          <div className="min-w-48 flex-1">
-            <Field id="team-name" label="Neues Team (z. B. Herren, U12)" value={name} minLength={2} maxLength={60} required onChange={(e) => setName(e.target.value)} />
-          </div>
-          <Button type="submit">Team anlegen</Button>
+          <Field id="team-name" label="Neues Team (z. B. Herren, U12)" value={name} minLength={2} maxLength={60} required onChange={(e) => setName(e.target.value)} className="min-w-48 flex-1" />
+          <Button type="submit" busy={creating}>Team anlegen</Button>
         </form>
       </Card>
 
-      {teams === null ? (
+      {list.error && !teams ? (
+        <ErrorState message={list.error} onRetry={list.reload} />
+      ) : teams === null ? (
         <CardSkeletons count={2} />
       ) : teams.length === 0 ? (
-        <Card><p className="text-sm text-muted">Noch keine Teams.</p></Card>
+        <EmptyState title="Noch keine Teams." />
       ) : (
         <ul className="space-y-3">
           {teams.map((t) => (
@@ -90,13 +87,13 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={async () =>
-                        await ask(`Team „${t.name}“ samt Terminen löschen?`) &&
-                        run(async () => {
+                      onClick={async () => {
+                        if (!(await ask(`Team „${t.name}“ samt Terminen löschen?`, { confirmLabel: "Löschen" }))) return;
+                        await run(async () => {
                           await api(`/orgs/${slug}/teams/${t.id}`, { method: "DELETE" });
                           load();
-                        })
-                      }
+                        });
+                      }}
                     >
                       Löschen
                     </Button>
@@ -112,32 +109,34 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                           <button
                             type="button"
                             aria-label={`${m.name} entfernen`}
-                            className="rounded-full px-2 text-muted hover:text-danger"
-                            onClick={() =>
-                              run(async () => {
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted hover:text-danger"
+                            onClick={async () => {
+                              if (!(await ask(`${m.name} aus dem Team entfernen?`, { confirmLabel: "Entfernen" }))) return;
+                              await run(async () => {
                                 await api(`/orgs/${slug}/teams/${t.id}/members/${m.userId}`, { method: "DELETE" });
                                 await refreshOpen(t.id);
-                              })
-                            }
+                              });
+                            }}
                           >
-                            ×
+                            <X size={14} aria-hidden />
                           </button>
                         </li>
                       ))}
                     </ul>
                     <div>
                       <label htmlFor={`add-${t.id}`} className="sr-only">Mitglied hinzufügen</label>
-                      <select
+                      <Select
                         id={`add-${t.id}`}
+                        size="sm"
                         value=""
-                        onChange={(e) =>
-                          e.target.value &&
-                          run(async () => {
-                            await api(`/orgs/${slug}/teams/${t.id}/members/${e.target.value}`, { method: "PUT" });
+                        onChange={(e) => {
+                          const userId = e.target.value;
+                          if (!userId) return;
+                          void run(async () => {
+                            await api(`/orgs/${slug}/teams/${t.id}/members/${userId}`, { method: "PUT" });
                             await refreshOpen(t.id);
-                          })
-                        }
-                        className="h-9 rounded-lg border border-border bg-bg px-2 text-sm"
+                          });
+                        }}
                       >
                         <option value="">Mitglied hinzufügen …</option>
                         {candidates
@@ -145,7 +144,7 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                           .map((c) => (
                             <option key={c.userId} value={c.userId}>{c.name}</option>
                           ))}
-                      </select>
+                      </Select>
                     </div>
                   </div>
                 )}

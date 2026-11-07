@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui";
+import { Dialog } from "./ui-client";
 
 /*
  * Bestaetigungsdialog (ask) und Rueckmeldungen (toast) als einfache, global aufrufbare Funktionen.
@@ -37,12 +38,14 @@ export function UiHosts() {
   const [pending, setPending] = useState<Pending | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const confirmRef = useRef<HTMLButtonElement>(null);
-  const lastFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     askListener = (p) => {
-      lastFocus.current = document.activeElement as HTMLElement | null;
-      setPending(p);
+      // Laeuft schon eine Frage, wird sie als "Abbrechen" beendet
+      setPending((old) => {
+        old?.resolve(false);
+        return p;
+      });
     };
     toastListener = (t) => {
       setToasts((l) => [...l.slice(-3), t]);
@@ -54,46 +57,35 @@ export function UiHosts() {
     };
   }, []);
 
-  useEffect(() => {
-    if (pending) confirmRef.current?.focus();
-  }, [pending]);
-
   const close = (ok: boolean) => {
     pending?.resolve(ok);
     setPending(null);
-    lastFocus.current?.focus?.();
   };
 
   return (
     <>
-      {pending && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          onMouseDown={(e) => e.target === e.currentTarget && close(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") close(false);
-            if (e.key === "Tab") {
-              // Fokus im Dialog halten (zwei Knoepfe)
-              const btns = Array.from(e.currentTarget.querySelectorAll("button"));
-              const first = btns[0];
-              const last = btns[btns.length - 1];
-              if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last.focus());
-              else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first.focus());
-            }
-          }}
-        >
-          <div role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-text" className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-overlay">
-            <h2 id="ask-title" className="text-base font-semibold">{pending.opts.title ?? "Bitte bestätigen"}</h2>
-            <p id="ask-text" className="mt-2 text-sm text-muted">{pending.message}</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => close(false)}>{pending.opts.cancelLabel ?? "Abbrechen"}</Button>
+      <Dialog
+        open={!!pending}
+        onClose={() => close(false)}
+        title={pending?.opts.title ?? "Bitte bestätigen"}
+        description={pending?.message}
+        role="alertdialog"
+        placement="sheet"
+        size="sm"
+        initialFocusRef={confirmRef}
+        footer={
+          pending && (
+            <>
+              <Button variant="secondary" onClick={() => close(false)}>
+                {pending.opts.cancelLabel ?? "Abbrechen"}
+              </Button>
               <Button ref={confirmRef} variant={pending.opts.danger === false ? "primary" : "danger"} onClick={() => close(true)}>
                 {pending.opts.confirmLabel ?? "Bestätigen"}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          )
+        }
+      />
 
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-end md:px-6">
         {toasts.map((t) => {

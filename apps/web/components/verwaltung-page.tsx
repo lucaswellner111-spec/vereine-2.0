@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import type { OrgRole } from "@vereine/shared";
 import { itemsForRole, VERWALTUNG_ITEMS, useVerwaltung } from "@/lib/verwaltung";
-import { Alert, Card, PageHeader, CardSkeletons } from "./ui";
+import { Alert, ArrowLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "./ui";
 
 export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; onError: (m: string | null) => void };
 
@@ -22,10 +21,7 @@ export function VerwaltungPage({ id, children }: { id: string; children: (ctx: V
     return (
       <>
         <PageHeader title="Verwaltung" subtitle="Hier verwaltest du deine Vereine." />
-        <Card>
-          <p className="text-sm">Du bist noch in keinem Vorstand, Kassenwart oder in der Moderation eines Vereins.</p>
-          <Link href="/vereine/neu" className="mt-3 inline-block text-sm font-medium text-brand hover:underline">Verein gründen →</Link>
-        </Card>
+        <EmptyState title="Du bist noch in keinem Vorstand, Kassenwart oder in der Moderation eines Vereins." action={<ArrowLink href="/vereine/neu">Verein gründen</ArrowLink>} />
       </>
     );
   }
@@ -35,22 +31,35 @@ export function VerwaltungPage({ id, children }: { id: string; children: (ctx: V
     <>
       <PageHeader
         title={title}
-        subtitle={detail ? `${detail.name} · ${detail.members} ${detail.members === 1 ? "Mitglied" : "Mitglieder"} · ${detail.followers} Follower` : "Lade …"}
+        subtitle={detail ? `${detail.name} · ${detail.members} ${detail.members === 1 ? "Mitglied" : "Mitglieder"} · ${detail.followers} Follower` : <Skeleton className="mt-1 h-4 w-56" />}
         action={
           orgs.length > 1 ? (
             <div>
               <label htmlFor="org" className="sr-only">Verein</label>
-              <select id="org" value={slug} onChange={(e) => setSlug(e.target.value)} className="h-10 rounded-lg border border-border bg-surface px-3 text-sm">
+              <Select id="org" value={slug} onChange={(e) => setSlug(e.target.value)}>
                 {orgs.map((o) => (
                   <option key={o.slug} value={o.slug}>{o.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : undefined
         }
       />
-      {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-      {detail && role && !allowed && <Card><p className="text-sm text-muted">Mit deiner Rolle hast du auf diese Seite keinen Zugriff. <Link href="/verwaltung" className="text-brand hover:underline">Zurück zur Verwaltung</Link></p></Card>}
+      {error && !detail ? (
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            setError(null);
+            refresh();
+          }}
+        />
+      ) : error ? (
+        <div className="mb-4"><Alert>{error}</Alert></div>
+      ) : null}
+      {!detail && !error && <CardSkeletons count={1} />}
+      {detail && role && !allowed && (
+        <EmptyState title="Mit deiner Rolle hast du auf diese Seite keinen Zugriff." action={<ArrowLink href="/verwaltung">Zurück zur Verwaltung</ArrowLink>} />
+      )}
       {detail && role && allowed && slug && children({ slug, role, refresh, onError: setError })}
     </>
   );

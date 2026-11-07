@@ -1,37 +1,83 @@
 "use client";
 
-import { useEffect } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useRef } from "react";
+import { createPortal } from "react-dom";
 import { mediaUrl } from "@/lib/media";
+import { useModal } from "./ui-client";
 
-/** Vollbild-Ansicht eines Bildes. Schliessen per Escape, Klick auf den Hintergrund oder Knopf. */
+/**
+ * Vollbild-Ansicht eines Bildes. Schliessen per Escape, Klick auf den Hintergrund oder Knopf;
+ * Pfeiltasten blaettern. Tasten werden am Container behandelt (nicht am document), damit
+ * verschachtelte Modals (z. B. Lightbox im Profil-Dialog) sich nicht gegenseitig schliessen.
+ */
 export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") onIndex(Math.min(ids.length - 1, index + 1));
-      if (e.key === "ArrowLeft") onIndex(Math.max(0, index - 1));
-    };
-    document.addEventListener("keydown", key);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", key);
-      document.body.style.overflow = prev;
-    };
-  }, [ids.length, index, onClose, onIndex]);
+  const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const { onKeyDown } = useModal(ref, { open: true, onClose, initialFocusRef: closeRef });
 
-  return (
-    <div role="dialog" aria-modal="true" aria-label="Bildansicht" className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={onClose}>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      ref={ref}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bildansicht"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight") {
+          e.stopPropagation();
+          onIndex(Math.min(ids.length - 1, index + 1));
+        } else if (e.key === "ArrowLeft") {
+          e.stopPropagation();
+          onIndex(Math.max(0, index - 1));
+        } else onKeyDown(e);
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={mediaUrl(ids[index], "medium")} alt="Beitragsbild" className="max-h-full max-w-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
-      <button type="button" onClick={onClose} aria-label="Schließen" className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1.5 text-white hover:bg-white/25">✕</button>
+      <button
+        ref={closeRef}
+        type="button"
+        onClick={onClose}
+        aria-label="Schließen"
+        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+      >
+        <X size={20} aria-hidden />
+      </button>
       {ids.length > 1 && (
         <>
-          <button type="button" aria-label="Vorheriges Bild" disabled={index === 0} onClick={(e) => { e.stopPropagation(); onIndex(index - 1); }} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-3 py-2 text-white hover:bg-white/25 disabled:opacity-30">‹</button>
-          <button type="button" aria-label="Nächstes Bild" disabled={index === ids.length - 1} onClick={(e) => { e.stopPropagation(); onIndex(index + 1); }} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-3 py-2 text-white hover:bg-white/25 disabled:opacity-30">›</button>
-          <p className="absolute bottom-4 rounded-full bg-black/50 px-3 py-1 text-xs text-white">{index + 1} / {ids.length}</p>
+          <button
+            type="button"
+            aria-label="Vorheriges Bild"
+            disabled={index === 0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onIndex(index - 1);
+            }}
+            className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"
+          >
+            <ChevronLeft size={20} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Nächstes Bild"
+            disabled={index === ids.length - 1}
+            onClick={(e) => {
+              e.stopPropagation();
+              onIndex(index + 1);
+            }}
+            className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 disabled:opacity-30"
+          >
+            <ChevronRight size={20} aria-hidden />
+          </button>
+          <p className="absolute bottom-4 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+            {index + 1} / {ids.length}
+          </p>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

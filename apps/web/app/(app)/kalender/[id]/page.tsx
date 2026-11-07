@@ -1,22 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, CalendarPlus, Clock, MapPin, Share2, Users } from "lucide-react";
+import { CalendarPlus, Clock, MapPin, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
-import { Alert, Badge, Button, Card } from "@/components/ui";
+import { Alert, ArrowLink, BackLink, Badge, Button, Card, CardSkeletons, ErrorState, LinkButton } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
-import { withRsvp } from "@/lib/events";
+import { RSVP_OPTIONS, RSVP_STATUS_LABEL, withRsvp } from "@/lib/events";
 import { shareLink } from "@/lib/share";
 import { ask } from "@/components/ui-hosts";
 
-const rsvpOptions: { id: RsvpStatus; label: string }[] = [
-  { id: "yes", label: "Zusagen" },
-  { id: "maybe", label: "Vielleicht" },
-  { id: "no", label: "Absagen" },
-];
-const groupLabel: Record<RsvpStatus, string> = { yes: "Zugesagt", maybe: "Vielleicht", no: "Abgesagt" };
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 
@@ -26,15 +20,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [people, setPeople] = useState<RsvpItem[] | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const e = await api<EventItem>(`/events/${id}`);
       setEvent(e);
       if (e.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`));
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) setNotFound(true);
-      else setError(describeError(err));
+      else setLoadError(describeError(err));
     }
   }, [id]);
   useEffect(() => {
@@ -70,20 +66,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     return (
       <Card>
         <p className="text-sm">Dieser Termin existiert nicht oder ist für dich nicht sichtbar.</p>
-        <Link href="/kalender" className="mt-2 inline-block text-sm text-brand hover:underline">Zum Kalender</Link>
+        <ArrowLink href="/kalender" className="mt-2">Zum Kalender</ArrowLink>
       </Card>
     );
   }
-  if (!event) return <p className="text-sm text-muted" role="status">{error ?? "Lade …"}</p>;
+  if (!event) return loadError ? <ErrorState message={loadError} onRetry={() => void load()} /> : <CardSkeletons count={1} />;
 
   const start = new Date(event.startsAt);
   const end = event.endsAt ? new Date(event.endsAt) : null;
 
   return (
     <>
-      <Link href="/kalender" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
-        <ArrowLeft size={15} aria-hidden /> Kalender
-      </Link>
+      <BackLink href="/kalender">Kalender</BackLink>
 
       <Card className={clsx("space-y-5", event.canceled && "opacity-80")}>
         <div>
@@ -127,7 +121,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <div>
             <h2 className="mb-2 text-sm font-semibold">Kommst du?</h2>
             <div className="grid grid-cols-3 gap-2 sm:flex" role="group" aria-label="Teilnahme">
-              {rsvpOptions.map((o) => (
+              {RSVP_OPTIONS.map((o) => (
                 <Button key={o.id} variant={event.myStatus === o.id ? "primary" : "secondary"} aria-pressed={event.myStatus === o.id} onClick={() => rsvp(o.id)}>
                   {o.label}
                 </Button>
@@ -140,9 +134,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         )}
 
         <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-          <a href={`/api/events/${event.id}/ics`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-2">
+          <LinkButton native variant="secondary" href={`/api/events/${event.id}/ics`}>
             <CalendarPlus size={16} aria-hidden /> In Kalender übernehmen
-          </a>
+          </LinkButton>
           <Button variant="secondary" onClick={() => shareLink(event.title, `/kalender/${event.id}`)}>
             <Share2 size={16} aria-hidden /> Teilen
           </Button>
@@ -168,7 +162,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 return (
                   list.length > 0 && (
                     <div key={s}>
-                      <p className="mb-1.5 text-xs font-medium text-muted">{groupLabel[s]} ({list.length})</p>
+                      <p className="mb-1.5 text-xs font-medium text-muted">{RSVP_STATUS_LABEL[s]} ({list.length})</p>
                       <ul className="flex flex-wrap gap-1.5">
                         {list.map((p) => (
                           <li key={p.userId} className="rounded-full bg-surface-2 px-3 py-1 text-sm">{p.name}</li>

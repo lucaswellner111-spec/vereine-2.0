@@ -14,6 +14,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { OrgDetail, OrgRole, OrgSummary } from "@vereine/shared";
 import { api, describeError } from "./api";
@@ -58,6 +59,10 @@ export function VerwaltungProvider({ children }: { children: ReactNode }) {
   const [slug, setSlugState] = useState("");
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pathname = usePathname();
+
+  // Fehler gehoeren zur Seite bzw. zum Verein: beim Wechsel zuruecksetzen
+  useEffect(() => setError(null), [pathname, slug]);
 
   useEffect(() => {
     api<OrgSummary[]>("/orgs/managed")

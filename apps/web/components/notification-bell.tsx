@@ -1,5 +1,6 @@
 "use client";
 
+import { Bell } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NotificationItem, NotificationsResponse } from "@vereine/shared";
@@ -92,7 +93,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
         aria-expanded={open}
         className="relative inline-flex h-11 w-11 items-center justify-center rounded-lg md:h-9 md:w-9 text-muted hover:bg-surface-2 hover:text-text"
       >
-        <span aria-hidden>🔔</span>
+        <Bell size={18} aria-hidden />
         {data.unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-on-danger">
             {data.unread > 9 ? "9+" : data.unread}

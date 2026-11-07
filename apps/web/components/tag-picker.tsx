@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Check, Search, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { TAGS, TAG_GROUPS, tagLabel } from "@vereine/shared";
+import { Input } from "./ui";
 
 /**
  * Auswahl aus dem festen Tag-Katalog (Sportarten/Themen), gruppiert und durchsuchbar.
@@ -57,13 +58,15 @@ export function TagPicker({ value, onChange, max, label = "Tags", hint }: { valu
         <div className="rounded-lg border border-border bg-surface">
           <div className="relative border-b border-border p-2">
             <Search size={14} aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
-            <input
+            {/* pl-8 = Platz fuer das Such-Icon (Ausnahme der className-Regel; pl-* steht in Tailwind v4 nach px-*) */}
+            <Input
               type="search"
+              size="sm"
               aria-labelledby={`${id}-label`}
               placeholder="Sportart oder Thema suchen …"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-bg pl-8 pr-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full pl-8"
             />
           </div>
           <div className="max-h-72 overflow-y-auto p-2">

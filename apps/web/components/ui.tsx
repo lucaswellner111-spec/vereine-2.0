@@ -1,71 +1,179 @@
 import clsx from "clsx";
-import type { ComponentPropsWithRef, InputHTMLAttributes, ReactNode } from "react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, RotateCw, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import type { ComponentProps, ComponentPropsWithRef, InputHTMLAttributes, ReactNode } from "react";
 
-type ButtonProps = ComponentPropsWithRef<"button"> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md";
-};
+/*
+ * Basis-Komponenten. Bewusst OHNE Hooks und ohne "use client", damit sie auch in Server-Komponenten
+ * (z. B. not-found) nutzbar sind. Interaktives liegt in ui-client.tsx.
+ * className an diesen Komponenten nur fuer Layout (Breite, flex, margin, responsive hide) –
+ * nie Hoehe/Hintergrund/Rahmen/Padding (es gibt kein tailwind-merge).
+ */
 
-export function Button({ variant = "primary", size = "md", className, ...props }: ButtonProps) {
+type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Size = "sm" | "md";
+
+export function buttonClasses({ variant = "primary", size = "md" }: { variant?: Variant; size?: Size } = {}) {
+  return clsx(
+    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+    size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs",
+    variant === "primary" && "bg-brand text-brand-contrast hover:bg-brand-hover",
+    variant === "secondary" && "border border-border bg-surface text-text hover:bg-surface-2",
+    variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
+    variant === "danger" && "bg-danger text-on-danger hover:opacity-90",
+  );
+}
+
+type ButtonProps = ComponentPropsWithRef<"button"> & { variant?: Variant; size?: Size; busy?: boolean };
+
+export function Button({ variant = "primary", size = "md", busy = false, className, disabled, children, ...props }: ButtonProps) {
   return (
     <button
       {...props}
-      className={clsx(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        size === "md" ? "h-10 px-4 text-sm" : "h-8 px-3 text-xs",
-        variant === "primary" && "bg-brand text-brand-contrast hover:bg-brand-hover",
-        variant === "secondary" && "border border-border bg-surface text-text hover:bg-surface-2",
-        variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
-        variant === "danger" && "bg-danger text-on-danger hover:opacity-90",
-        className,
-      )}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      className={clsx(buttonClasses({ variant, size }), className)}
+    >
+      {busy && <Loader2 size={14} className="animate-spin" aria-hidden />}
+      {children}
+    </button>
+  );
+}
+
+type LinkButtonProps = Omit<ComponentProps<typeof Link>, "className"> & {
+  variant?: Variant;
+  size?: Size;
+  className?: string;
+  /** Echtes <a> statt next/link – fuer /api-Downloads (CSV/PDF), data:-URLs und download-Links. */
+  native?: boolean;
+};
+
+export function LinkButton({ variant = "primary", size = "md", className, native = false, href, children, ...props }: LinkButtonProps) {
+  const cls = clsx(buttonClasses({ variant, size }), className);
+  if (native) {
+    // Link-spezifische Props (prefetch, replace, …) werden bei native nicht genutzt.
+    return (
+      <a {...(props as ComponentProps<"a">)} href={typeof href === "string" ? href : String(href)} className={cls}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link {...props} href={href} className={cls}>
+      {children}
+    </Link>
+  );
+}
+
+export function BackLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+  return (
+    <Link href={href} className={clsx("mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted hover:text-text", className)}>
+      <ArrowLeft size={16} aria-hidden />
+      {children}
+    </Link>
+  );
+}
+
+export function ArrowLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+  return (
+    <Link href={href} className={clsx("inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline", className)}>
+      {children}
+      <ArrowRight size={14} aria-hidden />
+    </Link>
+  );
+}
+
+// ---------- Formular-Steuerelemente (ohne Standardbreite) ----------
+
+const controlBase =
+  "rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
+
+type ControlExtra = { size?: Size; invalid?: boolean };
+
+export function Input({ size = "md", invalid, className, ...props }: Omit<ComponentPropsWithRef<"input">, "size"> & ControlExtra) {
+  return (
+    <input
+      aria-invalid={invalid ? "true" : undefined}
+      {...props}
+      className={clsx(controlBase, size === "md" ? "h-10" : "h-9", className)}
     />
   );
 }
 
-export function LinkButton({
-  href,
-  variant = "primary",
-  children,
-  className,
-}: {
-  href: string;
-  variant?: "primary" | "secondary";
-  children: ReactNode;
-  className?: string;
-}) {
+export function Select({ size = "md", invalid, className, ...props }: Omit<ComponentPropsWithRef<"select">, "size"> & ControlExtra) {
   return (
-    <a
-      href={href}
-      className={clsx(
-        "inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors",
-        variant === "primary" ? "bg-brand text-brand-contrast hover:bg-brand-hover" : "border border-border bg-surface hover:bg-surface-2",
-        className,
-      )}
-    >
-      {children}
-    </a>
+    <select
+      aria-invalid={invalid ? "true" : undefined}
+      {...props}
+      className={clsx(controlBase, size === "md" ? "h-10" : "h-9", className)}
+    />
   );
 }
 
-export function Field({
-  label,
-  hint,
-  id,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; id: string }) {
+export function Textarea({ invalid, className, ...props }: ComponentPropsWithRef<"textarea"> & { invalid?: boolean }) {
+  return <textarea aria-invalid={invalid ? "true" : undefined} {...props} className={clsx(controlBase, "resize-none p-3", className)} />;
+}
+
+/** ARIA-Verknuepfungen eines Steuerelements mit Hinweis- und Fehlertext. */
+export function fieldAria(id: string, { hint, error }: { hint?: ReactNode; error?: ReactNode } = {}) {
+  const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ");
+  return {
+    id,
+    ...(describedBy ? { "aria-describedby": describedBy } : {}),
+    ...(error ? { "aria-invalid": "true" as const } : {}),
+  };
+}
+
+type ShellProps = { id: string; label: ReactNode; hint?: ReactNode; error?: ReactNode; className?: string };
+
+export function FieldShell({ id, label, hint, error, className, children }: ShellProps & { children: ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
+    <div className={clsx("space-y-1.5", className)}>
+      <label htmlFor={id} className="block text-sm font-medium">
         {label}
       </label>
-      <input
-        id={id}
-        {...props}
-        className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm placeholder:text-muted/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-      />
-      {hint && <p className="text-xs text-muted">{hint}</p>}
+      {children}
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs text-muted">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} className="text-xs text-danger">
+          {error}
+        </p>
+      )}
     </div>
+  );
+}
+
+type FieldProps = Omit<ComponentPropsWithRef<"input">, "size" | "id"> & ShellProps & { size?: Size };
+
+export function Field({ id, label, hint, error, className, size, ...props }: FieldProps) {
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error} className={className}>
+      <Input {...props} size={size} {...fieldAria(id, { hint, error })} className="w-full" />
+    </FieldShell>
+  );
+}
+
+type SelectFieldProps = Omit<ComponentPropsWithRef<"select">, "size" | "id"> & ShellProps & { size?: Size };
+
+export function SelectField({ id, label, hint, error, className, size, ...props }: SelectFieldProps) {
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error} className={className}>
+      <Select {...props} size={size} {...fieldAria(id, { hint, error })} className="w-full" />
+    </FieldShell>
+  );
+}
+
+type TextareaFieldProps = Omit<ComponentPropsWithRef<"textarea">, "id"> & ShellProps;
+
+export function TextareaField({ id, label, hint, error, className, ...props }: TextareaFieldProps) {
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error} className={className}>
+      <Textarea {...props} {...fieldAria(id, { hint, error })} className="w-full" />
+    </FieldShell>
   );
 }
 
@@ -82,8 +190,9 @@ export function Checkbox({
   );
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={clsx("rounded-xl border border-border bg-surface p-4 shadow-sm", className)}>{children}</div>;
+/** flush = ohne Innenabstand (Listen mit eigenen Zeilenabstaenden); p-0 per className wirkt nicht, da p-4 spaeter sortiert. */
+export function Card({ className, flush = false, children }: { className?: string; flush?: boolean; children: ReactNode }) {
+  return <div className={clsx("rounded-xl border border-border bg-surface shadow-card", !flush && "p-4", className)}>{children}</div>;
 }
 
 export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "brand" | "accent" | "danger"; children: ReactNode }) {
@@ -184,22 +293,64 @@ export function Toggle({
   );
 }
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+        {subtitle && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
       </div>
       {action}
     </div>
   );
 }
 
-export function ConceptNote({ children }: { children: ReactNode }) {
+/** Leerer Zustand einer Liste/Seite: Icon, Titel, Erklaerung, optional eine Aktion. */
+export function EmptyState({
+  icon: Icon,
+  title,
+  children,
+  action,
+  className,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mb-4 rounded-lg border border-dashed border-accent/60 bg-accent/10 px-3 py-2 text-xs text-muted">
-      <strong className="text-text">Konzept-Ansicht:</strong> {children}
+    <div className={clsx("rounded-xl border border-dashed border-border px-4 py-8 text-center", className)}>
+      {Icon && <Icon size={28} aria-hidden className="mx-auto mb-3 text-muted" />}
+      <p className="font-medium">{title}</p>
+      {children && <div className="mt-1 text-sm text-muted">{children}</div>}
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
+  );
+}
+
+/** Ladefehler mit optionalem "Erneut versuchen". */
+export function ErrorState({
+  message,
+  onRetry,
+  retryLabel = "Erneut versuchen",
+  className,
+}: {
+  message: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div role="alert" className={clsx("rounded-xl border border-danger/40 bg-surface px-4 py-6 text-center", className)}>
+      <AlertTriangle size={24} aria-hidden className="mx-auto mb-2 text-danger" />
+      <p className="text-sm">{message}</p>
+      {onRetry && (
+        <Button variant="secondary" size="sm" onClick={onRetry} className="mt-3">
+          <RotateCw size={14} aria-hidden />
+          {retryLabel}
+        </Button>
+      )}
     </div>
   );
 }
@@ -207,6 +358,24 @@ export function ConceptNote({ children }: { children: ReactNode }) {
 /** Platzhalter beim Laden: behaelt das Layout stabil und kuendigt sich Screenreadern als "Lade" an. */
 export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden className={clsx("animate-pulse rounded-md bg-surface-2", className)} />;
+}
+
+/** Zeilen-Platzhalter fuer einfache Listen und Tabellen. */
+export function ListSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-label="Lade" className={clsx("space-y-2", className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-2/5" />
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+        </div>
+      ))}
+      <span className="sr-only">Lade …</span>
+    </div>
+  );
 }
 
 /** Liste von Karten-Platzhaltern (Feed, Vereine, Termine). */

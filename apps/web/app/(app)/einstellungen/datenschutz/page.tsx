@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { ConsentState } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, Field, PageHeader, Toggle } from "@/components/ui";
+import { Alert, Button, Card, ErrorState, Field, ListSkeleton, PageHeader, Toggle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
 
 const labels: Record<string, { title: string; text: string; locked?: boolean }> = {
   terms: { title: "Nutzungsbedingungen", text: "Voraussetzung für die Nutzung.", locked: true },
@@ -15,26 +16,25 @@ const labels: Record<string, { title: string; text: string; locked?: boolean }> 
   analytics: { title: "Anonyme Nutzungsstatistik", text: "Hilft uns, die Plattform zu verbessern. Keine Weitergabe an Dritte." },
   marketing_email: { title: "Neuigkeiten per E-Mail", text: "Gelegentliche Produktneuigkeiten." },
 };
+/** Immer sichtbar. Statistik und E-Mail-Neuigkeiten werden derzeit nicht genutzt und erscheinen nur,
+ *  wenn sie erteilt sind – damit man sie widerrufen kann (Art. 7 Abs. 3 DSGVO). */
+const VISIBLE = new Set(["terms", "privacy", "personalized_feed"]);
+const UNUSED_TEXT = "Wird derzeit nicht genutzt. Du kannst die Einwilligung widerrufen.";
 
 export default function PrivacyPage() {
   const { user, clear } = useAuth();
   const router = useRouter();
-  const [consents, setConsents] = useState<ConsentState[]>([]);
+  const consentList = useApi<ConsentState[]>("/privacy/consents");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    api<ConsentState[]>("/privacy/consents").then(setConsents).catch((e) => setError(describeError(e)));
-  }, []);
-  useEffect(load, [load]);
-
   async function toggle(purpose: ConsentState["purpose"], granted: boolean) {
     setError(null);
     try {
-      setConsents(await api<ConsentState[]>("/privacy/consents", { method: "PUT", body: { purpose, granted } }));
+      consentList.setData(await api<ConsentState[]>("/privacy/consents", { method: "PUT", body: { purpose, granted } }));
     } catch (e) {
       setError(describeError(e));
     }
@@ -74,20 +74,28 @@ export default function PrivacyPage() {
       {notice && <div className="mb-4"><Alert tone="success">{notice}</Alert></div>}
 
       <h2 className="mb-2 font-semibold">Einwilligungen</h2>
-      <Card className="mb-6 divide-y divide-border p-0">
-        {consents.map((c) => {
-          const meta = labels[c.purpose];
-          return (
-            <div key={c.purpose} className="flex items-center justify-between gap-4 p-4">
-              <div>
-                <p className="text-sm font-medium">{meta.title}</p>
-                <p className="text-xs text-muted">{meta.text}</p>
-              </div>
-              <Toggle label={meta.title} checked={c.granted} disabled={meta.locked} onChange={(v) => toggle(c.purpose, v)} />
-            </div>
-          );
-        })}
-      </Card>
+      {consentList.error && !consentList.data ? (
+        <ErrorState message={consentList.error} onRetry={consentList.reload} className="mb-6" />
+      ) : !consentList.data ? (
+        <ListSkeleton rows={3} className="mb-6" />
+      ) : (
+        <Card flush className="mb-6 divide-y divide-border">
+          {consentList.data
+            .filter((c) => labels[c.purpose] && (VISIBLE.has(c.purpose) || c.granted))
+            .map((c) => {
+              const meta = labels[c.purpose];
+              return (
+                <div key={c.purpose} className="flex items-center justify-between gap-4 p-4">
+                  <div>
+                    <p className="text-sm font-medium">{meta.title}</p>
+                    <p className="text-xs text-muted">{VISIBLE.has(c.purpose) ? meta.text : UNUSED_TEXT}</p>
+                  </div>
+                  <Toggle label={meta.title} checked={c.granted} disabled={meta.locked} onChange={(v) => toggle(c.purpose, v)} />
+                </div>
+              );
+            })}
+        </Card>
+      )}
 
       <h2 className="mb-2 font-semibold">Deine Daten</h2>
       <Card className="mb-6">

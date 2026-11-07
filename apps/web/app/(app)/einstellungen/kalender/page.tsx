@@ -1,24 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CalendarFeedCreated, CalendarFeedStatus } from "@vereine/shared";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { Alert, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
+import { Alert, Button, Card, ErrorState, PageHeader, Skeleton } from "@/components/ui";
+import { CopyField } from "@/components/ui-client";
 import { api, describeError } from "@/lib/api";
 
 export default function CalendarSettingsPage() {
   const [status, setStatus] = useState<CalendarFeedStatus | null>(null);
   const [link, setLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api<CalendarFeedStatus>("/calendar-feed").then(setStatus).catch((e) => setError(describeError(e)));
+  const load = useCallback(() => {
+    setLoadError(null);
+    api<CalendarFeedStatus>("/calendar-feed").then(setStatus).catch((e) => setLoadError(describeError(e)));
   }, []);
+  useEffect(load, [load]);
 
   async function create() {
     setError(null);
-    setCopied(false);
     try {
       const res = await api<CalendarFeedCreated>("/calendar-feed", { method: "POST" });
       setLink(`${window.location.origin}/api/calendar/${res.token}.ics`);
@@ -48,8 +50,10 @@ export default function CalendarSettingsPage() {
         <p className="text-sm text-muted">
           Mit dem Abo-Link erscheinen alle Termine deiner Vereine und Teams automatisch in deinem Kalenderprogramm und bleiben aktuell. Wer den Link kennt, kann deine Termine sehen – gib ihn nicht weiter. Ein neuer Link macht den alten ungültig.
         </p>
-        {status === null ? (
-          <CardSkeletons count={2} />
+        {status === null && loadError ? (
+          <ErrorState message={loadError} onRetry={load} />
+        ) : status === null ? (
+          <div role="status" aria-label="Lade" className="flex gap-2"><Skeleton className="h-10 w-44" /></div>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button onClick={create}>{status.enabled ? "Neuen Link erzeugen" : "Abo-Link erzeugen"}</Button>
@@ -64,20 +68,7 @@ export default function CalendarSettingsPage() {
         {link && (
           <div className="space-y-2">
             <Alert tone="success">Kopiere den Link jetzt und füge ihn im Kalenderprogramm als „Kalender abonnieren“ (per URL) ein. Er wird nicht noch einmal angezeigt.</Alert>
-            <div className="flex flex-wrap items-center gap-2">
-              <input readOnly aria-label="Abo-Link" value={link} onFocus={(e) => e.currentTarget.select()} className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 font-mono text-xs" />
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  navigator.clipboard.writeText(link).then(
-                    () => setCopied(true),
-                    () => setError("Kopieren nicht möglich – markiere den Link und kopiere ihn von Hand."),
-                  )
-                }
-              >
-                {copied ? "Kopiert ✓" : "Kopieren"}
-              </Button>
-            </div>
+            <CopyField label="Abo-Link" value={link} />
           </div>
         )}
       </Card>
