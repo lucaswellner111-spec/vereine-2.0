@@ -4,6 +4,9 @@ import Redis from "ioredis";
 
 export type JobHandler = (data: any) => Promise<void>;
 
+/** Abweichende Zustell-Optionen je Job (z. B. Mail: mehr Versuche, Daten nach Erfolg sofort aus Redis entfernen). */
+export type EnqueueOptions = { attempts?: number; backoffMs?: number; removeOnComplete?: boolean | number; removeOnFail?: boolean | number };
+
 const QUEUE = "jobs";
 
 /**
@@ -60,13 +63,13 @@ export class JobsService implements OnModuleDestroy {
   }
 
   /** Einmaliger Job. Inline sofort und abgewartet (deterministisch fuer Tests), BullMQ asynchron mit Wiederholungen. */
-  async enqueue(name: string, data: object = {}): Promise<void> {
+  async enqueue(name: string, data: object = {}, opts: EnqueueOptions = {}): Promise<void> {
     if (this.mode === "inline") return this.run(name, data);
     await this.queue!.add(name, data, {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 5_000 },
-      removeOnComplete: 1_000,
-      removeOnFail: 5_000,
+      attempts: opts.attempts ?? 3,
+      backoff: { type: "exponential", delay: opts.backoffMs ?? 5_000 },
+      removeOnComplete: opts.removeOnComplete ?? 1_000,
+      removeOnFail: opts.removeOnFail ?? 5_000,
     });
   }
 

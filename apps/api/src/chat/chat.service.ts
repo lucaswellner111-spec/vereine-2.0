@@ -604,7 +604,17 @@ export class ChatService implements OnModuleInit {
       }
     }
     const blocked = await this.db.select().from(chatBlocks).where(eq(chatBlocks.blockerId, userId));
-    return { conversations: convs.length, messagesSent: out, blockedUsers: blocked.length };
+    // Eigene Meldungen ohne Beweiskopie (die gemeldete Nachricht stammt von einer anderen Person)
+    const filed = await this.db
+      .select({ messageId: messageReports.messageId, reason: messageReports.reason, note: messageReports.note, status: messageReports.status, at: messageReports.createdAt, resolvedAt: messageReports.resolvedAt })
+      .from(messageReports)
+      .where(eq(messageReports.reporterId, userId));
+    return {
+      conversations: convs.length,
+      messagesSent: out,
+      blockedUsers: blocked.length,
+      reportsFiled: filed.map((r) => ({ ...r, at: r.at.toISOString(), resolvedAt: r.resolvedAt?.toISOString() ?? null })),
+    };
   }
 
   /**

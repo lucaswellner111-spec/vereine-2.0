@@ -79,7 +79,7 @@ export class ProfilesService {
       await this.notifications.notify([target.userId], status === "pending" ? "follow_request" : "new_follower", {
         handle: mine?.handle ?? "",
         name: viewer.displayName,
-      });
+      }, { actorId: viewer.id });
     }
     return this.view(viewer.id, target);
   }
@@ -116,7 +116,7 @@ export class ProfilesService {
     if (decision === "approve") {
       await this.db.update(userFollows).set({ status: "active" }).where(key);
       const mine = await this.access.ensure(user.id);
-      await this.notifications.notify([followerId], "follow_accepted", { handle: mine?.handle ?? "", name: user.displayName });
+      await this.notifications.notify([followerId], "follow_accepted", { handle: mine?.handle ?? "", name: user.displayName }, { actorId: user.id });
     } else {
       await this.db.delete(userFollows).where(key);
     }

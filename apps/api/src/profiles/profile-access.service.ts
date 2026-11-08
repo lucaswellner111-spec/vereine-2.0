@@ -28,6 +28,37 @@ export class ProfileAccess {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
+  /**
+   * Datenauskunft (Art. 15): eigenes Profil und eigene Folge-Beziehungen; von der Gegenseite nur ID und Benutzername.
+   */
+  async exportFor(userId: string) {
+    const [[p], following, followers] = await Promise.all([
+      this.db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1),
+      this.db.select().from(userFollows).where(eq(userFollows.followerId, userId)),
+      this.db.select().from(userFollows).where(eq(userFollows.followedId, userId)),
+    ]);
+    const others = [...new Set([...following.map((f) => f.followedId), ...followers.map((f) => f.followerId)])];
+    const handles = new Map(
+      others.length ? (await this.db.select({ id: profiles.userId, handle: profiles.handle }).from(profiles).where(inArray(profiles.userId, others))).map((r) => [r.id, r.handle]) : [],
+    );
+    return {
+      profile: p
+        ? {
+            handle: p.handle,
+            bio: p.bio,
+            location: p.location,
+            visibility: p.visibility,
+            showClubs: p.showClubs,
+            hasAvatar: !!p.avatarMediaId,
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+          }
+        : null,
+      following: following.map((f) => ({ userId: f.followedId, handle: handles.get(f.followedId) ?? null, status: f.status, at: f.createdAt.toISOString() })),
+      followers: followers.map((f) => ({ userId: f.followerId, handle: handles.get(f.followerId) ?? null, status: f.status, at: f.createdAt.toISOString() })),
+    };
+  }
+
   /** Liefert Profile fuer alle IDs und legt fehlende an. */
   async ensureMany(userIds: string[]): Promise<Map<string, ProfileRow>> {
     const ids = [...new Set(userIds)];

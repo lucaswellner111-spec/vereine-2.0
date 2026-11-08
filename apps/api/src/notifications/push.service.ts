@@ -97,6 +97,23 @@ export class PushService {
     await this.db.delete(pushSubscriptions).where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint)));
   }
 
+  /** Datenauskunft: nur Host des Push-Dienstes und Datum (Endpunkt-Pfad und Schluessel sind Geheimnisse des Geraets). */
+  async exportFor(userId: string): Promise<{ host: string; at: string }[]> {
+    const rows = await this.db
+      .select({ endpoint: pushSubscriptions.endpoint, createdAt: pushSubscriptions.createdAt })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, userId));
+    return rows.map((r) => {
+      let host = "";
+      try {
+        host = new URL(r.endpoint).host;
+      } catch {
+        /* ungueltige Altzeile */
+      }
+      return { host, at: r.createdAt.toISOString() };
+    });
+  }
+
   async count(userId: string): Promise<number> {
     return (await this.db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId))).length;
   }

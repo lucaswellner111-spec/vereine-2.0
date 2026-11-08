@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import {
   isTagId,
   MAX_POST_TAGS,
@@ -19,6 +19,7 @@ import {
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { decodeCursor, encodeCursor, type Cursor } from "../common/cursor";
+import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { invalidatePublicOrg } from "../common/public-cache";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
@@ -345,7 +346,7 @@ export class PostsService {
     await enforceLimit(this.cache, `comment:create:${user.id}`, 100, 3600, limitMessage("Kommentare"));
     const [row] = await this.db.insert(comments).values({ postId, authorId: user.id, body }).returning();
     if (post.authorId !== user.id) {
-      await this.notifications.notify([post.authorId], "comment", { postId, commenter: user.displayName, excerpt: body.slice(0, 80) });
+      await this.notifications.notify([post.authorId], "comment", { postId, commenter: user.displayName, excerpt: body.slice(0, 80) }, { actorId: user.id });
     }
     const mine = await this.access.ensure(user.id);
     return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), author: { id: user.id, name: user.displayName, handle: mine?.handle ?? null } };
@@ -410,8 +411,20 @@ export class PostsService {
     if (post.authorId !== user.id && !(role && MODERATION_ROLES.includes(role))) {
       throw new ForbiddenException("Du darfst diesen Beitrag nicht loeschen.");
     }
-    await this.db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, postId));
-    await this.mediaSvc.deleteForPost(postId); // Bilder werden mit dem Beitrag entfernt (Datenminimierung)
+    // Text sofort leeren (Datenminimierung); bei offener Meldung bleibt er als Beweis bis zur Pruefung bzw. zum
+    // endgueltigen Loeschen (Job privacy.retention, 30 Tage nach dem Loeschen).
+    const [openReport] = await this.db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.postId, postId), eq(reports.status, "open")))
+      .limit(1);
+    await this.db
+      .update(posts)
+      .set(openReport ? { deletedAt: new Date() } : { deletedAt: new Date(), body: "", tags: [] })
+      .where(eq(posts.id, postId));
+    // Bilder werden mit dem Beitrag entfernt (Datenminimierung); bei offener Meldung bleiben sie als Beweis
+    // (nicht mehr auslieferbar, da der Beitrag geloescht ist) bis purgeExpired.
+    if (!openReport) await this.mediaSvc.deleteForPost(postId); // Bilder werden mit dem Beitrag entfernt (Datenminimierung)
     if (post.orgId) await invalidatePublicOrg(this.cache, await this.orgs.slugOf(post.orgId));
   }
 
@@ -484,6 +497,60 @@ export class PostsService {
         ];
       }),
     );
+  }
+
+  /** Auskunft (Art. 15): eigene Likes, eigene Meldungen (ohne Bearbeiter) und eigene "Weniger davon"-Eintraege. */
+  async exportFor(userId: string) {
+    const [likes, own, feedback] = await Promise.all([
+      this.db.select().from(postLikes).where(eq(postLikes.userId, userId)),
+      this.db.select().from(reports).where(eq(reports.reporterId, userId)),
+      this.db.select().from(feedFeedback).where(eq(feedFeedback.userId, userId)),
+    ]);
+    return {
+      likes: likes.map((l) => ({ postId: l.postId, at: l.createdAt.toISOString() })),
+      reports: own.map((r) => ({
+        postId: r.postId,
+        commentId: r.commentId,
+        reason: r.reason,
+        note: r.note,
+        status: r.status,
+        at: r.createdAt.toISOString(),
+        resolvedAt: r.resolvedAt?.toISOString() ?? null,
+      })),
+      feedFeedback: feedback.map((f) => ({ kind: f.targetKind, targetId: f.targetId, at: f.createdAt.toISOString() })),
+    };
+  }
+
+  /** Kontoloeschung: Verweise ohne Fremdschluessel (Bearbeiter von Meldungen, Stummschaltungen anderer). Idempotent. */
+  async eraseUser(userId: string): Promise<void> {
+    await this.db.update(reports).set({ resolvedBy: null }).where(eq(reports.resolvedBy, userId));
+    await this.db.delete(feedFeedback).where(and(eq(feedFeedback.targetKind, "user"), eq(feedFeedback.targetId, userId)));
+  }
+
+  /**
+   * Loeschfrist: soft-geloeschte Beitraege 30 Tage nach dem Loeschen endgueltig entfernen (Kommentare, Likes, Umfragen,
+   * Meldungen, Bild-Verknuepfungen per Kaskade; Bilddateien und "Weniger davon"-Eintraege vorher). Beitraege mit offener
+   * Meldung bleiben bis zur Pruefung (Beweis, DSA). Job privacy.retention, blockweise.
+   */
+  purgeExpired(): Promise<number> {
+    return purgeInRounds(async () => {
+      const rows = await this.db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(
+          and(
+            lt(posts.deletedAt, ago(RETENTION.deletedPosts)),
+            sql`not exists (select 1 from ${reports} where ${reports.postId} = ${posts.id} and ${reports.status} = 'open')`,
+          ),
+        )
+        .limit(RETENTION_BATCH);
+      if (rows.length === 0) return 0;
+      const ids = rows.map((r) => r.id);
+      const linked = await this.db.select({ id: postMedia.mediaId }).from(postMedia).where(inArray(postMedia.postId, ids));
+      await this.mediaSvc.deleteMedia([...new Set(linked.map((m) => m.id))]);
+      await this.db.delete(feedFeedback).where(and(eq(feedFeedback.targetKind, "post"), inArray(feedFeedback.targetId, ids)));
+      return (await this.db.delete(posts).where(inArray(posts.id, ids)).returning({ id: posts.id })).length;
+    });
   }
 
   /** Auskunft (Art. 15): eigene Umfragestimmen mit Frage und gewaehlter Antwort. */

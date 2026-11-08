@@ -99,6 +99,12 @@ export class TwoFactorService {
     return !!row?.at;
   }
 
+  /** Datenauskunft: nur an/aus und seit wann (nie Geheimnis oder Notfallcodes). */
+  async exportFor(userId: string): Promise<{ enabled: boolean; since: string | null }> {
+    const [row] = await this.db.select({ at: userTotp.enabledAt }).from(userTotp).where(eq(userTotp.userId, userId)).limit(1);
+    return { enabled: !!row?.at, since: row?.at?.toISOString() ?? null };
+  }
+
   async status(userId: string): Promise<TwoFactorStatus> {
     const enabled = await this.isEnabled(userId);
     const [{ n }] = await this.db

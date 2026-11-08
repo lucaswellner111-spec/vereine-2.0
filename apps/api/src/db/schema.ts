@@ -68,13 +68,18 @@ export const consents = identity.table(
   (t) => [index("consents_user_purpose_idx").on(t.userId, t.purpose)],
 );
 
-export const auditLog = identity.table("audit_log", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id"),
-  action: text("action").notNull(),
-  meta: jsonb("meta"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/** Fristen: privacy/retention.service.ts (12 Monate, Moderation 24 Monate, Rechnungsaktionen 10 Jahre). */
+export const auditLog = identity.table(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id"),
+    action: text("action").notNull(),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audit_log_user_idx").on(t.userId), index("audit_log_created_idx").on(t.createdAt)],
+);
 
 /** Zwei-Faktor (TOTP): Geheimnis verschluesselt; enabled_at = null bedeutet Einrichtung noch nicht bestaetigt. */
 export const userTotp = identity.table("user_totp", {
@@ -135,7 +140,8 @@ export const orgInvites = social.table(
     uses: integer("uses").notNull().default(0),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    createdBy: uuid("created_by").notNull(),
+    /** Null nach Kontoloeschung der erstellenden Person. */
+    createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("org_invites_org_idx").on(t.orgId, t.createdAt)],
@@ -186,6 +192,8 @@ export const posts = social.table(
     index("posts_org_created_idx").on(t.orgId, t.createdAt),
     index("posts_author_created_idx").on(t.authorId, t.createdAt),
     index("posts_tags_idx").using("gin", t.tags),
+    // Aufraeumjob: soft-geloeschte Beitraege nach 30 Tagen endgueltig entfernen
+    index("posts_deleted_idx").on(t.deletedAt).where(sql`deleted_at IS NOT NULL`),
   ],
 );
 
@@ -288,10 +296,16 @@ export const notifications = social.table(
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     type: text("type").notNull(), // comment | membership_request | membership_decision | post_hidden
     data: jsonb("data").notNull().default({}),
+    /** Ausloesende Person (Kommentar, Folgen); Kontoloeschung entfernt ihre Benachrichtigungen bei anderen (Kaskade). */
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "cascade" }),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+  (t) => [
+    index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    index("notifications_actor_idx").on(t.actorId).where(sql`actor_id IS NOT NULL`),
+    index("notifications_created_idx").on(t.createdAt),
+  ],
 );
 
 // --- Termine & Teams ---------------------------------------------------------
@@ -424,6 +438,7 @@ export const eventAttendance = social.table(
   (t) => [
     primaryKey({ columns: [t.eventId, t.userId] }),
     index("event_attendance_user_idx").on(t.userId),
+    index("event_attendance_marked_idx").on(t.markedAt),
     check("event_attendance_status_chk", sql`status IN ('present', 'absent', 'excused')`),
   ],
 );

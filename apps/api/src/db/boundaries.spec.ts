@@ -85,6 +85,8 @@ describe("Mitglieder-Bereich", () => {
  * laeuft ueber die jeweiligen Dienste. Neue Tabellen hier nur nach Absprache ergaenzen.
  */
 describe("Datenschutz-Bereich (Ausnahme mit Allowlist)", () => {
+  // Unveraendert seit P1: neue Bereichsdaten (P5: Profile, Benachrichtigungen, Push, 2FA, Kalender, Likes, Meldungen,
+  // Aufraeum-Jobs) laufen ueber exportFor/eraseUser/purgeExpired der Bereichsdienste, nicht ueber diese Liste.
   const PRIVACY_TABLES = ["auditLog", "comments", "consents", "follows", "orgMembers", "posts", "sessions", "users"];
   it("importiert nur die freigegebenen Tabellen", () => {
     for (const file of sources(join(root, "privacy"))) {

@@ -7,7 +7,9 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { Readable } from "node:stream";
 import sharp, { type Metadata } from "sharp";
+import { ZipFile } from "yazl";
 import type { MediaRef, PublicUser } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { enforceLimit } from "../common/rate-limit";
@@ -288,6 +290,51 @@ export class MediaService implements OnModuleInit {
   async eraseUser(userId: string): Promise<void> {
     const rows = await this.db.select({ id: media.id }).from(media).where(eq(media.ownerId, userId));
     for (const r of rows) await this.storage.remove(r.id);
+  }
+
+  /** Auskunft (Art. 15): eigene hochgeladene Bilder (ohne Vereinsbilder) als Liste. */
+  async listFor(userId: string) {
+    const rows = await this.db
+      .select({ id: media.id, kind: media.kind, width: media.width, height: media.height, bytes: media.bytes, createdAt: media.createdAt })
+      .from(media)
+      .where(eq(media.ownerId, userId))
+      .orderBy(media.createdAt, media.id);
+    return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  }
+
+  /**
+   * Datenportabilitaet (Art. 20): eigene Bilder als ZIP (groesste gespeicherte Variante; das Original wird nie
+   * gespeichert). Dateinamen enthalten nur Art, Datum und Bild-ID. Streamt Datei fuer Datei (nie alles im Speicher).
+   */
+  async zipFor(userId: string): Promise<{ stream: NodeJS.ReadableStream; count: number }> {
+    const rows = await this.listFor(userId);
+    const zip = new ZipFile();
+    const folder: Record<string, string> = { avatar: "profilbild", post: "beitragsbilder" };
+    let count = 0;
+    for (const r of rows) {
+      const variant = r.kind === "avatar" ? "avatar" : r.kind === "post" ? "medium" : null;
+      // Fehlende Dateien (z. B. abgebrochener Upload) ueberspringen statt leerer Eintraege
+      if (!variant || !(await this.storage.has(`${r.id}/${variant}.webp`))) continue;
+      count++;
+      const name = `${folder[r.kind]}/${r.createdAt.slice(0, 10)}_${r.id}.webp`;
+      // Bilder sind bereits komprimiert (WebP): ohne erneutes Komprimieren speichern
+      zip.addReadStreamLazy(name, { compress: false, mtime: new Date(r.createdAt) }, (cb) => {
+        this.storage.get(`${r.id}/${variant}.webp`).then(
+          (data) => cb(null, Readable.from(data ? [data] : [])),
+          (err) => cb(err, Readable.from([])),
+        );
+      });
+    }
+    zip.addBuffer(
+      Buffer.from(`Deine Bilder bei Klubnest (${count}), exportiert am ${new Date().toISOString().slice(0, 10)}.
+Format: WebP, Metadaten (z. B. GPS) wurden schon beim Hochladen entfernt.
+`, "utf8"),
+      "LIESMICH.txt",
+    );
+    zip.end();
+    // Lesefehler mitten im Stream: Antwort abbrechen (der Client sieht ein unvollstaendiges ZIP, kein haengender Download)
+    zip.on("error", (err: Error) => (zip.outputStream as unknown as { destroy(e?: Error): void }).destroy(err));
+    return { stream: zip.outputStream, count };
   }
 
   async countFor(userId: string): Promise<{ count: number; bytes: number }> {

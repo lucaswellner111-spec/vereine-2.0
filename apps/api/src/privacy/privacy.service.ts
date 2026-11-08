@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, sql } from "drizzle-orm";
 import {
   CONSENT_PURPOSES,
   LEGAL_VERSION,
@@ -15,6 +15,12 @@ import { MediaService } from "../media/media.service";
 import { MembersService } from "../members/members.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
+import { TwoFactorService } from "../auth/two-factor.service";
+import { CalendarFeedService } from "../events/calendar-feed.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { PushService } from "../notifications/push.service";
+import { OrgAdminService } from "../orgs/org-admin.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { PostsService } from "../posts/posts.service";
 import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
@@ -25,8 +31,9 @@ const ERASE_GRACE_MS = 15 * 60_000;
 
 /**
  * Datenschutz (Einwilligungen, Auskunft, Loeschung). Dokumentierte Ausnahme der Bereichsgrenzen (db/boundaries.spec.ts):
- * liest/loescht fuer Auskunft und Kontoloeschung direkt eine feste Liste von identity-/social-Tabellen; alles andere
- * laeuft ueber die Dienste der Bereiche (Chat, Medien, Mitglieder, Rechnungen, Vereine).
+ * liest/loescht fuer Auskunft und Kontoloeschung direkt eine feste Liste von identity-/social-Tabellen (Konto, Sitzungen,
+ * Einwilligungen, Protokoll, Beitraege/Kommentare, Vereins-Folgen/Mitgliedschaften); alles andere laeuft ueber die
+ * Dienste der Bereiche (Profile, Benachrichtigungen, Push, 2FA, Kalender, Beitraege, Chat, Medien, Mitglieder, Rechnungen, Vereine).
  */
 @Injectable()
 export class PrivacyService implements OnModuleInit {
@@ -43,6 +50,12 @@ export class PrivacyService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(PostsService) private readonly postsSvc: PostsService,
+    @Inject(ProfileAccess) private readonly profiles: ProfileAccess,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(PushService) private readonly push: PushService,
+    @Inject(TwoFactorService) private readonly twoFactor: TwoFactorService,
+    @Inject(CalendarFeedService) private readonly calendar: CalendarFeedService,
+    @Inject(OrgAdminService) private readonly orgAdmin: OrgAdminService,
   ) {}
 
   onModuleInit() {
@@ -86,7 +99,11 @@ export class PrivacyService implements OnModuleInit {
     return this.getConsents(userId);
   }
 
-  /** Auskunft/Datenportabilitaet (Art. 15, 20 DSGVO). */
+  /**
+   * Auskunft/Datenportabilitaet (Art. 15, 20 DSGVO). Nur eigene Daten; von Gegenseiten (Folgen/Follower) nur ID und
+   * Benutzername. Keine Geheimnisse (Passwort-Hash, 2FA-Geheimnis, Push-Schluessel, Token-Hashes). Bilder: media.zip.
+   * Bereichsdaten kommen ueber die exportFor-Methoden der Dienste.
+   */
   async exportData(user: PublicUser) {
     const [consentHistory, audit, sessionRows, ownPosts, ownComments, followed, memberships] = await Promise.all([
       this.db.select().from(consents).where(eq(consents.userId, user.id)),
@@ -97,10 +114,21 @@ export class PrivacyService implements OnModuleInit {
       this.db.select().from(follows).where(eq(follows.userId, user.id)),
       this.db.select().from(orgMembers).where(eq(orgMembers.userId, user.id)),
     ]);
-    const chatData = await this.chat.exportUser(user.id);
+    const [social, postData, notificationRows, pushRows, twoFactor, calendar, chatData] = await Promise.all([
+      this.profiles.exportFor(user.id),
+      this.postsSvc.exportFor(user.id),
+      this.notifications.exportFor(user.id),
+      this.push.exportFor(user.id),
+      this.twoFactor.exportFor(user.id),
+      this.calendar.status(user.id),
+      this.chat.exportUser(user.id),
+    ]);
     return {
       exportedAt: new Date().toISOString(),
       profile: user,
+      socialProfile: social.profile,
+      twoFactor,
+      calendarFeed: { active: calendar.enabled, since: calendar.createdAt },
       consents: consentHistory.map((c) => ({
         purpose: c.purpose,
         granted: c.granted,
@@ -114,11 +142,18 @@ export class PrivacyService implements OnModuleInit {
       posts: ownPosts.map((p) => ({ body: p.body, kind: p.kind, orgId: p.orgId, at: p.createdAt.toISOString(), deleted: !!p.deletedAt })),
       comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, at: c.createdAt.toISOString() })),
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
+      following: social.following,
+      followers: social.followers,
+      likes: postData.likes,
+      reports: postData.reports,
+      notifications: notificationRows,
+      pushSubscriptions: pushRows,
+      feedFeedback: postData.feedFeedback,
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
       events: await this.events.exportFor(user.id),
       pollVotes: await this.postsSvc.exportVotes(user.id),
       chat: chatData,
-      media: await this.mediaSvc.countFor(user.id),
+      media: { ...(await this.mediaSvc.countFor(user.id)), items: await this.mediaSvc.listFor(user.id), download: "/privacy/export/media.zip" },
       invoices: await this.billing.exportFor(user.id),
       memberData: await this.members.exportFor(user.id),
       activityLog: audit.map((a) => ({
@@ -164,9 +199,16 @@ export class PrivacyService implements OnModuleInit {
       if (org.otherActive === 0) await this.orgs.deleteIfAbandoned(org.id, userId);
     }
     await this.mediaSvc.eraseUser(userId); // Bilddateien (Zeilen folgen per Kaskade)
+    // Verweise ohne Fremdschluessel: Ersteller von Einladungen, Bearbeiter von Meldungen, "Weniger davon" anderer
+    await this.orgAdmin.eraseUser(userId);
+    await this.postsSvc.eraseUser(userId);
     await this.db.transaction(async (tx) => {
-      // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt).
+      // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt, auch als betroffene Person in fremden Eintraegen).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, userId));
+      await tx
+        .update(auditLog)
+        .set({ meta: sql`${auditLog.meta} - 'memberId'` })
+        .where(and(eq(auditLog.action, "member.profile.updated"), sql`${auditLog.meta}->>'memberId' = ${userId}`));
       await tx.insert(auditLog).values({ userId: null, action: "user.deleted" });
       await tx.delete(users).where(eq(users.id, userId));
     });

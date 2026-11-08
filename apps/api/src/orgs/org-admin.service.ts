@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type {
   CreatedInvite,
   CreateInviteInput,
@@ -10,6 +10,7 @@ import type {
   OrgBillingProfileInput,
   PublicUser,
 } from "@vereine/shared";
+import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { DB, type Database } from "../db/db.module";
 import { follows, orgInvites, orgMembers, organizations } from "../db/schema";
 import { OrgsService } from "./orgs.service";
@@ -62,6 +63,23 @@ export class OrgAdminService {
           ? "used_up"
           : "active";
     return { id: r.id, maxUses: r.maxUses, uses: r.uses, expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), status };
+  }
+
+  /** Kontoloeschung: Verweis auf die erstellende Person entfernen (Einladung bleibt fuer den Verein gueltig). */
+  async eraseUser(userId: string): Promise<void> {
+    await this.db.update(orgInvites).set({ createdBy: null }).where(eq(orgInvites.createdBy, userId));
+  }
+
+  /** Loeschfrist: 30 Tage nach Ablauf oder Widerruf (Job privacy.retention), blockweise. */
+  purgeExpiredInvites(): Promise<number> {
+    return purgeInRounds(async () => {
+      const ids = this.db
+        .select({ id: orgInvites.id })
+        .from(orgInvites)
+        .where(or(lt(orgInvites.expiresAt, ago(RETENTION.invites)), lt(orgInvites.revokedAt, ago(RETENTION.invites))))
+        .limit(RETENTION_BATCH);
+      return (await this.db.delete(orgInvites).where(inArray(orgInvites.id, ids)).returning({ id: orgInvites.id })).length;
+    });
   }
 
   async listInvites(user: PublicUser, slug: string): Promise<InviteItem[]> {

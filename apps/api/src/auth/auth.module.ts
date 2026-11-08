@@ -8,6 +8,6 @@ import { UsersDirectory } from "./users-directory.service";
 @Module({
   controllers: [AuthController],
   providers: [AuthService, TwoFactorService, UsersDirectory, AuditService],
-  exports: [AuthService, UsersDirectory, AuditService],
+  exports: [AuthService, UsersDirectory, AuditService, TwoFactorService],
 })
 export class AuthModule {}

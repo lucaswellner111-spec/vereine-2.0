@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { Injectable } from "@nestjs/common";
 
@@ -11,6 +11,7 @@ export abstract class StorageService {
   abstract put(key: string, data: Buffer): Promise<void>;
   abstract get(key: string): Promise<Buffer | null>;
   abstract remove(prefix: string): Promise<void>;
+  abstract has(key: string): Promise<boolean>;
 }
 
 @Injectable()
@@ -35,6 +36,14 @@ export class LocalStorage extends StorageService {
       return await readFile(this.path(key));
     } catch {
       return null;
+    }
+  }
+
+  async has(key: string) {
+    try {
+      return (await stat(this.path(key))).isFile();
+    } catch {
+      return false;
     }
   }
 

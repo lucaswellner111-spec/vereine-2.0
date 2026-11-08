@@ -24,6 +24,7 @@ import type {
 } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { invalidatePublicOrg } from "../common/public-cache";
+import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { DB, type Database } from "../db/db.module";
 import { pgCode } from "../common/pg-errors";
 import { UsersDirectory } from "../auth/users-directory.service";
@@ -229,9 +230,22 @@ export class EventsService implements OnModuleInit {
     return sql`not (${member}${inTeam})`;
   }
 
-  /** Datenauskunft (Art. 15): eigene Zu-/Absagen, Helfer-Eintragungen und Anwesenheit. */
+  /** Loeschfrist Anwesenheit: 24 Monate ab Erfassung (Job privacy.retention), blockweise. */
+  purgeExpiredAttendance(): Promise<number> {
+    return purgeInRounds(async () => {
+      const res = await this.db
+        .delete(eventAttendance)
+        .where(
+          sql`(event_id, user_id) in (select a.event_id, a.user_id from social.event_attendance a where a.marked_at < ${ago(RETENTION.attendance)} limit ${RETENTION_BATCH})`,
+        )
+        .returning({ eventId: eventAttendance.eventId });
+      return res.length;
+    });
+  }
+
+  /** Datenauskunft (Art. 15): eigene Zu-/Absagen (inkl. Warteliste), Helfer-Eintragungen, Anwesenheit und Teams. */
   async exportFor(userId: string) {
-    const [rsvps, shifts, attendance] = await Promise.all([
+    const [rsvps, shifts, attendance, myTeams] = await Promise.all([
       this.db
         .select({ r: eventRsvps, title: events.title, startsAt: events.startsAt })
         .from(eventRsvps)
@@ -248,6 +262,11 @@ export class EventsService implements OnModuleInit {
         .from(eventAttendance)
         .innerJoin(events, eq(events.id, eventAttendance.eventId))
         .where(eq(eventAttendance.userId, userId)),
+      this.db
+        .select({ teamId: teams.id, name: teams.name, orgId: teams.orgId, at: teamMembers.createdAt })
+        .from(teamMembers)
+        .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+        .where(eq(teamMembers.userId, userId)),
     ]);
     return {
       responses: rsvps.map(({ r, title, startsAt }) => ({
@@ -267,6 +286,7 @@ export class EventsService implements OnModuleInit {
         at: x.s.createdAt.toISOString(),
       })),
       attendance: attendance.map(({ a, title, startsAt }) => ({ eventId: a.eventId, eventTitle: title, eventStartsAt: startsAt.toISOString(), status: a.status, at: a.markedAt.toISOString() })),
+      teams: myTeams.map((t) => ({ ...t, at: t.at.toISOString() })),
     };
   }
 

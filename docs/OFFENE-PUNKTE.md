@@ -58,7 +58,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Datenschutz/Rechtliches aus Etappe 1 (Details: docs/DATENSCHUTZ-LAUNCH.md)
 - **Mindestalter 16 vs. Jugendvereine:** Mitglieder unter 16 brauchen Elternkonto/Zustimmung (Art. 8 DSGVO) – Lösung vor dem Launch festlegen (Elternkonto, das Kinder-Mitgliedschaften verwaltet, oder Mitglied ohne eigenes Konto nur mit Stammdaten).
 - Aufbewahrung der pseudonymen Austrittsdaten (Nummer, Eintritt/Austritt, Beitragsklasse) und Namens-Aufbewahrung für Vereinsunterlagen: Anwalt/DSB.
-- Fristen festlegen: Benachrichtigungen (Vorschlag 90 Tage), Zugriffsprotokoll (12 Monate, Finanzaktionen länger), Server-Logs (14 Tage), Backups (14 Tage) → in Löschkonzept aufnehmen.
+- Fristen festlegen: Benachrichtigungen (umgesetzt P5: 180 Tage), Zugriffsprotokoll (umgesetzt P5: 12 Monate, Moderation 24 Monate, Rechnungsaktionen 10 Jahre), Server-Logs (14 Tage), Backups (14 Tage) → in Löschkonzept aufnehmen, umgesetzte Fristen mit DSB bestätigen.
 - AVV-Vorlage für Vereine und digitale Akzeptanz beim Onboarding fehlen (Pflicht, weil die Plattform bei Mitgliederdaten Auftragsverarbeiter ist).
 
 ## Demo-Daten auf klubnest.de (angelegt 2026-11-01) – VOR DEM LAUNCH LÖSCHEN
@@ -90,7 +90,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Beitrag bearbeiten speichert keine Versionen; ob für Moderation eine kurze Historie nötig ist, mit der DSA-Frage oben entscheiden.
 
 ## Paket P4b: offen (Stand 2026-11-08)
-- **Anwesenheit – Frist (DSB):** Vorschlag 24 Monate nach Termin, danach löschen; Löschjob kommt in P5. Bis dahin bleiben Einträge, bis Austritt, Kontolöschung oder Vereins-/Terminlöschung.
+- **Anwesenheit – Frist (DSB):** 24 Monate ab Erfassung, täglicher Löschjob `privacy.retention` seit P5 (mit DSB bestätigen); vorher endet sie mit Austritt, Kontolöschung oder Vereins-/Terminlöschung.
 - **Anwesenheit bei Minderjährigen (DSB):** Reicht der Vereinszweck, oder braucht es Information der Erziehungsberechtigten bzw. eine kürzere Frist? Bewusst kein Grund/Freitext bei „entschuldigt“ (keine Gesundheitsdaten).
 - **Anwesenheits-Export** (CSV/PDF) für Vereine kommt in P5, ebenso ein Protokolleintrag beim Export.
 - **Helferlisten-Namen:** aktive Mitglieder sehen, wer sich eingetragen hat (wie bei den Zusagen, Frage aus Q2: Opt-out „nur als Zahl“?).
@@ -117,3 +117,16 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - Robustheit (umgesetzt): Versuchszähler am Lauf (ab 5 keine automatische Wiederholung), Lebenszeichen nach jedem 200er-Block, Sweep-Job `billing.fee-run-sweep` alle 5 Min. (queued > 1 Min., running ohne Lebenszeichen > 15 Min.), Knopf „Erneut versuchen“ bei fehlgeschlagenen Läufen. Offen: Entwürfe ausgetretener Mitglieder werden nicht automatisch entfernt (bewusst, Kassenwart entscheidet); ggf. Hinweis in der Rechnungsliste.
 - 2000er-Grenze entfernt: `OrgsService.allActiveMembersWithRole` liest blockweise per Keyset (Primärschlüssel org_id, user_id) ohne Obergrenze; genutzt von Mitgliedsprofilen (`ensureProfiles`), Mitgliederliste, CSV-Export, Beitragslauf und `allActiveMemberIds` (Rechnungsempfänger, Namensliste für Vorstand/Moderation, Chat-Kandidaten). Vorher gingen dort Mitglieder ab Nr. 2001 still verloren. SKALIERUNG: Mitgliederliste und Export laden weiter alles in den Speicher und filtern dort (bei > 20.000 Mitgliedern Suche/Paging in die DB verlagern). Die Liste offener Rechnungen (`GET /orgs/:slug/invoices`, 500) und der Rechnungs-CSV-Export (5000/Jahr) haben weiter feste Grenzen.
 - GiroCode: Name im SEPA-Zeichensatz (Latin-1 bleibt, anderes wird „?“); ohne abschließenden Zeilenumbruch nach dem Verwendungszweck (EPC069-12: nach dem letzten belegten Feld kein Trenner). Mit echten Banking-Apps (Sparkasse, VR, ING, DKB) testen.
+
+## Paket P5 (Datenschutz-Lücken, Aufräum-Jobs, Mail): offen (Stand 2026-11-08)
+- **Mailversand aktivieren (nächste Etappe):** `MailService.send` ist fertig, aber noch ohne Aufrufer. Offen: E-Mail-Bestätigung bei Registrierung, „Passwort vergessen“ (Token-Tabelle, Gültigkeit, Rate-Limit), Einladung per Mail, Rechnungsmail beim Finalisieren; Basis-URL für Links (`APP_URL`), Abmelde-/Einstellungsseite für nicht zwingende Mails.
+- **Scaleway TEM (Paris/FR):** AVV abschließen, Unterauftragsverarbeiter-Liste, Datenschutzerklärung, Domain-Einträge SPF/DKIM/DMARC; Zugangsdaten nur als Server-Secret (`SMTP_USER`/`SMTP_PASS`), nie im Repo. Für Rechnungsmails muss der AVV mit dem Verein den Mail-Anbieter nennen.
+- **Fristen mit DSB bestätigen:** Benachrichtigungen 180 Tage (früher Vorschlag 90), Zugriffsprotokoll 12 Monate / Moderation 24 Monate / Rechnungsaktionen 10 Jahre, Anwesenheit 24 Monate, gelöschte Beiträge 30 Tage (offene Meldung hält länger), abgelaufene/widerrufene Einladungen 30 Tage. Konstanten in `apps/api/src/privacy/retention.service.ts`.
+- **Mail-Jobdaten in Redis:** Adresse und Link (Token) liegen bis zum Versand in der Queue-Redis (AOF-persistiert); nach Erfolg und nach dem letzten Fehlversuch werden sie sofort entfernt. Tokens für Passwort-Reset trotzdem kurz gültig halten (Vorschlag 30–60 Min.) und nur gehasht speichern.
+- **Benachrichtigungen vor Migration 0021** haben keine `actor_id`; Name/Textauszug gelöschter Personen bleibt dort bis zur 180-Tage-Frist. Nur Kommentar-/Folgen-Benachrichtigungen tragen eine Akteur-ID; löscht jemand nur einen Kommentar (nicht das Konto), bleibt der Auszug in der Benachrichtigung des Beitragsautors bis zur Frist.
+- **Datenauskunft:** Interessen-Tags je Nutzer gibt es noch nicht (bei `social.user_tags` in den Export aufnehmen). Der Export ist ein einziges JSON (SKALIERUNG: bei sehr aktiven Konten mit vielen tausend Nachrichten/Benachrichtigungen als Job mit Download-Link erzeugen). Rate-Limit: 5 Exporte bzw. 5 Bilder-ZIPs je Stunde und Konto.
+- **Bilder-ZIP** enthält die größte gespeicherte Variante (WebP), nicht das Original (wird nie gespeichert) – in der Datenschutzerklärung so beschreiben.
+- `created_by` an Rechnungen und Beitragsläufen bleibt nach Kontolöschung (Frage aus P4c Teil 2 weiter offen); `chat.conversations.created_by` ebenso prüfen.
+- **DSA-Frage Kontolöschung:** Löscht jemand sein Konto, verschwinden seine Beiträge und Kommentare per Kaskade – samt **offener Meldungen** darüber (die Ausnahme „offene Meldung hält den Beitrag“ gilt nur für das eigene Löschen eines Beitrags und den 30-Tage-Job). Mit Anwalt/DSB klären, ob gemeldete Inhalte als Beweis (verschlüsselte Kopie, Frist) die Kontolöschung überstehen müssen (wie Chat-Meldungen, Art. 17 Abs. 3 lit. e DSGVO).
+- Aufräumjob: schlägt ein Schritt fehl, laufen die anderen weiter; der Job meldet am Ende einen Fehler mit den Schrittnamen (BullMQ wiederholt ihn). Ein Monitoring-Alarm darauf fehlt noch.
+- Anwesenheits-Export (CSV/PDF) für Vereine weiter offen (nicht Teil von P5).
