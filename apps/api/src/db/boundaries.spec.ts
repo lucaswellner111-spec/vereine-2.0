@@ -51,7 +51,7 @@ describe("Chat-Bereich", () => {
 
 /** Der Abrechnungs-Bereich kennt nur seine eigenen Tabellen; Vereins-/Nutzerdaten kommen ueber OrgsService/UsersDirectory. */
 describe("Billing-Bereich", () => {
-  const BILLING_TABLES = ["billing", "invoices", "invoiceItems", "invoiceCounters"];
+  const BILLING_TABLES = ["billing", "invoices", "invoiceItems", "invoiceCounters", "feeRuns"];
   it("importiert nur billing-Tabellen aus dem Schema", () => {
     for (const file of sources(join(root, "billing"))) {
       const src = readFileSync(file, "utf8");

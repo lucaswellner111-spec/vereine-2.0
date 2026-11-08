@@ -45,6 +45,8 @@ export function pushMessage(type: Type, d: Record<string, string>): PushPayload 
       return { title: `Neue Rechnung von ${d.orgName ?? ""}`, body: d.amount ?? "", url: "/rechnungen" };
     case "invoice_overdue":
       return { title: "Rechnung überfällig", body: d.orgName ?? "", url: "/rechnungen" };
+    case "fee_run_done":
+      return { title: "Beitragslauf fertig", body: `${d.periodLabel ?? ""}: ${d.created ?? "0"} Entwürfe`, url: "/verwaltung/rechnungen" };
   }
 }
 

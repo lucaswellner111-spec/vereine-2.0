@@ -40,8 +40,8 @@ function isMinor(birthDate: string | null): boolean | null {
  * DATENSCHUTZ (docs/DATENSCHUTZ-LAUNCH.md, Abschnitt 4): Vorstand/Kassenwart lesen, nur der Vorstand aendert;
  * jedes Mitglied pflegt seine eigenen Daten. Beim Austritt werden alle personenbezogenen Felder geleert,
  * bei Kontoloeschung die Zeilen entfernt. Der Export wird protokolliert.
- * SKALIERUNG: Die Liste laedt bis zu 2000 Mitglieder je Verein und filtert im Speicher (Namen kommen aus dem
- * Bereich identity). Darueber hinaus: Suche ueber UsersDirectory + Seitenweise Abfrage in der Datenbank.
+ * SKALIERUNG: Die Liste laedt alle aktiven Mitglieder (blockweise, ohne feste Grenze) und filtert im Speicher (Namen
+ * kommen aus dem Bereich identity). Bei sehr grossen Vereinen: Suche ueber UsersDirectory + Seitenweise Abfrage in der DB.
  */
 @Injectable()
 export class MembersService implements OnModuleInit {
@@ -73,7 +73,7 @@ export class MembersService implements OnModuleInit {
 
   /** Stellt sicher, dass jedes aktive Mitglied ein Profil mit Nummer hat (idempotent); reaktiviert Wiedereintritte. */
   private async ensureProfiles(orgId: string): Promise<void> {
-    const active = await this.orgs.activeMembersWithRole(orgId);
+    const active = await this.orgs.allActiveMembersWithRole(orgId);
     if (active.length === 0) return;
     const existing = await this.db.select().from(memberProfiles).where(eq(memberProfiles.orgId, orgId));
     const byUser = new Map(existing.map((p) => [p.userId, p]));
@@ -107,7 +107,7 @@ export class MembersService implements OnModuleInit {
     const org = await this.requireRole(user, slug, READERS);
     await this.ensureProfiles(org.id);
     const [active, profiles, classes] = await Promise.all([
-      this.orgs.activeMembersWithRole(org.id),
+      this.orgs.allActiveMembersWithRole(org.id),
       this.db.select().from(memberProfiles).where(and(eq(memberProfiles.orgId, org.id), isNull(memberProfiles.leftOn))),
       this.db.select().from(feeClasses).where(eq(feeClasses.orgId, org.id)),
     ]);
@@ -293,6 +293,41 @@ export class MembersService implements OnModuleInit {
     if (res.length === 0) throw new NotFoundException("Beitragsklasse nicht gefunden.");
   }
 
+  // --- Beitragslauf (schmale Lesewege fuer den Bereich billing) ---------------------------
+
+  /** Beitragsklassen eines Vereins (ohne Rechtepruefung, nur fuer interne Dienste). */
+  async feeClassesOf(orgId: string, ids?: string[]): Promise<{ id: string; name: string; amountCents: number }[]> {
+    const conds = [eq(feeClasses.orgId, orgId)];
+    if (ids) {
+      if (ids.length === 0) return [];
+      conds.push(inArray(feeClasses.id, ids));
+    }
+    return this.db.select({ id: feeClasses.id, name: feeClasses.name, amountCents: feeClasses.amountCents }).from(feeClasses).where(and(...conds));
+  }
+
+  /**
+   * Kandidaten eines Beitragslaufs: aktive Mitglieder (ohne leftOn, mit Rolle) einer der Klassen, mit Anschrift
+   * als Text fuer die Rechnungskopie. Dazu die Zahl aktiver Mitglieder ohne Beitragsklasse.
+   */
+  async feeRunCandidates(orgId: string, classIds: string[]): Promise<{ candidates: { userId: string; feeClassId: string; address: string }[]; withoutClass: number }> {
+    await this.ensureProfiles(orgId);
+    const [active, profiles] = await Promise.all([
+      this.orgs.allActiveMembersWithRole(orgId),
+      this.db.select().from(memberProfiles).where(and(eq(memberProfiles.orgId, orgId), isNull(memberProfiles.leftOn))),
+    ]);
+    const activeIds = new Set(active.map((a) => a.userId));
+    const wanted = new Set(classIds);
+    const current = profiles.filter((p) => activeIds.has(p.userId));
+    const candidates = current
+      .filter((p) => p.feeClassId && wanted.has(p.feeClassId))
+      .map((p) => ({
+        userId: p.userId,
+        feeClassId: p.feeClassId!,
+        address: [p.street, [p.zip, p.city].filter(Boolean).join(" ")].filter(Boolean).join("\n"),
+      }));
+    return { candidates, withoutClass: current.filter((p) => !p.feeClassId).length };
+  }
+
   // --- Export ---------------------------------------------------------------------------
 
   /** CSV (Semikolon, UTF-8 mit BOM). Nur Vorstand; wird protokolliert (Anzahl, keine Inhalte). */
@@ -300,7 +335,7 @@ export class MembersService implements OnModuleInit {
     const org = await this.requireRole(user, slug, ["admin"]);
     await this.ensureProfiles(org.id);
     const [active, profiles, classes] = await Promise.all([
-      this.orgs.activeMembersWithRole(org.id),
+      this.orgs.allActiveMembersWithRole(org.id),
       this.db.select().from(memberProfiles).where(and(eq(memberProfiles.orgId, org.id), isNull(memberProfiles.leftOn))).orderBy(asc(memberProfiles.memberNo)),
       this.db.select().from(feeClasses).where(eq(feeClasses.orgId, org.id)),
     ]);

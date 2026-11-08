@@ -414,6 +414,7 @@ export class BillingService implements OnModuleInit {
       vatCents: r.vatCents,
       items: items.map((i) => ({ description: i.description, quantity: i.quantity, unitCents: i.unitCents, vatRate: i.vatRate })),
       voidReason: r.voidReason,
+      currency: r.currency,
     };
   }
 }

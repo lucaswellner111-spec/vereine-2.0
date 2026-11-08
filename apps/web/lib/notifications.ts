@@ -8,6 +8,7 @@ import {
   EyeOff,
   MessageCircle,
   Receipt,
+  ReceiptText,
   TriangleAlert,
   UserCheck,
   UserPlus,
@@ -50,6 +51,8 @@ export function describeNotification(n: NotificationItem): { text: string; href:
       return { text: `Neue Rechnung ${d.number} von ${d.orgName}: ${d.amount}`, href: "/rechnungen" };
     case "invoice_overdue":
       return { text: `Rechnung ${d.number} von ${d.orgName} ist überfällig.`, href: "/rechnungen" };
+    case "fee_run_done":
+      return { text: `Beitragslauf „${d.periodLabel}“ bei ${d.orgName} fertig: ${d.created} Entwürfe zum Prüfen und Finalisieren.`, href: "/verwaltung/rechnungen" };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }
@@ -69,6 +72,7 @@ export const NOTIFICATION_ICONS: Record<NotificationItem["type"], LucideIcon> = 
   follow_accepted: UserCheck,
   invoice_new: Receipt,
   invoice_overdue: TriangleAlert,
+  fee_run_done: ReceiptText,
   post_hidden: EyeOff,
 };
 

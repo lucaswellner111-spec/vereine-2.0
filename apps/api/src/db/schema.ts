@@ -597,6 +597,35 @@ export const feedFeedback = social.table(
 
 export const billing = pgSchema("billing");
 
+/** Beitragslauf: erzeugt Rechnungsentwuerfe fuer Mitglieder ausgewaehlter Beitragsklassen (Finalisieren bleibt manuell). */
+export const feeRuns = billing.table(
+  "fee_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull(),
+    periodLabel: text("period_label").notNull(),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    feeClassIds: uuid("fee_class_ids").array().notNull(),
+    status: text("status").notNull().default("queued"), // queued | running | done | failed
+    createdCount: integer("created_count").notNull().default(0),
+    skippedCount: integer("skipped_count").notNull().default(0),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Lebenszeichen des laufenden Jobs (Claim und nach jedem Block); aelter als 15 Min. = haengend, darf neu geclaimt werden. */
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    /** Zahl der Ausfuehrungsversuche; ab 5 keine automatische Wiederholung mehr (nur "Erneut versuchen"). */
+    attempts: integer("attempts").notNull().default(0),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("fee_runs_org_period_unique").on(t.orgId, t.periodLabel),
+    index("fee_runs_org_created_idx").on(t.orgId, t.createdAt),
+    index("fee_runs_status_idx").on(t.status),
+    check("fee_runs_status_chk", sql`status IN ('queued', 'running', 'done', 'failed')`),
+    check("fee_runs_period_chk", sql`char_length(period_label) BETWEEN 1 AND 40`),
+  ],
+);
+
 export const invoices = billing.table(
   "invoices",
   {
@@ -629,9 +658,12 @@ export const invoices = billing.table(
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidReason: text("void_reason"),
     overdueNotifiedAt: timestamp("overdue_notified_at", { withTimezone: true }),
+    /** Herkunft aus einem Beitragslauf (je Lauf und Empfaenger hoechstens ein Entwurf). */
+    feeRunId: uuid("fee_run_id").references((): AnyPgColumn => feeRuns.id, { onDelete: "set null" }),
   },
   (t) => [
     unique("invoices_org_number_unique").on(t.orgId, t.number),
+    unique("invoices_fee_run_recipient_unique").on(t.feeRunId, t.recipientUserId),
     index("invoices_org_created_idx").on(t.orgId, t.createdAt),
     index("invoices_recipient_idx").on(t.recipientUserId),
     index("invoices_open_due_idx").on(t.status, t.dueDate),

@@ -163,7 +163,7 @@ describe("Web-Push", () => {
   });
 
   it("Kurztexte kennen alle Typen", () => {
-    const types = ["comment", "membership_request", "membership_decision", "post_hidden", "event_created", "event_reminder", "event_canceled", "event_updated", "event_waitlist_promoted", "new_follower", "follow_request", "follow_accepted", "invoice_new", "invoice_overdue"] as const;
+    const types = ["comment", "membership_request", "membership_decision", "post_hidden", "event_created", "event_reminder", "event_canceled", "event_updated", "event_waitlist_promoted", "new_follower", "follow_request", "follow_accepted", "invoice_new", "invoice_overdue", "fee_run_done"] as const;
     for (const t of types) {
       const m = pushMessage(t, { orgName: "TSV", title: "Training", amount: "10 €", name: "Mia", handle: "mia", orgSlug: "tsv", decision: "approve" });
       expect(m.title.length).toBeGreaterThan(0);

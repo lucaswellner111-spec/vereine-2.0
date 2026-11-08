@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { InvoiceDetail } from "@vereine/shared";
+import { giroCodeMatrix, giroCodePayload } from "./girocode";
 
 /** Betrag in Cent als "1.234,56 €". */
 export const formatEur = (cents: number) =>
@@ -12,6 +13,9 @@ const safe = (text: string) => text.replace(/[^\x20-\x7E\xA0-\xFF€„“”–
 
 const MARGIN = 56;
 const PAGE = { w: 595.28, h: 841.89 }; // A4
+const QR_SIDE = 113.4; // ca. 4 cm
+const QR_QUIET = 4; // Ruhezone in Modulen
+export const GIROCODE_CAPTION = "GiroCode – mit der Banking-App scannen";
 
 /** Erzeugt die Rechnung als PDF (ohne Fremdressourcen). Entwuerfe sind als solche gekennzeichnet. */
 export async function buildInvoicePdf(inv: InvoiceDetail): Promise<Uint8Array> {
@@ -148,6 +152,44 @@ export async function buildInvoicePdf(inv: InvoiceDetail): Promise<Uint8Array> {
       text(page, line.trim(), MARGIN, y, 9, regular, grey);
       y -= 12;
     }
+  }
+
+  // GiroCode (EPC-QR) als Vektorgrafik: nur offene Rechnungen mit gueltiger IBAN (Quelle: Rechnungskopie)
+  const payload = giroCodePayload(inv);
+  if (payload) {
+    const matrix = giroCodeMatrix(payload);
+    const side = QR_SIDE;
+    const cell = side / (matrix.size + 2 * QR_QUIET);
+    if (y - side - 40 < MARGIN) {
+      page = doc.addPage([PAGE.w, PAGE.h]);
+      y = PAGE.h - MARGIN;
+    }
+    y -= 14;
+    const top = y;
+    const left = MARGIN;
+    page.drawRectangle({ x: left, y: top - side, width: side, height: side, color: rgb(1, 1, 1) });
+    // Waagrechte Laeufe dunkler Module zu einem Rechteck zusammenfassen (kleineres PDF)
+    for (let r = 0; r < matrix.size; r++) {
+      let c = 0;
+      while (c < matrix.size) {
+        if (!matrix.isDark(r, c)) {
+          c++;
+          continue;
+        }
+        const start = c;
+        while (c < matrix.size && matrix.isDark(r, c)) c++;
+        page.drawRectangle({
+          x: left + (QR_QUIET + start) * cell,
+          y: top - (QR_QUIET + r + 1) * cell,
+          width: (c - start) * cell,
+          height: cell,
+          color: rgb(0, 0, 0),
+        });
+      }
+    }
+    y = top - side - 12;
+    text(page, GIROCODE_CAPTION, left, y, 9, regular, grey);
+    y -= 12;
   }
 
   // Fusszeile

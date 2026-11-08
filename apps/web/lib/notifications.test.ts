@@ -52,3 +52,11 @@ describe("mergeNotifications", () => {
     expect(m.unread).toBe(3);
   });
 });
+
+describe("Beitragslauf-Benachrichtigung", () => {
+  it("fuehrt zu den Rechnungen", () => {
+    const n = { id: "9", type: "fee_run_done", data: { periodLabel: "2027", orgName: "SV", created: "12" }, readAt: null, createdAt: "" } as NotificationItem;
+    expect(describeNotification(n)).toEqual({ text: "Beitragslauf „2027“ bei SV fertig: 12 Entwürfe zum Prüfen und Finalisieren.", href: "/verwaltung/rechnungen" });
+    expect(NOTIFICATION_ICONS.fee_run_done).toBeTruthy();
+  });
+});

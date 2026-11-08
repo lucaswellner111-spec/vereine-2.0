@@ -252,3 +252,37 @@ describe("Migration 0019: Umfragen und oeffentliche Vereinsseite", () => {
     expect(Number(left.rows[0].n)).toBe(0);
   });
 });
+
+describe("Migration 0020: Beitragslauf", () => {
+  it("Zeitraum je Verein eindeutig, je Lauf und Empfaenger nur ein Entwurf, Status geprueft, Lauf loeschen behaelt Rechnungen", async () => {
+    const pg = new PGlite();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+    for (const file of files.filter((f) => f < "0020")) for (const stmt of statements(file)) await pg.exec(stmt);
+    const org = "00000000-0000-0000-0000-0000000000a1";
+    const u = (n: number) => `00000000-0000-0000-0000-00000000000${n}`;
+    // Bestandsrechnung vor der Migration
+    await pg.exec(`insert into billing.invoices (org_id, recipient_user_id, recipient_name, issuer_name, due_date, created_by) values ('${org}', '${u(1)}', 'Anna', 'TSV', '2027-01-31', '${u(9)}')`);
+
+    for (const stmt of statements("0020_p4c_fee_runs.sql")) await pg.exec(stmt);
+
+    expect((await pg.query<{ f: string | null }>("select fee_run_id as f from billing.invoices")).rows).toEqual([{ f: null }]);
+    const run = "00000000-0000-0000-0000-0000000000c1";
+    await pg.exec(`insert into billing.fee_runs (id, org_id, period_label, due_date, fee_class_ids, created_by) values ('${run}', '${org}', '2027', '2027-01-31', '{}', '${u(9)}')`);
+    expect((await pg.query<{ s: string }>("select status as s from billing.fee_runs")).rows[0].s).toBe("queued");
+    await expect(pg.exec(`insert into billing.fee_runs (org_id, period_label, due_date, fee_class_ids, created_by) values ('${org}', '2027', '2027-01-31', '{}', '${u(9)}')`)).rejects.toMatchObject({ code: "23505" });
+    await pg.exec(`insert into billing.fee_runs (org_id, period_label, due_date, fee_class_ids, created_by) values ('00000000-0000-0000-0000-0000000000a2', '2027', '2027-01-31', '{}', '${u(9)}')`); // anderer Verein ok
+    await expect(pg.exec(`insert into billing.fee_runs (org_id, period_label, due_date, fee_class_ids, created_by) values ('${org}', '', '2027-01-31', '{}', '${u(9)}')`)).rejects.toMatchObject({ code: "23514" });
+    await expect(pg.exec(`update billing.fee_runs set status = 'kaputt' where id = '${run}'`)).rejects.toMatchObject({ code: "23514" });
+
+    const inv = (user: number) => `insert into billing.invoices (org_id, recipient_user_id, recipient_name, issuer_name, due_date, created_by, fee_run_id) values ('${org}', '${u(user)}', 'X', 'TSV', '2027-01-31', '${u(9)}', '${run}')`;
+    await pg.exec(inv(1));
+    await expect(pg.exec(inv(1))).rejects.toMatchObject({ code: "23505" });
+    await pg.exec(inv(2));
+    // anonymisierte Empfaenger (NULL) kollidieren nicht
+    await pg.exec(`update billing.invoices set recipient_user_id = null where fee_run_id = '${run}'`);
+    await pg.exec(inv(1));
+    await pg.exec(`delete from billing.fee_runs where id = '${run}'`);
+    const left = await pg.query<{ n: number; linked: number }>("select count(*)::int as n, count(fee_run_id)::int as linked from billing.invoices");
+    expect(left.rows[0]).toEqual({ n: 4, linked: 0 });
+  });
+});

@@ -8,7 +8,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import {
   isTagId,
   RESERVED_ORG_SLUGS,
@@ -352,7 +352,7 @@ export class OrgsService {
     await this.events.emitLeave(org.id, targetId);
   }
 
-  /** Namen aktiver Mitglieder (max. 2000), nur fuer Vorstand und Moderation - ohne Rollen, E-Mails oder Status. */
+  /** Namen aktiver Mitglieder, nur fuer Vorstand und Moderation - ohne Rollen, E-Mails oder Status. */
   async memberNames(slug: string, actor: PublicUser): Promise<OrgMemberName[]> {
     const org = await this.requireBySlug(slug);
     const role = await this.activeRole(org.id, actor.id);
@@ -508,14 +508,9 @@ export class OrgsService {
     return (m?.role as OrgRole) ?? null;
   }
 
-  /** IDs aller aktiven Mitglieder (fuer Rechnungsempfaenger), begrenzt auf 2000. */
+  /** IDs aller aktiven Mitglieder (Rechnungsempfaenger, Namensliste, Chat-Kandidaten), ohne feste Grenze. */
   async allActiveMemberIds(orgId: string): Promise<string[]> {
-    const rows = await this.db
-      .select({ userId: orgMembers.userId })
-      .from(orgMembers)
-      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))
-      .limit(2000);
-    return rows.map((r) => r.userId);
+    return (await this.allActiveMembersWithRole(orgId)).map((m) => m.userId);
   }
 
   /** Anzahl offener Mitgliedsantraege (fuer das Dashboard). */
@@ -527,15 +522,28 @@ export class OrgsService {
     return n;
   }
 
-  /** Aktive Mitglieder mit Rolle und Beitrittszeit (Lesezugang fuer die Mitgliederverwaltung), max. 2000. */
-  async activeMembersWithRole(orgId: string): Promise<{ userId: string; role: OrgRole; since: Date }[]> {
-    const rows = await this.db
-      .select({ userId: orgMembers.userId, role: orgMembers.role, since: orgMembers.createdAt })
-      .from(orgMembers)
-      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))
-      .orderBy(orgMembers.createdAt)
-      .limit(2000);
-    return rows.map((r) => ({ userId: r.userId, role: r.role as OrgRole, since: r.since }));
+  /**
+   * Alle aktiven Mitglieder mit Rolle OHNE feste Grenze (Beitragslauf, Mitgliedsprofile, Export), blockweise per
+   * Keyset ueber den Primaerschluessel (org_id, user_id). SKALIERUNG: haelt alle IDs im Speicher (bei 50.000 Mitgliedern
+   * wenige MB); darueber Verarbeitung je Block an die Aufrufer durchreichen.
+   */
+  async allActiveMembersWithRole(orgId: string, block = 1000): Promise<{ userId: string; role: OrgRole; since: Date }[]> {
+    const out: { userId: string; role: OrgRole; since: Date }[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const conds = [eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")];
+      if (after) conds.push(gt(orgMembers.userId, after));
+      const rows = await this.db
+        .select({ userId: orgMembers.userId, role: orgMembers.role, since: orgMembers.createdAt })
+        .from(orgMembers)
+        .where(and(...conds))
+        .orderBy(asc(orgMembers.userId))
+        .limit(block);
+      for (const r of rows) out.push({ userId: r.userId, role: r.role as OrgRole, since: r.since });
+      if (rows.length < block) break;
+      after = rows[rows.length - 1].userId;
+    }
+    return out.sort((a, b) => a.since.getTime() - b.since.getTime());
   }
 
   /** Slug und Name zu Verein-IDs (Lesezugang fuer andere Bereiche, z. B. billing). */

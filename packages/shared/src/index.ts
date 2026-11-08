@@ -423,7 +423,8 @@ export type NotificationItem = {
     | "follow_request"
     | "follow_accepted"
     | "invoice_new"
-    | "invoice_overdue";
+    | "invoice_overdue"
+    | "fee_run_done";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
@@ -637,6 +638,8 @@ export type InvoiceDetail = InvoiceSummary & {
   vatCents: number;
   items: InvoiceItemView[];
   voidReason: string | null;
+  /** Waehrung der Rechnung (bisher immer EUR). */
+  currency: string;
 };
 export type InvoiceRecipient = { userId: string; name: string };
 
@@ -744,6 +747,40 @@ export const feeClassSchema = z.object({
 });
 export type FeeClassInput = z.infer<typeof feeClassSchema>;
 export type FeeClassItem = FeeClassInput & { id: string; members: number };
+
+// --- Beitragslauf (erzeugt nur Rechnungsentwuerfe) --------------------------------------
+
+export const feeRunSchema = z.object({
+  /** Zeitraum, z. B. "2027" oder "1. Halbjahr 2027"; je Verein eindeutig. */
+  periodLabel: z.string().trim().min(1).max(40),
+  dueDate: isoDate,
+  feeClassIds: z.array(z.string().uuid()).min(1).max(30).refine((a) => new Set(a).size === a.length, "Beitragsklassen doppelt gewählt"),
+});
+export type FeeRunInput = z.infer<typeof feeRunSchema>;
+export type FeeRunPreview = {
+  count: number;
+  totalCents: number;
+  byClass: { feeClassId: string; name: string; amountCents: number; members: number; totalCents: number }[];
+  /** Aktive Mitglieder ohne Beitragsklasse (bekommen keine Rechnung). */
+  withoutClass: number;
+  /** Fuer diesen Zeitraum gibt es schon einen Lauf (Anlegen ergaebe 409). */
+  periodTaken: boolean;
+};
+export const FEE_RUN_STATUS = ["queued", "running", "done", "failed"] as const;
+export type FeeRunStatus = (typeof FEE_RUN_STATUS)[number];
+export type FeeRunItem = {
+  id: string;
+  periodLabel: string;
+  dueDate: string;
+  feeClassIds: string[];
+  status: FeeRunStatus;
+  createdCount: number;
+  skippedCount: number;
+  /** Ausfuehrungsversuche (ab 5 keine automatische Wiederholung). */
+  attempts: number;
+  createdAt: string;
+  finishedAt: string | null;
+};
 
 /** Angaben, die ein Mitglied selbst pflegt. */
 export const selfMemberProfileSchema = z.object({
