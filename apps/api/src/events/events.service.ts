@@ -529,7 +529,8 @@ export class EventsService implements OnModuleInit {
       .where(
         and(
           isNull(events.canceledAt),
-          gt(sql`coalesce(${events.endsAt}, ${events.startsAt} + interval '3 hours')`, new Date()),
+          // now() statt JS-Date: postgres-js kann ein Date als Parameter eines freien SQL-Ausdrucks nicht serialisieren (PGlite schon)
+          sql`coalesce(${events.endsAt}, ${events.startsAt} + interval '3 hours') > now()`,
           or(isNull(events.capacity), lt(events.yesCount, events.capacity)),
           sql`exists (select 1 from ${eventRsvps} where ${eventRsvps.eventId} = ${events.id} and ${eventRsvps.status} = 'waitlist')`,
         ),
