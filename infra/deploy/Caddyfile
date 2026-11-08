@@ -1,5 +1,10 @@
 {
 	email {$ACME_EMAIL}
+	# trusted_proxies NIE allgemein setzen (z. B. 0.0.0.0/0 oder oeffentliche Netze): Caddy uebernimmt dann
+	# {client_ip} aus dem X-Forwarded-For des Clients, jeder koennte seine IP faelschen und das Rate-Limit je IP
+	# (Login, oeffentliche Seiten) umgehen. Nur Netze eintragen, in denen ein eigener Load-Balancer davor steht.
+	# Achtung: Erreicht ein Client Caddy ueber den Docker-Userland-Proxy (z. B. IPv6), kommt er mit einer privaten
+	# Bridge-IP an und wuerde hier als vertrauenswuerdig gelten.
 	servers {
 		trusted_proxies static private_ranges
 	}
@@ -14,7 +19,11 @@
 	}
 
 	handle {
-		reverse_proxy web:3000
+		# Besucher-IP fuer das Web (Rate-Limit der oeffentlichen Seiten je IP). header_up ersetzt einen
+		# vom Client mitgeschickten X-Real-IP, das Web liest nur diesen Header.
+		reverse_proxy web:3000 {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	header {

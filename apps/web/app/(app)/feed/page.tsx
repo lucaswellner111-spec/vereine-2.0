@@ -3,11 +3,12 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Camera, Info, UserSearch, X } from "lucide-react";
+import { Camera, ChartBar, Info, UserSearch, X } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { FeedPost, FeedResponse, MediaRef, OrgSummary } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
+import { emptyPollDraft, PollComposer, pollDraftToInput, type PollDraft } from "@/components/poll-composer";
 import { MAX_POST_TAGS, tagLabel } from "@vereine/shared";
 import { LazyTagPicker as TagPicker } from "@/components/lazy";
 import { Alert, ArrowLink, Avatar, Button, Card, FileButton, CardSkeletons, EmptyState, ErrorState, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
@@ -65,6 +66,8 @@ function Feed() {
   const [error, setError] = useState<string | null>(null);
   const [busy, run] = useBusy();
   const [tags, setTags] = useState<string[]>([]); // Tags des neuen Beitrags
+  const [poll, setPoll] = useState<PollDraft | null>(null); // null = ohne Umfrage
+  const [pollError, setPollError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -110,16 +113,23 @@ function Feed() {
 
   const publish = () =>
     run(async () => {
-      if (!draft.trim() && images.length === 0) return;
+      if (!draft.trim() && images.length === 0 && !poll) return;
       setError(null);
+      setPollError(null);
+      const parsed = poll ? pollDraftToInput(poll) : null;
+      if (parsed && "error" in parsed) {
+        setPollError(parsed.error);
+        return;
+      }
       try {
         const post = await api<FeedPost>("/posts", {
           method: "POST",
-          body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id), tags },
+          body: { body: draft, orgSlug: target || undefined, mediaIds: images.map((i) => i.id), tags, poll: parsed?.input },
         });
         setDraft("");
         setImages([]);
         setTags([]);
+        setPoll(null);
         setComposerOpen(false);
         // Neuen Beitrag oben einfuegen statt den ganzen Feed neu zu laden
         feed.setData((f) => (f ? { ...f, posts: [post, ...f.posts.filter((x) => x.id !== post.id)] } : f));
@@ -147,7 +157,7 @@ function Feed() {
     });
   };
   const sentinelRef = useInfiniteScroll({ hasMore: !!data?.nextCursor && !moreFailed, loading: moreBusy, onLoadMore: () => void loadMore() });
-  const expanded = composerOpen || !!draft || images.length > 0;
+  const expanded = composerOpen || !!draft || images.length > 0 || !!poll;
   const openComposer = () => {
     // synchron aufklappen, damit der Fokus noch im Tipp-Ereignis liegt (iOS oeffnet sonst keine Tastatur)
     flushSync(() => setComposerOpen(true));
@@ -310,6 +320,18 @@ function Feed() {
             <Camera size={14} aria-hidden />
             {uploading ? "Lädt hoch …" : `Bild${images.length ? ` (${images.length}/4)` : ""}`}
           </FileButton>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-pressed={!!poll}
+            onClick={() => {
+              setPollError(null);
+              setPoll((p) => (p ? null : emptyPollDraft()));
+            }}
+          >
+            <ChartBar size={14} aria-hidden />
+            Umfrage
+          </Button>
           <label htmlFor="target" className="text-xs text-muted">Posten als</label>
           <Select id="target" size="sm" value={target} onChange={(e) => setTarget(e.target.value)} className="min-w-0 max-sm:flex-1 sm:max-w-56">
             <option value="">Ich selbst</option>
@@ -319,9 +341,10 @@ function Feed() {
           </Select>
           <span className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted">{draft.length}/1000</span>
-            <Button size="sm" onClick={publish} busy={busy} disabled={(!draft.trim() && images.length === 0) || uploading}>Veröffentlichen</Button>
+            <Button size="sm" onClick={publish} busy={busy} disabled={(!draft.trim() && images.length === 0 && !poll) || uploading}>Veröffentlichen</Button>
           </span>
         </div>
+        {poll && <PollComposer value={poll} onChange={setPoll} error={pollError} />}
         {/* Zeile 3: Tags ueber die volle Breite */}
         <div className="mt-3 border-t border-border pt-3">
           <TagPicker label="Tags (optional)" value={tags} onChange={setTags} max={MAX_POST_TAGS} hint={target ? "Ohne Auswahl übernimmt der Beitrag die Tags des Vereins." : undefined} />

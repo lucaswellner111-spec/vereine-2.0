@@ -15,6 +15,7 @@ import { MediaService } from "../media/media.service";
 import { MembersService } from "../members/members.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
+import { PostsService } from "../posts/posts.service";
 import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
 import { OrgsService } from "../orgs/orgs.service";
@@ -41,6 +42,7 @@ export class PrivacyService implements OnModuleInit {
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(EventsService) private readonly events: EventsService,
+    @Inject(PostsService) private readonly postsSvc: PostsService,
   ) {}
 
   onModuleInit() {
@@ -114,6 +116,7 @@ export class PrivacyService implements OnModuleInit {
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
       events: await this.events.exportFor(user.id),
+      pollVotes: await this.postsSvc.exportVotes(user.id),
       chat: chatData,
       media: await this.mediaSvc.countFor(user.id),
       invoices: await this.billing.exportFor(user.id),

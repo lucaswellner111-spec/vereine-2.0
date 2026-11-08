@@ -166,7 +166,7 @@ function ChatView() {
                   aria-current={c.id === active ? "true" : undefined}
                   className={clsx("flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-surface-2", c.id === active && "bg-surface-2")}
                 >
-                  <Avatar name={c.title} />
+                  <Avatar name={c.title} mediaId={c.avatarId} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium">{c.title}</span>

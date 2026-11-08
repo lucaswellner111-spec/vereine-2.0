@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type {
+  ChatCandidate,
   ChatContact,
   ChatEvent,
   ChatReportItem,
@@ -21,6 +22,7 @@ import type {
   PublicUser,
   ReportInput,
 } from "@vereine/shared";
+import { CHAT_CANDIDATES_LIMIT } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
@@ -31,12 +33,15 @@ import { chatBlocks, conversationMembers, conversations, messageReports, message
 import { JobsService } from "../jobs/jobs.service";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { ChatCrypto } from "./chat-crypto.service";
 import { REALTIME_BUS, type RealtimeBus } from "./realtime-bus";
 
 const PAGE = 30;
 const RATE_LIMIT_PER_MIN = 30;
 const DELETED_USER = "Gelöschter Nutzer";
+/** Bewusst allgemein: nennt weder Blockierungen noch, welche Person betroffen ist. */
+const ADD_MEMBERS_REJECTED = "Nicht alle ausgewaehlten Personen koennen hinzugefuegt werden.";
 const defaultRetentionDays = () => Number(process.env.CHAT_DEFAULT_RETENTION_DAYS ?? 365);
 
 type Conv = typeof conversations.$inferSelect;
@@ -67,6 +72,7 @@ export class ChatService implements OnModuleInit {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PushService) private readonly push: PushService,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   onModuleInit() {
@@ -212,8 +218,12 @@ export class ChatService implements OnModuleInit {
     const unread = new Map(unreadRows.map((r) => [r.id, r.n]));
     const last = new Map(lastRows.map((r) => [r.conversationId, r]));
     const otherOf = new Map(memberRows.map((m) => [m.conversationId, m.userId]));
-    const names = await this.directory.names([...otherOf.values()]);
-    const slugs = await this.orgSlugs(rows.map((r) => r.conv.orgId));
+    // Avatare auch privater Profile: die Person ist Mitglied der Unterhaltung (Entscheidung 14)
+    const [names, profs, slugs] = await Promise.all([
+      this.directory.names([...otherOf.values()]),
+      this.access.ensureMany([...otherOf.values()]),
+      this.orgSlugs(rows.map((r) => r.conv.orgId)),
+    ]);
 
     return rows.map(({ conv }) => {
       const l = last.get(conv.id);
@@ -224,6 +234,7 @@ export class ChatService implements OnModuleInit {
         id: conv.id,
         kind: conv.kind as "direct" | "group",
         title: conv.kind === "group" ? conv.title ?? "Gruppe" : (other ? names.get(other) : undefined) ?? DELETED_USER,
+        avatarId: conv.kind === "direct" && other ? profs.get(other)?.avatarMediaId ?? null : null,
         orgSlug: conv.orgId ? slugs.get(conv.orgId) ?? null : null,
         unread: unread.get(conv.id) ?? 0,
         lastMessage: l ? { preview, createdAt: l.createdAt.toISOString(), mine: l.senderId === user.id } : null,
@@ -235,9 +246,9 @@ export class ChatService implements OnModuleInit {
   async detail(user: PublicUser, id: string): Promise<ConversationDetail> {
     const conv = await this.requireMember(id, user.id);
     const members = await this.db.select().from(conversationMembers).where(eq(conversationMembers.conversationId, id));
-    const names = await this.directory.names(members.map((m) => m.userId));
+    const [names, profs] = await Promise.all([this.directory.names(members.map((m) => m.userId)), this.access.ensureMany(members.map((m) => m.userId))]);
     const list: ConversationMember[] = members
-      .map((m) => ({ userId: m.userId, name: names.get(m.userId) ?? DELETED_USER, role: m.role as "owner" | "member" }))
+      .map((m) => ({ userId: m.userId, name: names.get(m.userId) ?? DELETED_USER, role: m.role as "owner" | "member", avatarId: profs.get(m.userId)?.avatarMediaId ?? null }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
     const [summary] = await this.summarize(user, [conv]);
     const other = conv.kind === "direct" ? members.find((m) => m.userId !== user.id) : undefined;
@@ -359,11 +370,40 @@ export class ChatService implements OnModuleInit {
     const conv = await this.requireMember(id, user.id);
     if (conv.kind !== "group" || !conv.orgId) throw new ForbiddenException("Nur in Gruppen moeglich.");
     await this.requireOwner(id, user.id);
-    const valid = await this.orgs.activeMemberIds(conv.orgId, [...new Set(userIds)]);
-    if (valid.length !== new Set(userIds).size) throw new BadRequestException("Alle muessen aktive Vereinsmitglieder sein.");
+    const wanted = [...new Set(userIds)];
+    const valid = await this.orgs.activeMemberIds(conv.orgId, wanted);
+    // Blockierung (egal wer wen) wie bei candidates ausschliessen; generische Meldung verraet nicht, wer blockiert ist
+    const blocked = await this.blockedBetween(user.id, valid);
+    if (valid.length !== wanted.length || blocked.size > 0) throw new BadRequestException(ADD_MEMBERS_REJECTED);
     await this.db.insert(conversationMembers).values(valid.map((u) => ({ conversationId: id, userId: u, role: "member" }))).onConflictDoNothing();
     await this.publish(valid, { type: "conversation", conversationId: id });
     return this.detail(user, id);
+  }
+
+  /**
+   * Fuer "Mitglied hinzufuegen" (nur Besitzer): aktive Vereinsmitglieder, die noch nicht in der Gruppe sind (ohne Blockierte),
+   * optional nach Namen gefiltert, hoechstens CHAT_CANDIDATES_LIMIT Treffer. Profilbilder nur fuer diese Treffer.
+   */
+  async candidates(user: PublicUser, id: string, q = ""): Promise<ChatCandidate[]> {
+    const conv = await this.requireMember(id, user.id);
+    if (conv.kind !== "group" || !conv.orgId) throw new ForbiddenException("Nur in Gruppen moeglich.");
+    await this.requireOwner(id, user.id);
+    const [all, current] = await Promise.all([
+      this.orgs.allActiveMemberIds(conv.orgId),
+      this.db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, id)),
+    ]);
+    const inGroup = new Set(current.map((m) => m.userId));
+    const open = all.filter((u) => !inGroup.has(u));
+    const blocked = await this.blockedBetween(user.id, open);
+    const ids = open.filter((u) => !blocked.has(u));
+    const names = await this.directory.names(ids);
+    const term = q.trim().toLocaleLowerCase("de");
+    const hits = ids
+      .filter((u) => names.has(u) && (!term || names.get(u)!.toLocaleLowerCase("de").includes(term)))
+      .sort((a, b) => names.get(a)!.localeCompare(names.get(b)!, "de"))
+      .slice(0, CHAT_CANDIDATES_LIMIT);
+    const profs = await this.access.ensureMany(hits);
+    return hits.map((u) => ({ userId: u, name: names.get(u)!, avatarId: profs.get(u)?.avatarMediaId ?? null }));
   }
 
   /** Mitglied entfernen (Besitzer) oder selbst austreten. Verlaesst der letzte Besitzer die Gruppe, erbt das aelteste Mitglied. */

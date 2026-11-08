@@ -18,6 +18,8 @@ import {
   type OrgMemberName,
   type OrgRole,
   type OrgSummary,
+  type PublicOrgQuery,
+  type PublicOrgSummary,
   type PublicUser,
   type UpdateOrgInput,
 } from "@vereine/shared";
@@ -25,6 +27,7 @@ import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { isUniqueViolation } from "../common/pg-errors";
+import { invalidatePublicOrg } from "../common/public-cache";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { follows, orgMembers, organizations } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -42,6 +45,9 @@ const slugify = (name: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "verein";
+
+/** Platzhalter % und _ in Suchbegriffen woertlich nehmen. */
+const escapeLike = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 @Injectable()
 export class OrgsService {
@@ -82,8 +88,9 @@ export class OrgsService {
     throw new ConflictException("Für diesen Namen ist keine freie Vereinsadresse mehr verfügbar. Bitte wähle einen anderen Namen.");
   }
 
-  async list(userId: string, q?: string, tag?: string): Promise<OrgSummary[]> {
+  async list(userId: string, q?: string, tag?: string, city?: string): Promise<OrgSummary[]> {
     const term = q?.trim();
+    const place = city?.trim().slice(0, 60);
     const rows = await this.db
       .select()
       .from(organizations)
@@ -93,6 +100,7 @@ export class OrgsService {
             ? or(ilike(organizations.name, `%${term}%`), ilike(organizations.city, `%${term}%`), ilike(organizations.category, `%${term}%`))
             : undefined,
           tag && isTagId(tag) ? sql`${organizations.tags} @> ARRAY[${tag}]::text[]` : undefined,
+          place ? ilike(organizations.city, `%${escapeLike(place)}%`) : undefined,
         ),
       )
       .orderBy(organizations.name)
@@ -117,6 +125,7 @@ export class OrgsService {
     const org = await this.requireBySlug(slug);
     if ((await this.activeRole(org.id, actor.id)) !== "admin") throw new ForbiddenException("Nur der Vorstand ändert die Tags des Vereins.");
     await this.db.update(organizations).set({ tags }).where(eq(organizations.id, org.id));
+    if (org.publicPage) await invalidatePublicOrg(this.cache, slug, true);
     return this.detail(slug, actor.id);
   }
 
@@ -147,6 +156,7 @@ export class OrgsService {
     return {
       ...summary,
       bannerId: org.bannerMediaId,
+      publicPage: org.publicPage,
       viewer: {
         following: !!follow,
         membership: !membership ? "none" : membership.status === "active" ? "active" : "pending",
@@ -163,7 +173,54 @@ export class OrgsService {
       .update(organizations)
       .set({ name: input.name, category: input.category, city: input.city, about: input.about })
       .where(eq(organizations.id, org.id));
+    if (org.publicPage) await invalidatePublicOrg(this.cache, slug, true);
     return this.detail(slug, actor.id);
+  }
+
+  /** Oeffentliche Vereinsseite ein-/ausschalten - nur Vorstand. Cache wird sofort geleert. */
+  async setPublicPage(slug: string, actor: PublicUser, enabled: boolean): Promise<OrgDetail> {
+    const org = await this.requireBySlug(slug);
+    if ((await this.activeRole(org.id, actor.id)) !== "admin") throw new ForbiddenException("Nur der Vorstand schaltet die öffentliche Vereinsseite um.");
+    await this.db.update(organizations).set({ publicPage: enabled }).where(eq(organizations.id, org.id));
+    await invalidatePublicOrg(this.cache, slug, true);
+    return this.detail(slug, actor.id);
+  }
+
+  // --- Oeffentlicher Bereich (ohne Login, nur freigeschaltete Vereine) -------------
+
+  /** Verein mit freigeschalteter oeffentlicher Seite, sonst undefined. Liefert nur unkritische Felder. */
+  async publicBySlug(slug: string): Promise<(PublicOrgSummary & { id: string; about: string; bannerId: string | null }) | undefined> {
+    const [org] = await this.db.select().from(organizations).where(and(eq(organizations.slug, slug), eq(organizations.publicPage, true))).limit(1);
+    if (!org) return undefined;
+    const [summary] = await this.publicSummaries([org]);
+    return { ...summary, id: org.id, about: org.about, bannerId: org.bannerMediaId };
+  }
+
+  /** Vereinsfinder: nur freigeschaltete Vereine, alphabetisch, Seitengroesse vom Aufrufer (max. 30). */
+  async publicList(query: PublicOrgQuery, size: number): Promise<PublicOrgSummary[]> {
+    const term = query.q ? escapeLike(query.q) : "";
+    const place = query.city ? escapeLike(query.city) : "";
+    const rows = await this.db
+      .select()
+      .from(organizations)
+      .where(
+        and(
+          eq(organizations.publicPage, true),
+          term ? or(ilike(organizations.name, `%${term}%`), ilike(organizations.about, `%${term}%`)) : undefined,
+          place ? ilike(organizations.city, `%${place}%`) : undefined,
+          query.category ? eq(organizations.category, query.category) : undefined,
+          query.tag && isTagId(query.tag) ? sql`${organizations.tags} @> ARRAY[${query.tag}]::text[]` : undefined,
+        ),
+      )
+      .orderBy(organizations.name, organizations.id)
+      .limit(size)
+      .offset(query.offset);
+    return this.publicSummaries(rows);
+  }
+
+  private async publicSummaries(rows: OrgRow[]): Promise<PublicOrgSummary[]> {
+    const full = await this.summaries(rows);
+    return full.map((o) => ({ slug: o.slug, name: o.name, category: o.category, city: o.city, tags: o.tags, logoId: o.logoId, members: o.members }));
   }
 
   async follow(slug: string, userId: string, on: boolean): Promise<OrgDetail> {
@@ -342,12 +399,14 @@ export class OrgsService {
       const deleted = await tx
         .delete(organizations)
         .where(and(eq(organizations.id, orgId), sql`not exists (select 1 from social.org_members m where m.org_id = ${orgId} and m.status = 'active' and m.user_id <> ${userId})`))
-        .returning({ id: organizations.id });
+        .returning({ id: organizations.id, slug: organizations.slug });
       if (deleted.length === 0) return null;
-      return cbs;
+      return { cbs, slug: deleted[0].slug };
     });
     if (!after) return false;
-    for (const cb of after) {
+    // oeffentliche Seite und Finder sofort leeren (sonst bis zu 60 s aus dem Cache)
+    await invalidatePublicOrg(this.cache, after.slug, true);
+    for (const cb of after.cbs) {
       try {
         await cb();
       } catch {

@@ -10,6 +10,8 @@ import {
   type FeedPost,
   type FeedResponse,
   type MutedItem,
+  type PollView,
+  type PublicPost,
   type PublicUser,
   type ReportInput,
   type UpdatePostInput,
@@ -17,9 +19,10 @@ import {
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { decodeCursor, encodeCursor, type Cursor } from "../common/cursor";
+import { invalidatePublicOrg } from "../common/public-cache";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
-import { comments, feedFeedback, follows, orgMembers, organizations, postLikes, postMedia, posts, reports } from "../db/schema";
+import { comments, feedFeedback, follows, orgMembers, organizations, pollOptions, polls, pollVotes, postLikes, postMedia, posts, reports } from "../db/schema";
 import { diversify, reasonFor, scorePost, type Relation } from "../feed/ranking";
 import { MediaService } from "../media/media.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -72,10 +75,18 @@ export class PostsService {
       orgId = org.id;
       orgTags = org.tags;
     }
-    const [row] = await this.db
-      .insert(posts)
-      .values({ authorId: user.id, orgId, body: input.body, kind: input.kind, tags: input.tags.length ? input.tags : orgTags.slice(0, MAX_POST_TAGS) })
-      .returning();
+    const poll = input.poll;
+    const row = await this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(posts)
+        .values({ authorId: user.id, orgId, body: input.body, kind: input.kind, tags: input.tags.length ? input.tags : orgTags.slice(0, MAX_POST_TAGS) })
+        .returning();
+      if (poll) {
+        await tx.insert(polls).values({ postId: created.id, question: poll.question, closesAt: poll.closesAt ? new Date(poll.closesAt) : null });
+        await tx.insert(pollOptions).values(poll.options.map((label, position) => ({ postId: created.id, position, label })));
+      }
+      return created;
+    });
     try {
       await this.mediaSvc.attach(user.id, row.id, input.mediaIds);
     } catch (err) {
@@ -117,6 +128,7 @@ export class PostsService {
       .limit(1);
     if (open) throw new ConflictException("Beitrag wird geprüft und kann gerade nicht bearbeitet werden.");
     await this.db.update(posts).set({ body: input.body, tags: input.tags, editedAt: new Date() }).where(eq(posts.id, postId));
+    if (post.orgId) await invalidatePublicOrg(this.cache, await this.orgs.slugOf(post.orgId));
     const [updated] = await this.hydrate([postId], user.id, await this.context(user.id));
     return updated;
   }
@@ -400,6 +412,102 @@ export class PostsService {
     }
     await this.db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, postId));
     await this.mediaSvc.deleteForPost(postId); // Bilder werden mit dem Beitrag entfernt (Datenminimierung)
+    if (post.orgId) await invalidatePublicOrg(this.cache, await this.orgs.slugOf(post.orgId));
+  }
+
+  // --- Umfragen ---------------------------------------------------------------------------------
+
+  /**
+   * Stimme abgeben oder aendern (Einfachwahl, eine Zeile je Person dank Primaerschluessel). Zaehler pflegt der
+   * Trigger poll_votes_count; parallele Stimmen serialisiert die Zeilensperre auf der Option.
+   */
+  async vote(user: PublicUser, postId: string, optionId: string): Promise<PollView> {
+    const poll = await this.requireOpenPoll(user, postId);
+    const [option] = await this.db
+      .select({ id: pollOptions.id })
+      .from(pollOptions)
+      .where(and(eq(pollOptions.id, optionId), eq(pollOptions.postId, poll.postId)))
+      .limit(1);
+    if (!option) throw new BadRequestException("Diese Antwort gehört nicht zur Umfrage.");
+    await enforceLimit(this.cache, `poll:vote:${user.id}`, 120, 3600, limitMessage("Abstimmungen"));
+    await this.db
+      .insert(pollVotes)
+      .values({ postId, optionId, userId: user.id })
+      .onConflictDoUpdate({
+        target: [pollVotes.postId, pollVotes.userId],
+        set: { optionId, createdAt: sql`now()` },
+        setWhere: sql`${pollVotes.optionId} <> excluded.option_id`,
+      });
+    return (await this.pollsFor([postId], user.id)).get(postId)!;
+  }
+
+  /** Eigene Stimme zuruecknehmen (bis zum Ende der Umfrage). */
+  async unvote(user: PublicUser, postId: string): Promise<PollView> {
+    await this.requireOpenPoll(user, postId);
+    await this.db.delete(pollVotes).where(and(eq(pollVotes.postId, postId), eq(pollVotes.userId, user.id)));
+    return (await this.pollsFor([postId], user.id)).get(postId)!;
+  }
+
+  private async requireOpenPoll(user: PublicUser, postId: string) {
+    await this.requirePost(postId, user.id);
+    const [poll] = await this.db.select().from(polls).where(eq(polls.postId, postId)).limit(1);
+    if (!poll) throw new NotFoundException("Dieser Beitrag hat keine Umfrage.");
+    if (poll.closesAt && poll.closesAt.getTime() <= Date.now()) throw new BadRequestException("Die Umfrage ist beendet.");
+    return poll;
+  }
+
+  /** Umfragen gesammelt laden (drei Abfragen fuer alle Beitraege einer Seite). Nur Zahlen und die eigene Wahl. */
+  private async pollsFor(postIds: string[], userId: string): Promise<Map<string, PollView>> {
+    if (postIds.length === 0) return new Map();
+    const pollRows = await this.db.select().from(polls).where(inArray(polls.postId, postIds));
+    if (pollRows.length === 0) return new Map();
+    const ids = pollRows.map((p) => p.postId);
+    const [opts, mine] = await Promise.all([
+      this.db.select().from(pollOptions).where(inArray(pollOptions.postId, ids)).orderBy(pollOptions.postId, pollOptions.position),
+      this.db.select({ postId: pollVotes.postId, optionId: pollVotes.optionId }).from(pollVotes).where(and(inArray(pollVotes.postId, ids), eq(pollVotes.userId, userId))),
+    ]);
+    const myVote = new Map(mine.map((v) => [v.postId, v.optionId]));
+    const now = Date.now();
+    return new Map(
+      pollRows.map((p) => {
+        const options = opts.filter((o) => o.postId === p.postId).map((o) => ({ id: o.id, label: o.label, votes: o.votes }));
+        return [
+          p.postId,
+          {
+            question: p.question,
+            options,
+            total: options.reduce((n, o) => n + o.votes, 0),
+            myOptionId: myVote.get(p.postId) ?? null,
+            closesAt: p.closesAt?.toISOString() ?? null,
+            closed: !!p.closesAt && p.closesAt.getTime() <= now,
+          },
+        ];
+      }),
+    );
+  }
+
+  /** Auskunft (Art. 15): eigene Umfragestimmen mit Frage und gewaehlter Antwort. */
+  async exportVotes(userId: string): Promise<{ postId: string; question: string; answer: string; at: string }[]> {
+    const rows = await this.db
+      .select({ postId: pollVotes.postId, question: polls.question, answer: pollOptions.label, at: pollVotes.createdAt })
+      .from(pollVotes)
+      .innerJoin(polls, eq(polls.postId, pollVotes.postId))
+      .innerJoin(pollOptions, eq(pollOptions.id, pollVotes.optionId))
+      .where(eq(pollVotes.userId, userId));
+    return rows.map((r) => ({ ...r, at: r.at.toISOString() }));
+  }
+
+  // --- Oeffentlicher Bereich ----------------------------------------------------------------------
+
+  /** Letzte Vereinsbeitraege fuer die oeffentliche Seite: nur Text, Datum, Tags (ohne Autor, Bilder, Kommentare, Likes). */
+  async publicRecent(orgId: string, limit = 10): Promise<PublicPost[]> {
+    const rows = await this.db
+      .select({ body: posts.body, createdAt: posts.createdAt, tags: posts.tags })
+      .from(posts)
+      .where(and(eq(posts.orgId, orgId), isNull(posts.deletedAt), isNull(posts.hiddenAt), ne(posts.body, "")))
+      .orderBy(desc(posts.createdAt), desc(posts.id))
+      .limit(limit);
+    return rows.map((r) => ({ body: r.body, createdAt: r.createdAt.toISOString(), tags: r.tags }));
   }
 
   // --- intern -----------------------------------------------------------------------------------
@@ -517,7 +625,7 @@ export class PostsService {
   /** Reichert Beitrags-IDs mit Autor, Profil, Verein, Bildern, Zaehlern und Nutzer-Status an (Reihenfolge der ids bleibt). */
   private async hydrateWithRelation(ids: string[], userId: string, ctx: Ctx): Promise<{ post: FeedPost & { orgId: string | null }; relation: Relation }[]> {
     if (ids.length === 0) return [];
-    const [rows, likeCounts, commentCounts, mine, mediaMap] = await Promise.all([
+    const [rows, likeCounts, commentCounts, mine, mediaMap, pollMap] = await Promise.all([
       this.db
         .select({
           id: posts.id, body: posts.body, kind: posts.kind, tags: posts.tags, createdAt: posts.createdAt, editedAt: posts.editedAt, authorId: posts.authorId,
@@ -530,6 +638,7 @@ export class PostsService {
       this.db.select({ id: comments.postId, n: sql<number>`count(*)::int` }).from(comments).where(inArray(comments.postId, ids)).groupBy(comments.postId),
       this.db.select({ id: postLikes.postId }).from(postLikes).where(and(inArray(postLikes.postId, ids), eq(postLikes.userId, userId))),
       this.mediaSvc.forPosts(ids),
+      this.pollsFor(ids, userId),
     ]);
     const likes = new Map(likeCounts.map((r) => [r.id, r.n]));
     const cmts = new Map(commentCounts.map((r) => [r.id, r.n]));
@@ -570,6 +679,7 @@ export class PostsService {
             canDelete: r.authorId === userId || canModerate(r.orgId),
             canEdit: r.authorId === userId && (!r.orgId || canModerate(r.orgId)),
             editedAt: r.editedAt?.toISOString() ?? null,
+            poll: pollMap.get(r.id) ?? null,
             reason: reasonFor(relation, r.orgName, l, c, { authorName }),
             orgId: r.orgId,
           };

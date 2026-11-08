@@ -193,3 +193,62 @@ describe("Migration 0018: Termine mit Limit, Warteliste, Helferlisten, Anwesenhe
     expect(Number(left.rows[0].n)).toBe(0);
   });
 });
+
+describe("Migration 0019: Umfragen und oeffentliche Vereinsseite", () => {
+  it("Funktionen stehen je in einem eigenen Block (kein breakpoint im Rumpf)", () => {
+    const fns = statements("0019_p4c_polls_public.sql").filter((s) => /CREATE OR REPLACE FUNCTION/.test(s));
+    expect(fns).toHaveLength(1);
+    for (const fn of fns) {
+      expect(fn.match(/\$\$/g)).toHaveLength(2);
+      expect(fn.trim().endsWith("$$;")).toBe(true);
+      expect(fn).toMatch(/END;\s*\$\$;$/);
+    }
+  });
+
+  it("Bestand bleibt privat, Trigger zaehlt Stimmen (auch bei Wechsel und Kaskaden), Option muss zur Umfrage gehoeren", async () => {
+    const pg = new PGlite();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+    for (const file of files.filter((f) => f < "0019")) for (const stmt of statements(file)) await pg.exec(stmt);
+
+    const u = (n: number) => `00000000-0000-0000-0000-00000000000${n}`;
+    const org = "00000000-0000-0000-0000-0000000000a1";
+    const post = "00000000-0000-0000-0000-0000000000f1";
+    const post2 = "00000000-0000-0000-0000-0000000000f2";
+    await pg.exec(`
+      insert into identity.users (id, email, password_hash, display_name) values
+        ('${u(1)}', 'a@example.de', 'h', 'Anna'), ('${u(2)}', 'b@example.de', 'h', 'Ben'), ('${u(3)}', 'c@example.de', 'h', 'Cleo');
+      insert into social.organizations (id, slug, name, category, city) values ('${org}', 'tsv', 'TSV', 'Sport', 'Stadt');
+      insert into social.posts (id, author_id, org_id, body) values ('${post}', '${u(1)}', '${org}', 'Frage'), ('${post2}', '${u(1)}', '${org}', 'Andere');
+    `);
+
+    for (const stmt of statements("0019_p4c_polls_public.sql")) await pg.exec(stmt);
+
+    expect((await pg.query<{ p: boolean }>("select public_page as p from social.organizations")).rows[0].p).toBe(false);
+    const o = (n: number) => `00000000-0000-0000-0000-0000000000b${n}`;
+    await pg.exec(`
+      insert into social.polls (post_id, question) values ('${post}', 'Welcher Tag?'), ('${post2}', 'Andere Frage');
+      insert into social.poll_options (id, post_id, position, label) values ('${o(1)}', '${post}', 0, 'Sa'), ('${o(2)}', '${post}', 1, 'So'), ('${o(3)}', '${post2}', 0, 'X');
+      insert into social.poll_votes (post_id, option_id, user_id) values ('${post}', '${o(1)}', '${u(1)}'), ('${post}', '${o(1)}', '${u(2)}'), ('${post}', '${o(2)}', '${u(3)}');
+    `);
+    const votes = async () => (await pg.query<{ v: number }>(`select votes as v from social.poll_options where post_id = '${post}' order by position`)).rows.map((r) => r.v);
+    expect(await votes()).toEqual([2, 1]);
+    await pg.exec(`update social.poll_votes set option_id = '${o(2)}' where user_id = '${u(2)}'`);
+    expect(await votes()).toEqual([1, 2]);
+    await pg.exec(`update social.poll_votes set created_at = now() where user_id = '${u(2)}'`); // gleiche Option: kein Doppelzaehlen
+    expect(await votes()).toEqual([1, 2]);
+    // zweite Stimme derselben Person (PK) und fremde Option (zusammengesetzter FK) scheitern
+    await expect(pg.exec(`insert into social.poll_votes (post_id, option_id, user_id) values ('${post}', '${o(2)}', '${u(1)}')`)).rejects.toThrow();
+    await expect(pg.exec(`insert into social.poll_votes (post_id, option_id, user_id) values ('${post2}', '${o(1)}', '${u(1)}')`)).rejects.toThrow();
+    await expect(pg.exec(`update social.poll_options set votes = -1 where id = '${o(3)}'`)).rejects.toMatchObject({ code: "23514" });
+    await expect(pg.exec(`insert into social.polls (post_id, question) values ('${u(1)}', 'x')`)).rejects.toThrow();
+    // Kontoloeschung senkt, Stimme zuruecknehmen senkt
+    await pg.exec(`delete from identity.users where id = '${u(3)}'`);
+    expect(await votes()).toEqual([1, 1]);
+    await pg.exec(`delete from social.poll_votes where user_id = '${u(1)}'`);
+    expect(await votes()).toEqual([0, 1]);
+    // Beitrag weg -> Umfrage, Optionen und Stimmen weg (Trigger auf geloeschten Optionen stoert nicht)
+    await pg.exec(`delete from social.posts where id = '${post}'`);
+    const left = await pg.query<{ n: number }>(`select (select count(*) from social.polls where post_id = '${post}') + (select count(*) from social.poll_options where post_id = '${post}') + (select count(*) from social.poll_votes where post_id = '${post}') as n`);
+    expect(Number(left.rows[0].n)).toBe(0);
+  });
+});

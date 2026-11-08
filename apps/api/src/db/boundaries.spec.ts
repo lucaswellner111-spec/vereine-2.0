@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * Dieser Test bricht, sobald jemand wieder `users`, `sessions`, `consents` oder `auditLog` importiert.
  */
 const root = join(__dirname, "..");
-const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications", "profiles", "media"];
+const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications", "profiles", "media", "public"];
 const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog"];
 
 function sources(dir: string): string[] {
@@ -94,6 +94,16 @@ describe("Datenschutz-Bereich (Ausnahme mit Allowlist)", () => {
       );
       const foreign = imports.filter((i) => !PRIVACY_TABLES.includes(i));
       expect(foreign, `${file} importiert nicht freigegebene Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});
+
+/** Der oeffentliche Bereich (ohne Login) liest nur ueber die schmalen Methoden der Fachdienste, nie direkt Tabellen. */
+describe("Oeffentlicher Bereich", () => {
+  it("importiert keine Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "public"))) {
+      const src = readFileSync(file, "utf8");
+      expect(src, `${file} importiert das DB-Schema`).not.toMatch(/from\s*"\.\.\/db\/schema"/);
     }
   });
 });

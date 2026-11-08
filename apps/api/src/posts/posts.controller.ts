@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import {
   createCommentSchema,
   createPostSchema,
   feedbackSchema,
   type MutedItem,
+  pollVoteSchema,
+  type PollView,
   reportSchema,
   deleteCommentSchema,
   moderatePostSchema,
@@ -150,6 +152,17 @@ export class PostsController {
   @HttpCode(204)
   remove(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
     return this.posts.remove(user, id);
+  }
+
+  /** Umfrage: Stimme abgeben/aendern bzw. zuruecknehmen (bis zum Ende der Umfrage). */
+  @Put("posts/:id/poll/vote")
+  vote(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<PollView> {
+    return this.posts.vote(user, id, parse(pollVoteSchema, body).optionId);
+  }
+
+  @Delete("posts/:id/poll/vote")
+  unvote(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<PollView> {
+    return this.posts.unvote(user, id);
   }
 
   @Post("posts/:id/like")

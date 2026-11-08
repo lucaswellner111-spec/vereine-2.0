@@ -15,12 +15,15 @@ import type {
   EventItem,
   EventKind,
   OrgRole,
+  PublicEvent,
   PublicUser,
   RsvpItem,
   RsvpState,
   RsvpStatus,
   UpdateEventInput,
 } from "@vereine/shared";
+import { CACHE, type Cache } from "../cache/cache.module";
+import { invalidatePublicOrg } from "../common/public-cache";
 import { DB, type Database } from "../db/db.module";
 import { pgCode } from "../common/pg-errors";
 import { UsersDirectory } from "../auth/users-directory.service";
@@ -67,6 +70,7 @@ export class EventsService implements OnModuleInit {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
+    @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
   onModuleInit() {
@@ -94,6 +98,27 @@ export class EventsService implements OnModuleInit {
   async listForOrg(user: PublicUser, slug: string, range: EventRange): Promise<EventItem[]> {
     const org = await this.orgs.requireBySlug(slug);
     return this.query(user, eq(events.orgId, org.id), range);
+  }
+
+  /**
+   * Oeffentliche Vereinsseite: naechste oeffentliche, nicht abgesagte Termine (laufende eingeschlossen),
+   * nur Titel, Art, Zeit und Ort - keine Beschreibung, keine Zusagen.
+   */
+  async publicUpcoming(orgId: string, limit = 10): Promise<PublicEvent[]> {
+    const rows = await this.db
+      .select({ title: events.title, kind: events.kind, startsAt: events.startsAt, endsAt: events.endsAt, location: events.location })
+      .from(events)
+      .where(
+        and(
+          eq(events.orgId, orgId),
+          eq(events.visibility, "public"),
+          isNull(events.canceledAt),
+          sql`coalesce(${events.endsAt}, ${events.startsAt} + interval '3 hours') > now()`,
+        ),
+      )
+      .orderBy(asc(events.startsAt), asc(events.id))
+      .limit(limit);
+    return rows.map((r) => ({ title: r.title, kind: r.kind as EventKind, startsAt: r.startsAt.toISOString(), endsAt: r.endsAt?.toISOString() ?? null, location: r.location }));
   }
 
   async get(user: PublicUser, id: string): Promise<EventItem> {
@@ -386,6 +411,7 @@ export class EventsService implements OnModuleInit {
         },
       );
     }
+    await invalidatePublicOrg(this.cache, event.orgSlug); // z. B. Sichtbarkeit -> intern sofort weg
     return this.get(user, id);
   }
 
@@ -399,6 +425,7 @@ export class EventsService implements OnModuleInit {
       ? and(eq(events.seriesId, event.seriesId!), gte(events.startsAt, new Date(event.startsAt)), isNull(events.canceledAt))!
       : eq(events.id, id);
     const canceled = await this.db.update(events).set({ canceledAt: new Date() }).where(target).returning({ id: events.id });
+    await invalidatePublicOrg(this.cache, event.orgSlug);
     const attendees = await this.db
       .select({ userId: eventRsvps.userId })
       .from(eventRsvps)

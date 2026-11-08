@@ -20,7 +20,11 @@
 	}
 
 	handle {
-		reverse_proxy web:3000
+		# Besucher-IP fuer das Web (Rate-Limit der oeffentlichen Seiten je IP). header_up ersetzt einen
+		# vom Client mitgeschickten X-Real-IP, das Web liest nur diesen Header.
+		reverse_proxy web:3000 {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	header -Server

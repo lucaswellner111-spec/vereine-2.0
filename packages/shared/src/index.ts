@@ -131,10 +131,45 @@ export type OrgSummary = {
 export type OrgDetail = OrgSummary & {
   /** Banner (Varianten banner/banner-sm) oder null. */
   bannerId: string | null;
+  /** Oeffentliche Vereinsseite /verein/<slug> ohne Login freigeschaltet (nur der Vorstand schaltet um). */
+  publicPage: boolean;
   viewer: { following: boolean; membership: "none" | "pending" | "active"; role: OrgRole | null };
 };
 
 export const POST_KINDS = ["update", "event", "donation"] as const;
+
+// --- Umfragen an Beitraegen (Einfachwahl, anonym) ---
+export const POLL_MIN_OPTIONS = 2;
+export const POLL_MAX_OPTIONS = 6;
+export const POLL_MAX_DAYS = 90;
+export const pollInputSchema = z
+  .object({
+    question: z.string().trim().min(3).max(200),
+    options: z.array(z.string().trim().min(1).max(80)).min(POLL_MIN_OPTIONS).max(POLL_MAX_OPTIONS),
+    /** Ende der Abstimmung; ohne Angabe offen. Hoechstens 90 Tage in der Zukunft. */
+    closesAt: z.string().datetime({ offset: true }).optional(),
+  })
+  .refine((p) => new Set(p.options.map((o) => o.toLocaleLowerCase("de"))).size === p.options.length, {
+    message: "Antworten dürfen sich nicht wiederholen.",
+    path: ["options"],
+  })
+  .refine((p) => !p.closesAt || new Date(p.closesAt).getTime() > Date.now(), { message: "Das Ende muss in der Zukunft liegen.", path: ["closesAt"] })
+  .refine((p) => !p.closesAt || new Date(p.closesAt).getTime() <= Date.now() + POLL_MAX_DAYS * 86400_000, {
+    message: `Höchstens ${POLL_MAX_DAYS} Tage Laufzeit.`,
+    path: ["closesAt"],
+  });
+export type PollInput = z.infer<typeof pollInputSchema>;
+export const pollVoteSchema = z.object({ optionId: z.string().uuid() });
+/** Ergebnis einer Umfrage: nur Zahlen und die eigene Wahl, nie Namen. */
+export type PollView = {
+  question: string;
+  options: { id: string; label: string; votes: number }[];
+  total: number;
+  myOptionId: string | null;
+  closesAt: string | null;
+  closed: boolean;
+};
+
 export const createPostSchema = z
   .object({
     body: z.string().trim().max(1000).default(""),
@@ -143,8 +178,9 @@ export const createPostSchema = z
     mediaIds: z.array(z.string().uuid()).max(4).default([]),
     /** Leer + Vereinsbeitrag: Tags des Vereins werden uebernommen. */
     tags: tagList(MAX_POST_TAGS).default([]),
+    poll: pollInputSchema.optional(),
   })
-  .refine((p) => p.body.length > 0 || p.mediaIds.length > 0, { message: "Text oder Bild erforderlich.", path: ["body"] });
+  .refine((p) => p.body.length > 0 || p.mediaIds.length > 0 || !!p.poll, { message: "Text oder Bild erforderlich.", path: ["body"] });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 /** Beitrag bearbeiten: nur Text und Tags (Bilder bleiben). Leerer Text nur, wenn der Beitrag Bilder hat (prueft die API). */
 export const updatePostSchema = z.object({
@@ -179,6 +215,8 @@ export type FeedPost = {
   canEdit: boolean;
   /** Zeitpunkt der letzten Bearbeitung oder null. */
   editedAt: string | null;
+  /** Umfrage am Beitrag oder null. */
+  poll: PollView | null;
   reason: string;
 };
 export type FeedResponse = {
@@ -442,11 +480,13 @@ export type ChatMessage = {
   createdAt: string;
   mine: boolean;
 };
-export type ConversationMember = { userId: string; name: string; role: "owner" | "member" };
+export type ConversationMember = { userId: string; name: string; role: "owner" | "member"; avatarId: string | null };
 export type ConversationSummary = {
   id: string;
   kind: "direct" | "group";
   title: string;
+  /** Direktchat: Avatar der anderen Person (auch bei privatem Profil); Gruppe: null. */
+  avatarId: string | null;
   orgSlug: string | null;
   unread: number;
   lastMessage: { preview: string; createdAt: string; mine: boolean } | null;
@@ -461,6 +501,11 @@ export type ConversationDetail = ConversationSummary & {
 };
 export type MessagePage = { messages: ChatMessage[]; nextCursor: string | null };
 export type ChatContact = { userId: string; name: string; context: string };
+/** Aktive Vereinsmitglieder, die noch nicht in der Gruppe sind (nur fuer Besitzer). */
+export type ChatCandidate = { userId: string; name: string; avatarId: string | null };
+/** Hoechstens so viele Treffer je Abfrage; Suche nach Namen serverseitig (?q=). */
+export const CHAT_CANDIDATES_LIMIT = 50;
+export const chatCandidatesQuerySchema = z.object({ q: z.string().trim().max(80).optional().default("") });
 
 /** Ereignis ueber den WebSocket: enthaelt nur IDs, keine Nachrichteninhalte. */
 export type ChatEvent =
@@ -779,3 +824,26 @@ export type ModerationPostItem = {
   openReports: number;
 };
 export type ModerationCommentItem = { id: string; body: string; authorName: string; createdAt: string; postId: string; postExcerpt: string };
+
+// --- Oeffentliche Vereinsseite (ohne Login) -------------------------------------------
+// Bewusst ohne Personendaten: keine Namen, keine Autoren, keine Beitragsbilder, nur oeffentliche Termine.
+
+export const setPublicPageSchema = z.object({ enabled: z.boolean() });
+export const PUBLIC_PAGE_SIZE = 30;
+export const publicOrgQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  city: z.string().trim().max(60).optional(),
+  tag: z.string().trim().max(40).optional(),
+  category: z.enum(ORG_CATEGORIES).optional(),
+  offset: z.coerce.number().int().min(0).max(3000).default(0),
+});
+export type PublicOrgQuery = z.infer<typeof publicOrgQuerySchema>;
+export type PublicOrgSummary = { slug: string; name: string; category: string; city: string; tags: string[]; logoId: string | null; members: number };
+export type PublicEvent = { title: string; kind: EventKind; startsAt: string; endsAt: string | null; location: string };
+export type PublicPost = { body: string; createdAt: string; tags: string[] };
+export type PublicOrg = PublicOrgSummary & {
+  about: string;
+  bannerId: string | null;
+  events: PublicEvent[];
+  posts: PublicPost[];
+};

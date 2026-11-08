@@ -6,7 +6,7 @@ import { Suspense, useState } from "react";
 import { TAGS, TAG_GROUPS, type OrgSummary } from "@vereine/shared";
 import { TagChips } from "@/components/tag-chips";
 import { Building2, SearchX } from "lucide-react";
-import { Avatar, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton, PageHeader, Select } from "@/components/ui";
+import { Avatar, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, Input, LinkButton, PageHeader, Select } from "@/components/ui";
 import { SearchField } from "@/components/ui-client";
 import { useApi } from "@/lib/use-api";
 
@@ -22,12 +22,16 @@ function Orgs() {
   const router = useRouter();
   const pathname = usePathname();
   // Tag steht in der URL (/vereine?tag=fussball), damit Links und Zurueck funktionieren
-  const tag = useSearchParams().get("tag") ?? "";
+  const search = useSearchParams();
+  const tag = search.get("tag") ?? "";
   const [q, setQ] = useState("");
+  // Ort-Filter: Startwert aus der URL (/vereine?ort=Musterstadt), danach lokal (Tippen soll die URL nicht fluten)
+  const [city, setCity] = useState(() => search.get("ort") ?? "");
 
   const params = new URLSearchParams();
   if (q.trim()) params.set("q", q.trim());
   if (tag) params.set("tag", tag);
+  if (city.trim()) params.set("city", city.trim());
   const path = `/orgs${params.size ? `?${params}` : ""}`;
   const orgs = useApi<OrgSummary[]>(path, { debounceMs: 250, keepPrevious: true });
 
@@ -38,7 +42,7 @@ function Orgs() {
   else if (!orgs.data) content = <CardSkeletons count={2} />;
   else if (!orgs.data.length)
     content =
-      q.trim() || tag ? (
+      q.trim() || tag || city.trim() ? (
         <EmptyState
           icon={SearchX}
           title="Keine Vereine zu deiner Suche"
@@ -47,6 +51,7 @@ function Orgs() {
               variant="secondary"
               onClick={() => {
                 setQ("");
+                setCity("");
                 setTag("");
               }}
             >
@@ -69,7 +74,7 @@ function Orgs() {
             <Link href={`/vereine/${org.slug}`} className="block h-full">
               <Card className="h-full transition-colors hover:bg-surface-2">
                 <div className="flex items-center gap-3">
-                  <Avatar name={org.name} size={44} />
+                  <Avatar name={org.name} size={44} mediaId={org.logoId} kind="org" />
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{org.name}</p>
                     <p className="text-xs text-muted">{org.city}</p>
@@ -108,6 +113,8 @@ function Orgs() {
             </optgroup>
           ))}
         </Select>
+        <label htmlFor="ort" className="sr-only">Ort</label>
+        <Input id="ort" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ort" autoComplete="address-level2" maxLength={60} className="w-full sm:w-44" />
         <SearchField id="q" label="Vereine suchen" value={q} onChange={setQ} placeholder="Name, Ort oder Kategorie suchen …" className="min-w-0 flex-1" />
       </div>
       {content}

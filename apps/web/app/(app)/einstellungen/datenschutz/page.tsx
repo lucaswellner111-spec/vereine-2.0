@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ConsentState } from "@vereine/shared";
+import { BlockedPeopleCard } from "@/components/blocked-people-card";
 import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, Button, Card, ErrorState, Field, ListSkeleton, PageHeader, Toggle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
@@ -95,6 +96,8 @@ export default function PrivacyPage() {
             })}
         </Card>
       )}
+
+      <BlockedPeopleCard />
 
       <h2 className="mb-2 font-semibold">Deine Daten</h2>
       <Card className="mb-6">

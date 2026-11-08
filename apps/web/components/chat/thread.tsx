@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { AlertCircle, ArrowLeft, Clock, MoreHorizontal, Trash2, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Clock, MoreHorizontal, Trash2, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { ChatMessage, ConversationDetail, MessagePage, PublicUser } from "@vereine/shared";
 import { CHAT_MAX_BODY } from "@vereine/shared";
@@ -14,6 +14,7 @@ import { REPORT_REASONS } from "@/lib/labels";
 import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea } from "../ui";
 import { DropdownMenu, type MenuEntry } from "../ui-client";
 import { ask, toast } from "@/components/ui-hosts";
+import { AddMembersDialog } from "./add-members-dialog";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -44,6 +45,7 @@ export function Thread({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [outbox, setOutbox] = useState<Outgoing[]>([]);
   // Sperre gegen doppeltes "Erneut senden": tempIds, die gerade unterwegs sind
   const inFlight = useRef(new Set<string>());
@@ -272,7 +274,7 @@ export function Thread({
       {liveRegion}
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 max-md:py-1.5 max-md:pl-1">
         {backButton}
-        <Avatar name={detail.title} size={32} />
+        <Avatar name={detail.title} size={32} mediaId={detail.avatarId} />
         <div className="min-w-0 flex-1">
           <h2 id={`thread-title-${id}`} ref={titleRef} tabIndex={-1} className="truncate text-sm font-medium focus:outline-none focus-visible:underline">
             {detail.title}
@@ -283,7 +285,24 @@ export function Thread({
           </p>
         </div>
         <Button variant="ghost" size="sm" aria-expanded={info} onClick={() => setInfo((v) => !v)}>Info</Button>
+        {detail.kind === "group" && detail.iAmOwner && (
+          <DropdownMenu
+            label="Gruppe verwalten"
+            items={[{ id: "add", label: "Mitglied hinzufügen", icon: UserPlus, onSelect: () => setAdding(true) }]}
+          />
+        )}
       </header>
+      {detail.kind === "group" && detail.iAmOwner && (
+        <AddMembersDialog
+          conversationId={id}
+          open={adding}
+          onClose={() => setAdding(false)}
+          onAdded={(d) => {
+            setDetail(d);
+            onChanged();
+          }}
+        />
+      )}
 
       {info && (
         <div className="space-y-3 border-b border-border bg-surface-2 p-3 text-sm">
@@ -291,7 +310,8 @@ export function Thread({
             <>
               <ul className="flex flex-wrap gap-2">
                 {detail.members.map((m) => (
-                  <li key={m.userId} className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1">
+                  <li key={m.userId} className="inline-flex items-center gap-1.5 rounded-full bg-surface py-1 pl-1 pr-3">
+                    <Avatar name={m.name} size={24} mediaId={m.avatarId} />
                     {m.name} {m.role === "owner" && <Badge tone="brand">Besitzer</Badge>}
                     {detail.iAmOwner && m.userId !== me.id && (
                       <button

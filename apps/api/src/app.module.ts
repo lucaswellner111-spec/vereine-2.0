@@ -17,9 +17,10 @@ import { OrgsModule } from "./orgs/orgs.module";
 import { PlatformModule } from "./platform/platform.module";
 import { PostsModule } from "./posts/posts.module";
 import { PrivacyModule } from "./privacy/privacy.module";
+import { PublicModule } from "./public/public.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule],
   controllers: [HealthController, MetricsController],
 })
 export class AppModule {}

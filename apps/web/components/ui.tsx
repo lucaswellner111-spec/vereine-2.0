@@ -260,8 +260,23 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "bran
   );
 }
 
-/** kind "org": Vereinslogo (Varianten logo/logo-sm, abgerundetes Quadrat statt Kreis). */
-export function Avatar({ name, size = 36, mediaId, kind = "user" }: { name: string; size?: number; mediaId?: string | null; kind?: "user" | "org" }) {
+/**
+ * kind "org": Vereinslogo (Varianten logo/logo-sm, abgerundetes Quadrat statt Kreis).
+ * publicMedia: Bild ueber /api/public/media (nur Logos oeffentlicher Vereinsseiten, ohne Login).
+ */
+export function Avatar({
+  name,
+  size = 36,
+  mediaId,
+  kind = "user",
+  publicMedia = false,
+}: {
+  name: string;
+  size?: number;
+  mediaId?: string | null;
+  kind?: "user" | "org";
+  publicMedia?: boolean;
+}) {
   const initials = name
     .split(/\s+/)
     .slice(0, 2)
@@ -271,7 +286,7 @@ export function Avatar({ name, size = 36, mediaId, kind = "user" }: { name: stri
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={`/api/media/${mediaId}/${kind === "org" ? (size <= 48 ? "logo-sm" : "logo") : size <= 48 ? "avatar-sm" : "avatar"}`}
+        src={`/api/${publicMedia ? "public/media" : "media"}/${mediaId}/${kind === "org" ? (size <= 48 ? "logo-sm" : "logo") : size <= 48 ? "avatar-sm" : "avatar"}`}
         alt=""
         aria-hidden
         width={size}

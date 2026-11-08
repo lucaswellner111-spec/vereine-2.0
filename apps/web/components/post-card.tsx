@@ -11,6 +11,7 @@ import { mediaUrl } from "@/lib/media";
 import { shareLink } from "@/lib/share";
 import { useBusy } from "@/lib/use-api";
 import { LazyLightbox, LazyTagPicker as TagPicker } from "./lazy";
+import { PollView } from "./poll-view";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
 import { Alert, Avatar, Badge, Button, Card, Input, TextareaField } from "./ui";
@@ -282,7 +283,9 @@ export function PostCard({
             </div>
           )}
 
-          <TagChips tags={post.tags} to="/feed" className="mt-3" />
+          {post.poll && <PollView postId={post.id} poll={post.poll} onChange={(poll) => setPost((p) => ({ ...p, poll }))} />}
+
+          <TagChips tags={post.tags} to="/tags" className="mt-3" />
 
           <div className="mt-3 flex items-center gap-1 text-sm text-muted">
             <Button variant="ghost" size="sm" aria-pressed={post.likedByMe} aria-label={`Gefällt mir, ${post.likes}`} onClick={like}>

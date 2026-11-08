@@ -250,6 +250,20 @@ export class MediaService implements OnModuleInit {
     return data;
   }
 
+  /** Ohne Login: nur Logo/Banner von Vereinen mit freigeschalteter oeffentlicher Seite (nie Avatare/Beitragsbilder). */
+  async servePublic(id: string, variant: string): Promise<Buffer> {
+    const [m] = await this.db
+      .select({ kind: media.kind })
+      .from(media)
+      .innerJoin(organizations, eq(organizations.id, media.orgId))
+      .where(and(eq(media.id, id), inArray(media.kind, ["org_logo", "org_banner"]), eq(organizations.publicPage, true)))
+      .limit(1);
+    if (!m || !(variant in VARIANTS[m.kind as Kind])) throw new NotFoundException("Bild nicht gefunden.");
+    const data = await this.storage.get(`${id}/${variant}.webp`);
+    if (!data) throw new NotFoundException("Bild nicht gefunden.");
+    return data;
+  }
+
   // --- Loeschen / Aufraeumen -----------------------------------------------------------------
 
   async deleteMedia(ids: string[]): Promise<void> {

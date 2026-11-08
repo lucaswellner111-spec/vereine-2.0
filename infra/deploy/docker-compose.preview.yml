@@ -132,6 +132,9 @@ services:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
     restart: unless-stopped
+    environment:
+      # Server-Komponenten (oeffentliche Vereinsseite, Vereinsfinder) holen Daten direkt im Docker-Netz
+      API_INTERNAL_URL: http://api:4000
 
   caddy:
     image: caddy:2

@@ -12,6 +12,6 @@ import { PostsService } from "./posts.service";
   imports: [AuthModule, OrgsModule, NotificationsModule, ProfilesModule, MediaModule],
   controllers: [PostsController],
   providers: [PostsService, ModerationService],
-  exports: [ModerationService],
+  exports: [ModerationService, PostsService],
 })
 export class PostsModule {}

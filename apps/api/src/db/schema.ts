@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -116,6 +117,8 @@ export const organizations = social.table(
     /** Vereinslogo/-banner (gehoeren dem Verein, social.media mit org_id). */
     logoMediaId: uuid("logo_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
     bannerMediaId: uuid("banner_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
+    /** Oeffentliche Vereinsseite /verein/<slug> ohne Login (Standard aus, nur der Vorstand schaltet ein). */
+    publicPage: boolean("public_page").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("organizations_tags_idx").using("gin", t.tags)],
@@ -206,6 +209,54 @@ export const comments = social.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("comments_post_idx").on(t.postId), index("comments_author_created_idx").on(t.authorId, t.createdAt)],
+);
+
+/** Umfrage an einem Beitrag (Einfachwahl, anonym). Unveraenderlich nach dem Anlegen. */
+export const polls = social.table(
+  "polls",
+  {
+    postId: uuid("post_id").primaryKey().references(() => posts.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("polls_question_chk", sql`char_length(question) BETWEEN 3 AND 200`)],
+);
+
+export const pollOptions = social.table(
+  "poll_options",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    postId: uuid("post_id").notNull().references(() => polls.postId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    label: text("label").notNull(),
+    /** Stimmen; gepflegt vom Trigger social.poll_votes_count (auch bei Kaskaden wie Kontoloeschung). */
+    votes: integer("votes").notNull().default(0),
+  },
+  (t) => [
+    unique("poll_options_post_position_uq").on(t.postId, t.position),
+    // Ziel des zusammengesetzten Fremdschluessels der Stimmen (Option gehoert sicher zur Umfrage)
+    unique("poll_options_id_post_uq").on(t.id, t.postId),
+    check("poll_options_label_chk", sql`char_length(label) BETWEEN 1 AND 80`),
+    check("poll_options_votes_chk", sql`votes >= 0`),
+  ],
+);
+
+/** Eine Stimme je Person und Umfrage (Primaerschluessel); wer wie gestimmt hat, gibt die API nie heraus. */
+export const pollVotes = social.table(
+  "poll_votes",
+  {
+    postId: uuid("post_id").notNull().references(() => polls.postId, { onDelete: "cascade" }),
+    optionId: uuid("option_id").notNull(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.postId, t.userId] }),
+    index("poll_votes_user_idx").on(t.userId),
+    index("poll_votes_option_idx").on(t.optionId),
+    foreignKey({ name: "poll_votes_option_fk", columns: [t.optionId, t.postId], foreignColumns: [pollOptions.id, pollOptions.postId] }).onDelete("cascade"),
+  ],
 );
 
 export const reports = social.table("reports", {

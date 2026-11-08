@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from "@nestjs/common";
 import {
   addMembersSchema,
+  chatCandidatesQuerySchema,
   createConversationSchema,
   reportMessageSchema,
   sendMessageSchema,
   setRetentionSchema,
+  type ChatCandidate,
   type ChatContact,
   type ChatMessage,
   type ConversationDetail,
@@ -70,6 +72,12 @@ export class ChatController {
   @Post("conversations/:id/members")
   addMembers(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<ConversationDetail> {
     return this.chat.addMembers(user, id, parse(addMembersSchema, body).userIds);
+  }
+
+  /** Aktive Vereinsmitglieder, die noch nicht in der Gruppe sind (nur Besitzer). */
+  @Get("conversations/:id/candidates")
+  candidates(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Query() query: unknown): Promise<ChatCandidate[]> {
+    return this.chat.candidates(user, id, parse(chatCandidatesQuerySchema, query ?? {}).q);
   }
 
   @Delete("conversations/:id/members/:userId")

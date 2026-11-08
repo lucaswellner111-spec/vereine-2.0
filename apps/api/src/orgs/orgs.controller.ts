@@ -16,6 +16,7 @@ import {
   createOrgSchema,
   decisionSchema,
   orgTagsSchema,
+  setPublicPageSchema,
   setRoleSchema,
   updateOrgSchema,
   type MemberItem,
@@ -34,8 +35,8 @@ export class OrgsController {
   constructor(@Inject(OrgsService) private readonly orgs: OrgsService) {}
 
   @Get()
-  list(@CurrentUser() user: PublicUser, @Query("q") q?: string, @Query("tag") tag?: string): Promise<OrgSummary[]> {
-    return this.orgs.list(user.id, q, tag);
+  list(@CurrentUser() user: PublicUser, @Query("q") q?: string, @Query("tag") tag?: string, @Query("city") city?: string): Promise<OrgSummary[]> {
+    return this.orgs.list(user.id, typeof q === "string" ? q : undefined, typeof tag === "string" ? tag : undefined, typeof city === "string" ? city : undefined);
   }
 
   @Get("mine")
@@ -63,6 +64,12 @@ export class OrgsController {
   @Put(":slug")
   update(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
     return this.orgs.update(slug, user, parse(updateOrgSchema, body));
+  }
+
+  /** Oeffentliche Vereinsseite /verein/<slug> ein-/ausschalten (nur Vorstand). */
+  @Put(":slug/public-page")
+  setPublicPage(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
+    return this.orgs.setPublicPage(slug, user, parse(setPublicPageSchema, body).enabled);
   }
 
   @Put(":slug/tags")

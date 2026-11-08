@@ -1,6 +1,8 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import type { ModerationCommentItem, ModerationPostItem, PublicUser, ReportItem, ResolveReportInput } from "@vereine/shared";
+import { CACHE, type Cache } from "../cache/cache.module";
+import { invalidatePublicOrg } from "../common/public-cache";
 import { DB, type Database } from "../db/db.module";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
@@ -22,6 +24,7 @@ export class ModerationService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
   private async requireModerator(orgId: string, userId: string) {
@@ -143,6 +146,7 @@ export class ModerationService {
     if (input.action === "unhide") {
       await this.db.update(posts).set({ hiddenAt: null, hiddenReason: null }).where(eq(posts.id, postId));
       await this.audit.record(user.id, "post.unhidden", { postId, orgId: post.orgId });
+      await invalidatePublicOrg(this.cache, await this.orgs.slugOf(post.orgId!));
       return;
     }
     await this.db.transaction(async (tx) => {
@@ -154,6 +158,7 @@ export class ModerationService {
     });
     const [org] = await this.db.select().from(organizations).where(eq(organizations.id, post.orgId!)).limit(1);
     await this.audit.record(user.id, "post.hidden", { postId, orgId: post.orgId });
+    await invalidatePublicOrg(this.cache, org?.slug); // ausgeblendete Beitraege sofort von der oeffentlichen Seite
     await this.notifications.notify([post.authorId], "post_hidden", { orgName: org?.name ?? "", reason: input.reason, excerpt: post.body.slice(0, 80) });
   }
 
@@ -222,6 +227,7 @@ export class ModerationService {
         .set({ status: "actioned", resolvedBy: actorId, resolvedAt: now, resolution: input.reason })
         .where(and(eq(reports.postId, report.postId), eq(reports.status, "open")));
     });
+    await invalidatePublicOrg(this.cache, org?.slug);
     // DSA: Betroffene erfahren die Entscheidung samt Begruendung.
     if (post) {
       await this.notifications.notify([post.authorId], "post_hidden", {
