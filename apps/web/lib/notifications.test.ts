@@ -27,6 +27,19 @@ describe("describeNotification", () => {
   });
 });
 
+describe("Termin-Benachrichtigungen P4b", () => {
+  it("geaendert und nachgerueckt fuehren zum Termin", () => {
+    const upd = { id: "3", type: "event_updated", data: { title: "Training", eventId: "e1", startsAt: "2026-11-10T18:00:00Z" }, readAt: null, createdAt: "" } as NotificationItem;
+    expect(describeNotification(upd).href).toBe("/kalender/e1");
+    expect(describeNotification(upd).text).toMatch(/^Geändert: Training – jetzt /);
+    const pro = { id: "4", type: "event_waitlist_promoted", data: { title: "Ausflug", eventId: "e2", startsAt: "2026-11-10T18:00:00Z" }, readAt: null, createdAt: "" } as NotificationItem;
+    expect(describeNotification(pro)).toMatchObject({ href: "/kalender/e2" });
+    expect(describeNotification(pro).text).toMatch(/nachgerückt: Ausflug/);
+    expect(NOTIFICATION_ICONS.event_updated).toBeTruthy();
+    expect(NOTIFICATION_ICONS.event_waitlist_promoted).toBeTruthy();
+  });
+});
+
 describe("mergeNotifications", () => {
   const item = (id: string, readAt: string | null = null) => ({ id, type: "new_follower", data: { name: id, handle: id }, readAt, createdAt: "" }) as NotificationItem;
   it("behaelt nachgeladene Seiten und Cursor, neue oben, bekannte aktualisiert", () => {

@@ -3,10 +3,11 @@ import { and, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { PublicUser, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
-import { eventRsvps, events, teamMembers, teams } from "../db/schema";
+import { eventAttendance, eventRsvps, eventShiftSignups, eventShifts, events, teamMembers, teams } from "../db/schema";
 import { isUniqueViolation } from "../common/pg-errors";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { EventsService } from "./events.service";
 
 @Injectable()
 export class TeamsService implements OnModuleInit {
@@ -15,6 +16,7 @@ export class TeamsService implements OnModuleInit {
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
+    @Inject(EventsService) private readonly events: EventsService,
   ) {}
 
   onModuleInit() {
@@ -23,18 +25,40 @@ export class TeamsService implements OnModuleInit {
 
   /**
    * Austritt: Team-Mitgliedschaften im Verein und Zusagen zu kuenftigen internen Terminen (nur Mitglieder bzw. Team)
-   * entfernen. Zusagen zu oeffentlichen Terminen und vergangene Termine bleiben unveraendert.
+   * entfernen, ebenso Helfer-Eintraege kuenftiger Termine und alle Anwesenheitseintraege des Vereins. Zusagen zu
+   * oeffentlichen Terminen und vergangene Termine bleiben unveraendert. Frei gewordene Plaetze ruecken nach.
    */
   async leaveOrg(orgId: string, userId: string): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    const freed = await this.db.transaction(async (tx) => {
+      const now = new Date();
+      // Betroffene Termine in fester Reihenfolge sperren (der Zaehler-Trigger aktualisiert sie), sonst drohen Deadlocks
+      await tx
+        .select({ id: events.id })
+        .from(events)
+        .where(and(eq(events.orgId, orgId), inArray(events.id, tx.select({ id: eventRsvps.eventId }).from(eventRsvps).where(eq(eventRsvps.userId, userId)))))
+        .orderBy(events.id)
+        .for("update");
       const orgTeams = tx.select({ id: teams.id }).from(teams).where(eq(teams.orgId, orgId));
       await tx.delete(teamMembers).where(and(eq(teamMembers.userId, userId), inArray(teamMembers.teamId, orgTeams)));
       const internal = tx
         .select({ id: events.id })
         .from(events)
-        .where(and(eq(events.orgId, orgId), gt(events.startsAt, new Date()), or(eq(events.visibility, "members"), isNotNull(events.teamId))));
-      await tx.delete(eventRsvps).where(and(eq(eventRsvps.userId, userId), inArray(eventRsvps.eventId, internal)));
+        .where(and(eq(events.orgId, orgId), gt(events.startsAt, now), or(eq(events.visibility, "members"), isNotNull(events.teamId))));
+      const removed = await tx
+        .delete(eventRsvps)
+        .where(and(eq(eventRsvps.userId, userId), inArray(eventRsvps.eventId, internal)))
+        .returning({ eventId: eventRsvps.eventId, status: eventRsvps.status });
+      const futureShifts = tx
+        .select({ id: eventShifts.id })
+        .from(eventShifts)
+        .innerJoin(events, eq(events.id, eventShifts.eventId))
+        .where(and(eq(events.orgId, orgId), gt(events.startsAt, now)));
+      await tx.delete(eventShiftSignups).where(and(eq(eventShiftSignups.userId, userId), inArray(eventShiftSignups.shiftId, futureShifts)));
+      const orgEventIds = tx.select({ id: events.id }).from(events).where(eq(events.orgId, orgId));
+      await tx.delete(eventAttendance).where(and(eq(eventAttendance.userId, userId), inArray(eventAttendance.eventId, orgEventIds)));
+      return removed.filter((r) => r.status === "yes").map((r) => r.eventId);
     });
+    await this.events.fillWaitlistsFor(freed);
   }
 
   private async requireAdmin(orgId: string, userId: string) {

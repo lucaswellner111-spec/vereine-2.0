@@ -138,10 +138,10 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
 
   it("RSVP: zu-/absagen, aendern, Zaehler; Sichtbarkeit wird respektiert", async () => {
     let e = (await req(mia, "PUT", `/events/${teamEventId}/rsvp`, { status: "yes" })).json();
-    expect(e.counts).toEqual({ yes: 1, maybe: 0, no: 0 });
+    expect(e.counts).toEqual({ yes: 1, maybe: 0, no: 0, waitlist: 0 });
     expect(e.myStatus).toBe("yes");
     e = (await req(mia, "PUT", `/events/${teamEventId}/rsvp`, { status: "maybe" })).json();
-    expect(e.counts).toEqual({ yes: 0, maybe: 1, no: 0 }); // ersetzt, nicht addiert
+    expect(e.counts).toEqual({ yes: 0, maybe: 1, no: 0, waitlist: 0 }); // ersetzt, nicht addiert
     await req(vera, "PUT", `/events/${teamEventId}/rsvp`, { status: "yes" });
 
     expect((await req(mia, "PUT", `/events/${teamEventId}/rsvp`, { status: "vielleicht" })).statusCode).toBe(400);

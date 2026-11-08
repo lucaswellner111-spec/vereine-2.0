@@ -1,13 +1,17 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarPlus, CalendarX2, Clock, ExternalLink, MapPin, Share2, Users } from "lucide-react";
+import { CalendarPlus, CalendarX2, Clock, ExternalLink, MapPin, Pencil, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { EventAttendees, EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
 import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, SectionTitle } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
-import { RSVP_OPTIONS, RSVP_STATUS_LABEL, withRsvp } from "@/lib/events";
+import { capacityText, EVENT_KIND_LABEL, myStatusText, RSVP_OPTIONS, RSVP_STATUS_LABEL, withRsvp } from "@/lib/events";
+import { EventAttendance, attendanceOpen } from "@/components/event-attendance";
+import { EventForm } from "@/components/event-form";
+import { EventShifts } from "@/components/event-shifts";
+import { Dialog } from "@/components/ui-client";
 import { shareLink } from "@/lib/share";
 import { ask, toast } from "@/components/ui-hosts";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -18,6 +22,7 @@ const MAX_FACES = 12;
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+const ended = (e: EventItem) => (e.endsAt ? new Date(e.endsAt) : new Date(new Date(e.startsAt).getTime() + 3 * 3600_000)) < new Date();
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -27,6 +32,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -52,7 +58,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   async function rsvp(status: RsvpStatus) {
     setError(null);
     const before = event;
-    if (event) setEvent(withRsvp(event, status)); // sofort sichtbar
+    // Sofort sichtbar, aber nur ohne Limit: mit Limit entscheidet der Server (Zusage oder Warteliste)
+    if (event && event.capacity === null) setEvent(withRsvp(event, status));
     try {
       setEvent(await api<EventItem>(`/events/${id}/rsvp`, { method: "PUT", body: { status } }));
       if (event?.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`));
@@ -100,6 +107,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           badges={
             <>
               {event.canceled && <Badge tone="danger">abgesagt</Badge>}
+              <Badge>{EVENT_KIND_LABEL[event.kind]}</Badge>
               {event.seriesId && <Badge>Serie</Badge>}
             </>
           }
@@ -142,7 +150,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
         {event.description && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{event.description}</p>}
 
-        {!event.canceled && (
+        {!event.canceled && !ended(event) && (
           <div>
             <SectionTitle className="mb-2">Kommst du?</SectionTitle>
             <div className="grid grid-cols-3 gap-2 sm:flex" role="group" aria-label="Teilnahme">
@@ -152,9 +160,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 </Button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted">
-              {event.counts.yes} Zusagen · {event.counts.maybe} vielleicht · {event.counts.no} Absagen
+            <p className="mt-2 text-xs text-muted" aria-live="polite">
+              {capacityText(event)} · {event.counts.maybe} vielleicht · {event.counts.no} Absagen
+              {event.myStatus && <> · <span className="font-medium text-text">Du: {myStatusText(event)}</span></>}
             </p>
+            {event.myStatus === "waitlist" && (
+              <p className="mt-1 text-xs text-muted">Wird ein Platz frei, rückst du automatisch nach und bekommst eine Benachrichtigung.</p>
+            )}
           </div>
         )}
 
@@ -189,6 +201,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <Button variant="secondary" onClick={() => shareLink(event.title, `/kalender/${event.id}`)}>
             <Share2 size={16} aria-hidden /> Teilen
           </Button>
+          {event.canManage && !event.canceled && !ended(event) && (
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              <Pencil size={16} aria-hidden /> Bearbeiten
+            </Button>
+          )}
           {event.canManage && !event.canceled && (
             <>
               <Button variant="secondary" onClick={() => cancel("single")}>Termin absagen</Button>
@@ -199,6 +216,25 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         {error && <Alert>{error}</Alert>}
       </Card>
 
+      <Dialog open={editing} onClose={() => setEditing(false)} title="Termin bearbeiten" size="lg">
+        <EventForm
+          idPrefix="edit"
+          event={event}
+          onCancel={() => setEditing(false)}
+          onSaved={async (e) => {
+            setEvent(e);
+            setEditing(false);
+            toast.success("Termin gespeichert.");
+            // Limit/Sichtbarkeit koennen Zusagen und Warteliste veraendern
+            if (e.canManage) setPeople(await api<RsvpItem[]>(`/events/${id}/participants`).catch(() => null));
+            setAttendees(await api<EventAttendees>(`/events/${id}/attendees`).catch(() => null));
+          }}
+        />
+      </Dialog>
+
+      <EventShifts event={event} />
+      {event.canManage && attendanceOpen(event) && <EventAttendance event={event} />}
+
       {event.canManage && people && (
         <Card className="mt-4">
           <SectionTitle icon={Users} className="mb-3">Teilnehmer (nur für die Verwaltung)</SectionTitle>
@@ -206,7 +242,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <p className="text-sm text-muted">Noch keine Rückmeldungen.</p>
           ) : (
             <div className="space-y-3">
-              {(["yes", "maybe", "no"] as const).map((s) => {
+              {(["yes", "waitlist", "maybe", "no"] as const).map((s) => {
                 const list = people.filter((p) => p.status === s);
                 return (
                   list.length > 0 && (

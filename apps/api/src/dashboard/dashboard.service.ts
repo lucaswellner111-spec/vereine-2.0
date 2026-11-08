@@ -19,12 +19,13 @@ export class DashboardService {
     const org = await this.orgs.requireBySlug(slug);
     const role = await this.orgs.activeRole(org.id, user.id);
     if (role !== "admin" && role !== "treasurer") throw new ForbiddenException("Nur Vorstand und Kassenwart sehen die Übersicht.");
-    const [detail, pending, stats, invoices, upcoming] = await Promise.all([
+    const [detail, pending, stats, invoices, upcoming, attendance] = await Promise.all([
       this.orgs.detail(slug, user.id),
       this.orgs.pendingCount(org.id),
       this.members.stats(org.id),
       this.billing.dashboard(org.id),
       this.events.listForOrg(user, slug, { from: new Date().toISOString() }),
+      this.events.attendanceStats(org.id),
     ]);
     return {
       members: detail.members,
@@ -33,6 +34,7 @@ export class DashboardService {
       minors: stats.minors,
       invoices,
       upcomingEvents: upcoming.filter((e) => !e.canceled).slice(0, 5).map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt, yes: e.counts.yes })),
+      attendance,
       byFeeClass: stats.byFeeClass,
       joinsByMonth: stats.joinsByMonth,
     };

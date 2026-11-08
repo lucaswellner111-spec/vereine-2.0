@@ -137,3 +137,59 @@ describe("Migration 0017: Beitraege bearbeiten, Kommentarmeldungen, Vereinsbilde
     expect((await pg.query<{ l: string | null }>("select logo_media_id as l from social.organizations")).rows[0].l).toBeNull();
   });
 });
+
+describe("Migration 0018: Termine mit Limit, Warteliste, Helferlisten, Anwesenheit", () => {
+  it("traegt yes_count nach und haelt Zaehler per Trigger (auch bei Kaskaden)", async () => {
+    const pg = new PGlite();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+    for (const file of files.filter((f) => f < "0018")) for (const stmt of statements(file)) await pg.exec(stmt);
+
+    const u = (n: number) => `00000000-0000-0000-0000-00000000000${n}`;
+    const org = "00000000-0000-0000-0000-0000000000a1";
+    const ev = "00000000-0000-0000-0000-0000000000e1";
+    await pg.exec(`
+      insert into identity.users (id, email, password_hash, display_name) values
+        ('${u(1)}', 'a@example.de', 'h', 'Anna'), ('${u(2)}', 'b@example.de', 'h', 'Ben'), ('${u(3)}', 'c@example.de', 'h', 'Cleo');
+      insert into social.organizations (id, slug, name, category, city) values ('${org}', 'tsv', 'TSV', 'Sport', 'Stadt');
+      insert into social.events (id, org_id, title, starts_at) values ('${ev}', '${org}', 'Training', now() + interval '1 day');
+      insert into social.event_rsvps (event_id, user_id, status) values ('${ev}', '${u(1)}', 'yes'), ('${ev}', '${u(2)}', 'yes'), ('${ev}', '${u(3)}', 'maybe');
+    `);
+
+    for (const stmt of statements("0018_p4b_events.sql")) await pg.exec(stmt);
+
+    const count = async () => (await pg.query<{ n: number; kind: string }>(`select yes_count as n, kind from social.events where id = '${ev}'`)).rows[0];
+    expect(await count()).toEqual({ n: 2, kind: "other" }); // Backfill, Standard-Art
+    await pg.exec(`update social.event_rsvps set status = 'yes' where user_id = '${u(3)}'`);
+    expect((await count()).n).toBe(3);
+    await pg.exec(`update social.event_rsvps set status = 'yes', updated_at = now() where user_id = '${u(3)}'`); // gleicher Status: kein Doppelzaehlen
+    expect((await count()).n).toBe(3);
+    await pg.exec(`update social.event_rsvps set status = 'no' where user_id = '${u(2)}'`);
+    expect((await count()).n).toBe(2);
+    await pg.exec(`delete from identity.users where id = '${u(1)}'`); // Kaskade Kontoloeschung
+    expect((await count()).n).toBe(1);
+
+    // Limit: Zusage ueber das Limit scheitert am CHECK (23514), Limit unter Zusagen ebenso
+    await pg.exec(`update social.events set capacity = 1 where id = '${ev}'`);
+    await expect(pg.exec(`update social.event_rsvps set status = 'yes' where user_id = '${u(2)}'`)).rejects.toMatchObject({ code: "23514" });
+    expect((await count()).n).toBe(1);
+    await expect(pg.exec(`update social.events set capacity = 0 where id = '${ev}'`)).rejects.toThrow();
+    await expect(pg.exec(`update social.events set kind = 'grillen' where id = '${ev}'`)).rejects.toThrow();
+
+    // Helferplaetze: Trigger zaehlt, CHECK verhindert Ueberbuchung, Kaskade senkt
+    const shift = "00000000-0000-0000-0000-0000000000d1";
+    await pg.exec(`insert into social.event_shifts (id, event_id, title, slots) values ('${shift}', '${ev}', 'Kuchen', 1)`);
+    await pg.exec(`insert into social.event_shift_signups (shift_id, user_id) values ('${shift}', '${u(2)}')`);
+    await expect(pg.exec(`insert into social.event_shift_signups (shift_id, user_id) values ('${shift}', '${u(3)}')`)).rejects.toMatchObject({ code: "23514" });
+    const taken = async () => (await pg.query<{ t: number }>(`select taken as t from social.event_shifts`)).rows[0].t;
+    expect(await taken()).toBe(1);
+    await pg.exec(`delete from identity.users where id = '${u(2)}'`);
+    expect(await taken()).toBe(0);
+
+    // Anwesenheit: nur bekannte Werte; Termin loeschen raeumt alles ab (Trigger auf geloeschtem Termin stoert nicht)
+    await expect(pg.exec(`insert into social.event_attendance (event_id, user_id, status) values ('${ev}', '${u(3)}', 'krank')`)).rejects.toThrow();
+    await pg.exec(`insert into social.event_attendance (event_id, user_id, status) values ('${ev}', '${u(3)}', 'present')`);
+    await pg.exec(`delete from social.events where id = '${ev}'`);
+    const left = await pg.query<{ n: number }>("select (select count(*) from social.event_rsvps) + (select count(*) from social.event_shifts) + (select count(*) from social.event_attendance) as n");
+    expect(Number(left.rows[0].n)).toBe(0);
+  });
+});

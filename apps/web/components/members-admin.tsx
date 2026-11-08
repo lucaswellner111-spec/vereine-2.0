@@ -37,6 +37,11 @@ export function DashboardPanel({ slug }: { slug: string; onError?: (m: string | 
         {d.invoices && stat("Offene Rechnungen", String(d.invoices.open), `${eurCents(d.invoices.openCents)} · ${d.invoices.overdue} überfällig`)}
         {d.invoices && stat("Bezahlt (dieses Jahr)", eurCents(d.invoices.paidThisYearCents))}
         {d.minors !== null && stat("Minderjährige", String(d.minors), "nach hinterlegtem Geburtsdatum")}
+        {stat(
+          "Anwesenheitsquote (90 Tage)",
+          d.attendance.rate === null ? "–" : `${Math.round(d.attendance.rate * 100)} %`,
+          d.attendance.events ? `aus ${d.attendance.events} erfassten ${d.attendance.events === 1 ? "Termin" : "Terminen"}` : "noch keine Anwesenheit erfasst",
+        )}
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

@@ -127,6 +127,13 @@
       "when": 1794093561407,
       "tag": "0017_p4a_posts_orgs",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794147057343,
+      "tag": "0018_p4b_events",
+      "breakpoints": true
     }
   ]
 }

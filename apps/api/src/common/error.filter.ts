@@ -22,6 +22,8 @@ export class AppErrorFilter extends BaseExceptionFilter {
     const code = pgCode(exception);
     if (code?.startsWith("22")) return super.catch(new BadRequestException("Ungültige Eingabe."), host);
     if (code === "23505") return super.catch(new ConflictException("Dieser Eintrag existiert bereits."), host);
+    // CHECK verletzt, z. B. Termin- oder Dienstgrenze in einem Rennen erreicht
+    if (code === "23514") return super.catch(new ConflictException("Die Grenze ist erreicht."), host);
 
     const fst = exception as { code?: unknown; statusCode?: unknown; message?: unknown } | null;
     if (typeof fst?.code === "string" && fst.code.startsWith("FST_") && typeof fst.statusCode === "number" && fst.statusCode >= 400 && fst.statusCode < 500) {

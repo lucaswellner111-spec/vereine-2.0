@@ -15,6 +15,7 @@ import { MediaService } from "../media/media.service";
 import { MembersService } from "../members/members.service";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, comments, consents, follows, orgMembers, posts, sessions, users } from "../db/schema";
+import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
 import { OrgsService } from "../orgs/orgs.service";
 
@@ -39,6 +40,7 @@ export class PrivacyService implements OnModuleInit {
     @Inject(MembersService) private readonly members: MembersService,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(EventsService) private readonly events: EventsService,
   ) {}
 
   onModuleInit() {
@@ -111,6 +113,7 @@ export class PrivacyService implements OnModuleInit {
       comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, at: c.createdAt.toISOString() })),
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
       memberships: memberships.map((m) => ({ orgId: m.orgId, role: m.role, status: m.status })),
+      events: await this.events.exportFor(user.id),
       chat: chatData,
       media: await this.mediaSvc.countFor(user.id),
       invoices: await this.billing.exportFor(user.id),
@@ -164,6 +167,8 @@ export class PrivacyService implements OnModuleInit {
       await tx.insert(auditLog).values({ userId: null, action: "user.deleted" });
       await tx.delete(users).where(eq(users.id, userId));
     });
+    // Zusagen sind per Kaskade weg: freie Plaetze aus Wartelisten fuellen (sonst spaetestens der 10-Minuten-Job)
+    await this.events.fillAllWaitlists().catch(() => undefined);
   }
 
   /** Job: gesperrte Konten (deleted_at aelter als `olderThanMs`), die noch existieren, fertig loeschen. */

@@ -88,3 +88,13 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Paket P4a: offen (Stand 2026-11-08)
 - **DSA-Beweissicherung bei gelöschten Kommentaren:** „Entfernen“ einer Kommentarmeldung löscht den Kommentar endgültig, die Meldung verschwindet per Kaskade; das Audit-Log enthält nur IDs. Mit DSB/Anwalt klären: Beweiskopie (verschlüsselt, befristet wie bei Chat-Meldungen) und Begründung an den Kommentarautor (Art. 17 DSA; bisher keine Benachrichtigung, da keine neue Art vorgesehen).
 - Beitrag bearbeiten speichert keine Versionen; ob für Moderation eine kurze Historie nötig ist, mit der DSA-Frage oben entscheiden.
+
+## Paket P4b: offen (Stand 2026-11-08)
+- **Anwesenheit – Frist (DSB):** Vorschlag 24 Monate nach Termin, danach löschen; Löschjob kommt in P5. Bis dahin bleiben Einträge, bis Austritt, Kontolöschung oder Vereins-/Terminlöschung.
+- **Anwesenheit bei Minderjährigen (DSB):** Reicht der Vereinszweck, oder braucht es Information der Erziehungsberechtigten bzw. eine kürzere Frist? Bewusst kein Grund/Freitext bei „entschuldigt“ (keine Gesundheitsdaten).
+- **Anwesenheits-Export** (CSV/PDF) für Vereine kommt in P5, ebenso ein Protokolleintrag beim Export.
+- **Helferlisten-Namen:** aktive Mitglieder sehen, wer sich eingetragen hat (wie bei den Zusagen, Frage aus Q2: Opt-out „nur als Zahl“?).
+- Warteliste: Wer bei einem öffentlichen Termin auf der Warteliste steht und dem Verein entfolgt, bleibt auf der Liste und kann nachrücken (wie Zusagen bisher). Ggf. beim Entfolgen bereinigen.
+- Serie bearbeiten: Datum/Uhrzeit ändern sich nur einzeln (Entscheidung 9); eine Verschiebung der ganzen Serie fehlt.
+- **Anwesenheit bei öffentlichen Terminen:** Die Liste zeigt nur Personen mit Zusage, die aktive Mitglieder sind (plus bereits Erfasste). Mitglieder ohne Zusage, die trotzdem kommen, lassen sich über die API erfassen, erscheinen in der Oberfläche aber nicht; Follower/Gäste werden nie erfasst (Datenminimierung). Prüfen, ob Vereine eine Suche „Mitglied hinzufügen“ brauchen.
+- Wird ein öffentlicher Termin auf intern gestellt, werden Zusagen, Warteliste und Helfer-Einträge von Nicht-Mitgliedern (bzw. Nicht-Teammitgliedern) ohne Benachrichtigung entfernt; ggf. eine Hinweis-Benachrichtigung ergänzen.

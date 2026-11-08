@@ -1,6 +1,8 @@
 import {
   AlarmClock,
   BadgeCheck,
+  CalendarCheck,
+  CalendarClock,
   CalendarPlus,
   CalendarX,
   EyeOff,
@@ -34,6 +36,10 @@ export function describeNotification(n: NotificationItem): { text: string; href:
       return { text: `Erinnerung: ${d.title} – ${fmt(d.startsAt)}`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
     case "event_canceled":
       return { text: d.series ? `Abgesagt: ${d.title} – ${d.series} Termine ab ${fmt(d.startsAt)}` : `Abgesagt: ${d.title} (${fmt(d.startsAt)})`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
+    case "event_updated":
+      return { text: d.series ? `Geändert: ${d.title} (${d.series} Termine der Serie)` : `Geändert: ${d.title} – jetzt ${fmt(d.startsAt)}`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
+    case "event_waitlist_promoted":
+      return { text: `Du bist nachgerückt: ${d.title} (${fmt(d.startsAt)}) – dein Platz ist bestätigt.`, href: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
     case "new_follower":
       return { text: `${d.name} folgt dir jetzt.`, href: `/profil/${d.handle}` };
     case "follow_request":
@@ -56,6 +62,8 @@ export const NOTIFICATION_ICONS: Record<NotificationItem["type"], LucideIcon> = 
   event_created: CalendarPlus,
   event_reminder: AlarmClock,
   event_canceled: CalendarX,
+  event_updated: CalendarClock,
+  event_waitlist_promoted: CalendarCheck,
   new_follower: UserPlus,
   follow_request: UserPlus,
   follow_accepted: UserCheck,

@@ -5,18 +5,21 @@ import Link from "next/link";
 import { useState } from "react";
 import type { EventItem, RsvpStatus } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { RSVP_OPTIONS, withRsvp } from "@/lib/events";
+import { capacityText, EVENT_KIND_LABEL, myStatusText, RSVP_OPTIONS, withRsvp } from "@/lib/events";
 import { Alert, Badge, Button, Card } from "./ui";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
 
-export function EventCard({ event, onChange }: { event: EventItem; onChange: (e: EventItem) => void }) {
+/** showDate: Datum mit anzeigen (Listen ohne Tagesueberschrift, z. B. vergangene Termine). */
+
+export function EventCard({ event, onChange, showDate = false }: { event: EventItem; onChange: (e: EventItem) => void; showDate?: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   async function rsvp(status: RsvpStatus) {
     setError(null);
     const before = event;
-    onChange(withRsvp(event, status)); // sofort sichtbar
+    if (event.capacity === null) onChange(withRsvp(event, status)); // sofort sichtbar; mit Limit entscheidet der Server
     try {
       onChange(await api<EventItem>(`/events/${event.id}/rsvp`, { method: "PUT", body: { status } }));
     } catch (e) {
@@ -27,6 +30,8 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
 
   const start = new Date(event.startsAt);
   const end = event.endsAt ? new Date(event.endsAt) : null;
+  const ended = (end ?? new Date(start.getTime() + 3 * 3600_000)) < new Date();
+  const mine = myStatusText(event);
 
   return (
     <Card>
@@ -37,14 +42,17 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
             <Link href={`/kalender/${event.id}`} className="hover:text-brand hover:underline">{event.title}</Link>
           </p>
           <p className="mt-0.5 text-sm text-muted">
+            {showDate && `${dateFmt.format(start)}, `}
             {timeFmt.format(start)}
             {end && ` – ${timeFmt.format(end)}`} Uhr
             {event.location && ` · ${event.location}`}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
             <Link href={`/vereine/${event.orgSlug}`} className="hover:underline">{event.orgName}</Link>
+            <Badge>{EVENT_KIND_LABEL[event.kind]}</Badge>
             {event.teamName && <Badge tone="brand">{event.teamName}</Badge>}
             {event.visibility === "public" && <Badge>öffentlich</Badge>}
+            {event.myStatus === "waitlist" && <Badge tone="accent">{mine}</Badge>}
             {event.canceled && <Badge tone="danger">abgesagt</Badge>}
           </p>
         </div>
@@ -63,7 +71,13 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
       </div>
       {event.description && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{event.description}</p>}
 
-      {!event.canceled && (
+      {!event.canceled && ended && (
+        <p className="mt-2 text-xs text-muted">
+          {capacityText(event)}
+          {mine && ` · Du: ${mine}`}
+        </p>
+      )}
+      {!event.canceled && !ended && (
         <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Teilnahme">
           {RSVP_OPTIONS.map((o) => (
             <Button
@@ -77,7 +91,7 @@ export function EventCard({ event, onChange }: { event: EventItem; onChange: (e:
             </Button>
           ))}
           <span className="text-xs text-muted">
-            {event.counts.yes} Zusagen · {event.counts.maybe} vielleicht · {event.counts.no} Absagen
+            {capacityText(event)} · {event.counts.maybe} vielleicht · {event.counts.no} Absagen
           </span>
         </div>
       )}

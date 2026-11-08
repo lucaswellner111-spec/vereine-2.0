@@ -29,6 +29,10 @@ export function pushMessage(type: Type, d: Record<string, string>): PushPayload 
       return { title: "Termin morgen", body: d.title ?? "", url: "/kalender" };
     case "event_canceled":
       return { title: "Termin abgesagt", body: d.title ?? "", url: "/kalender" };
+    case "event_updated":
+      return { title: "Termin geändert", body: d.title ?? "", url: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
+    case "event_waitlist_promoted":
+      return { title: "Du bist nachgerückt", body: d.title ?? "", url: d.eventId ? `/kalender/${d.eventId}` : "/kalender" };
     case "new_follower":
       return { title: "Neuer Follower", body: `${d.name ?? "Jemand"} folgt dir jetzt.`, url: `/profil/${d.handle ?? ""}` };
     case "follow_request":

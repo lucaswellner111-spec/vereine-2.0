@@ -284,6 +284,12 @@ export const events = social.table(
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    kind: text("kind").notNull().default("other"), // training | match | meeting | party | other
+    /** Teilnehmerlimit, null = unbegrenzt. */
+    capacity: integer("capacity"),
+    /** Zahl der Zusagen; gepflegt vom Trigger social.event_rsvps_count (auch bei Kaskaden), begrenzt per CHECK. */
+    yesCount: integer("yes_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -291,6 +297,9 @@ export const events = social.table(
     index("events_starts_idx").on(t.startsAt),
     index("events_series_idx").on(t.seriesId),
     index("events_team_idx").on(t.teamId),
+    check("events_kind_chk", sql`kind IN ('training', 'match', 'meeting', 'party', 'other')`),
+    check("events_capacity_chk", sql`capacity IS NULL OR capacity BETWEEN 1 AND 10000`),
+    check("events_yes_count_chk", sql`yes_count >= 0 AND (capacity IS NULL OR yes_count <= capacity)`),
   ],
 );
 
@@ -306,10 +315,66 @@ export const eventRsvps = social.table(
   {
     eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    status: text("status").notNull(), // yes | maybe | no
+    status: text("status").notNull(), // yes | maybe | no | waitlist
+    /** Reihenfolge der Warteliste (nur bei status waitlist gesetzt). */
+    waitlistedAt: timestamp("waitlisted_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.eventId, t.userId] }), index("event_rsvps_user_idx").on(t.userId)],
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.userId] }),
+    index("event_rsvps_user_idx").on(t.userId),
+    index("event_rsvps_waitlist_idx").on(t.eventId, t.status, t.waitlistedAt),
+  ],
+);
+
+/** Helferliste: Dienste an einem Termin (z. B. Kuchenstand 14-16 Uhr, 3 Plaetze). */
+export const eventShifts = social.table(
+  "event_shifts",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    slots: integer("slots").notNull(),
+    /** Belegte Plaetze; gepflegt vom Trigger social.event_shift_signups_count, begrenzt per CHECK. */
+    taken: integer("taken").notNull().default(0),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("event_shifts_event_position_idx").on(t.eventId, t.position),
+    check("event_shifts_title_chk", sql`char_length(title) BETWEEN 2 AND 80`),
+    check("event_shifts_slots_chk", sql`slots BETWEEN 1 AND 100`),
+    check("event_shifts_taken_chk", sql`taken >= 0 AND taken <= slots`),
+  ],
+);
+
+export const eventShiftSignups = social.table(
+  "event_shift_signups",
+  {
+    shiftId: uuid("shift_id").notNull().references(() => eventShifts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.shiftId, t.userId] }), index("event_shift_signups_user_idx").on(t.userId)],
+);
+
+/** Anwesenheit je Termin und Person (nur Vorstand/Moderation). Bewusst ohne Freitext/Grund (keine Art.-9-Daten). */
+export const eventAttendance = social.table(
+  "event_attendance",
+  {
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull(), // present | absent | excused
+    markedBy: uuid("marked_by").references(() => users.id, { onDelete: "set null" }),
+    markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.eventId, t.userId] }),
+    index("event_attendance_user_idx").on(t.userId),
+    check("event_attendance_status_chk", sql`status IN ('present', 'absent', 'excused')`),
+  ],
 );
 
 // --- Chat (eigener Bereich, KEINE Fremdschluessel auf identity/social) -----------

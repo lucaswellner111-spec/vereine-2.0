@@ -6,13 +6,15 @@ import { ProfilesModule } from "../profiles/profiles.module";
 import { CalendarFeedController } from "./calendar-feed.controller";
 import { CalendarFeedService } from "./calendar-feed.service";
 import { EventsController } from "./events.controller";
+import { AttendanceService } from "./attendance.service";
 import { EventsService } from "./events.service";
+import { ShiftsService } from "./shifts.service";
 import { TeamsService } from "./teams.service";
 
 @Module({
   imports: [AuthModule, OrgsModule, NotificationsModule, ProfilesModule],
   controllers: [EventsController, CalendarFeedController],
-  providers: [EventsService, TeamsService, CalendarFeedService],
+  providers: [EventsService, TeamsService, CalendarFeedService, ShiftsService, AttendanceService],
   exports: [EventsService],
 })
 export class EventsModule {}

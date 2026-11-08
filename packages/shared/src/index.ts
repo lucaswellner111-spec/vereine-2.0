@@ -234,6 +234,11 @@ export type TeamItem = { id: string; name: string; description: string; members:
 export type TeamMemberItem = { userId: string; name: string };
 
 export const EVENT_VISIBILITY = ["members", "public"] as const;
+/** Art des Termins (Anzeige, Filter, Anwesenheitsquote). */
+export const EVENT_KINDS = ["training", "match", "meeting", "party", "other"] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+/** Teilnehmerlimit: leer = unbegrenzt. */
+const eventCapacity = z.number().int().min(1).max(10000);
 export const createEventSchema = z
   .object({
     title: z.string().trim().min(3).max(120),
@@ -243,6 +248,8 @@ export const createEventSchema = z
     endsAt: z.string().datetime({ offset: true }).optional(),
     teamId: z.string().uuid().optional(),
     visibility: z.enum(EVENT_VISIBILITY).default("members"),
+    kind: z.enum(EVENT_KINDS).default("other"),
+    capacity: eventCapacity.optional(),
     /** Serie: der Termin wird mehrfach angelegt (woechentlich, 14-taegig, monatlich). */
     repeat: z.object({ freq: z.enum(["weekly", "biweekly", "monthly"]), count: z.number().int().min(2).max(52) }).optional(),
   })
@@ -252,8 +259,33 @@ export const createEventSchema = z
   });
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 
+/**
+ * Termin bearbeiten (alle Felder optional). scope "series": dieser und alle spaeteren Termine der Serie, aber
+ * Datum/Uhrzeit aendern sich immer nur bei diesem Termin. Das Team bleibt fest.
+ */
+export const updateEventSchema = z
+  .object({
+    title: z.string().trim().min(3).max(120).optional(),
+    description: z.string().trim().max(1000).optional(),
+    location: z.string().trim().max(120).optional(),
+    startsAt: z.string().datetime({ offset: true }).optional(),
+    endsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    visibility: z.enum(EVENT_VISIBILITY).optional(),
+    kind: z.enum(EVENT_KINDS).optional(),
+    capacity: eventCapacity.nullable().optional(),
+    scope: z.enum(["single", "series"]).default("single"),
+  })
+  .refine((e) => !e.endsAt || !e.startsAt || new Date(e.endsAt) > new Date(e.startsAt), {
+    message: "Das Ende muss nach dem Beginn liegen.",
+    path: ["endsAt"],
+  });
+export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+
 export const RSVP_STATUS = ["yes", "maybe", "no"] as const;
+/** Antwort, die man selbst geben kann. */
 export type RsvpStatus = (typeof RSVP_STATUS)[number];
+/** Gespeicherter Stand: bei vollem Limit wird aus einer Zusage "waitlist". */
+export type RsvpState = RsvpStatus | "waitlist";
 export const rsvpSchema = z.object({ status: z.enum(RSVP_STATUS) });
 
 export type EventItem = {
@@ -271,11 +303,63 @@ export type EventItem = {
   canceled: boolean;
   /** Gemeinsame Kennung der Termine einer Serie (sonst null). */
   seriesId: string | null;
-  counts: { yes: number; maybe: number; no: number };
-  myStatus: RsvpStatus | null;
+  kind: EventKind;
+  /** Teilnehmerlimit, null = unbegrenzt. */
+  capacity: number | null;
+  counts: { yes: number; maybe: number; no: number; waitlist: number };
+  myStatus: RsvpState | null;
+  /** Eigener Platz auf der Warteliste (1 = als Naechstes), sonst null. */
+  waitlistPosition: number | null;
   canManage: boolean;
 };
-export type RsvpItem = { userId: string; name: string; status: RsvpStatus };
+export type RsvpItem = { userId: string; name: string; status: RsvpState };
+
+// --- Helferlisten (Dienste an einem Termin) ---
+const shiftTime = z.string().datetime({ offset: true }).nullable().optional();
+export const createShiftSchema = z
+  .object({
+    title: z.string().trim().min(2).max(80),
+    startsAt: shiftTime,
+    endsAt: shiftTime,
+    slots: z.number().int().min(1).max(100),
+  })
+  .refine((s) => !s.endsAt || !s.startsAt || new Date(s.endsAt) > new Date(s.startsAt), { message: "Das Ende muss nach dem Beginn liegen.", path: ["endsAt"] });
+export const updateShiftSchema = z
+  .object({
+    title: z.string().trim().min(2).max(80).optional(),
+    startsAt: shiftTime,
+    endsAt: shiftTime,
+    slots: z.number().int().min(1).max(100).optional(),
+  })
+  .refine((s) => !s.endsAt || !s.startsAt || new Date(s.endsAt) > new Date(s.startsAt), { message: "Das Ende muss nach dem Beginn liegen.", path: ["endsAt"] });
+export type CreateShiftInput = z.infer<typeof createShiftSchema>;
+export type UpdateShiftInput = z.infer<typeof updateShiftSchema>;
+export type ShiftPerson = { userId: string; name: string; handle: string | null; avatarId: string | null };
+export type ShiftItem = {
+  id: string;
+  title: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  slots: number;
+  taken: number;
+  mine: boolean;
+  /** Nur fuer aktive Vereinsmitglieder (sonst fehlt das Feld). */
+  people?: ShiftPerson[];
+};
+
+// --- Anwesenheit (nur Vorstand/Moderation) ---
+export const ATTENDANCE_STATUS = ["present", "absent", "excused"] as const;
+export type AttendanceStatus = (typeof ATTENDANCE_STATUS)[number];
+export const saveAttendanceSchema = z.object({
+  entries: z
+    .array(z.object({ userId: z.string().uuid(), status: z.enum(ATTENDANCE_STATUS).nullable() }))
+    .min(1)
+    .max(500)
+    .refine((list) => new Set(list.map((e) => e.userId)).size === list.length, { message: "Jede Person nur einmal." }),
+});
+export type SaveAttendanceInput = z.infer<typeof saveAttendanceSchema>;
+export type AttendanceEntry = { userId: string; name: string; status: AttendanceStatus | null; rsvp: RsvpState | null };
+export type AttendanceList = { entries: AttendanceEntry[] };
 /**
  * Zusagen fuer alle, die den Termin sehen: bei internen/Team-Terminen sehen Vereinsmitglieder Anzeigename
  * und Avatar der Zusagen; bei oeffentlichen Terminen nur die Anzahl (visible = false).
@@ -295,6 +379,8 @@ export type NotificationItem = {
     | "event_created"
     | "event_reminder"
     | "event_canceled"
+    | "event_updated"
+    | "event_waitlist_promoted"
     | "new_follower"
     | "follow_request"
     | "follow_accepted"
@@ -666,6 +752,8 @@ export type OrgDashboard = {
   minors: number | null;
   invoices: { open: number; overdue: number; openCents: number; paidThisYearCents: number } | null;
   upcomingEvents: { id: string; title: string; startsAt: string; yes: number }[];
+  /** Anwesenheit der letzten 90 Tage: Anteil "da" an allen Eintraegen (null = keine Eintraege), Zahl der erfassten Termine. */
+  attendance: { rate: number | null; events: number };
   byFeeClass: { name: string; members: number }[];
   joinsByMonth: { month: string; joins: number }[];
 };
