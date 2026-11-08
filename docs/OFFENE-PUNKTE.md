@@ -84,3 +84,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Oberfläche Paket Q2: offen (Stand 2026-11-07)
 - **Zusagen-Anzeige:** aktive Mitglieder sehen bei internen/Team-Terminen Namen und Profilbilder der Zusagen (ohne eigene Einwilligung). Mit DSB klären, ob Vereinszweck (Art. 6 Abs. 1 lit. b/f) reicht oder ein Opt-out („Meine Zusage nur als Zahl zeigen“) nötig ist.
 - Benachrichtigungen kommen per Polling (30 s, pausiert im Hintergrund); Live-Zustellung über den Socket fehlt noch.
+
+## Paket P4a: offen (Stand 2026-11-08)
+- **DSA-Beweissicherung bei gelöschten Kommentaren:** „Entfernen“ einer Kommentarmeldung löscht den Kommentar endgültig, die Meldung verschwindet per Kaskade; das Audit-Log enthält nur IDs. Mit DSB/Anwalt klären: Beweiskopie (verschlüsselt, befristet wie bei Chat-Meldungen) und Begründung an den Kommentarautor (Art. 17 DSA; bisher keine Benachrichtigung, da keine neue Art vorgesehen).
+- Beitrag bearbeiten speichert keine Versionen; ob für Moderation eine kurze Historie nötig ist, mit der DSA-Frage oben entscheiden.

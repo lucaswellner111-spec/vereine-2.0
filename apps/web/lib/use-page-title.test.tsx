@@ -16,3 +16,17 @@ describe("usePageTitle", () => {
     expect(document.title).toBe("TSV Musterstadt · Klubnest");
   });
 });
+
+describe("usePageTitle gegen spaete Metadaten", () => {
+  it("setzt den Titel erneut, wenn Next ihn nachtraeglich ueberschreibt; nach dem Verlassen nicht mehr", async () => {
+    const { unmount } = renderHook(() => usePageTitle("Mein Beitrag"));
+    expect(document.title).toBe("Mein Beitrag · Klubnest");
+    document.title = "Beitrag · Klubnest"; // wie metadata.title aus layout.tsx
+    await new Promise((r) => setTimeout(r, 0)); // MutationObserver laeuft als Mikrotask
+    expect(document.title).toBe("Mein Beitrag · Klubnest");
+    unmount();
+    document.title = "Feed · Klubnest";
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.title).toBe("Feed · Klubnest");
+  });
+});

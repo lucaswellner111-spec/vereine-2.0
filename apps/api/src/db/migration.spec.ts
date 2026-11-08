@@ -93,3 +93,47 @@ describe("Migration 0016: Datenkorrekturen der Haertung", () => {
   });
 });
 
+
+describe("Migration 0017: Beitraege bearbeiten, Kommentarmeldungen, Vereinsbilder", () => {
+  it("ersetzt den Melde-Index, behaelt Bestand und erzwingt Besitzer oder Verein bei Medien", async () => {
+    const pg = new PGlite();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+    for (const file of files.filter((f) => f < "0017")) for (const stmt of statements(file)) await pg.exec(stmt);
+
+    const u = "00000000-0000-0000-0000-000000000001";
+    const org = "00000000-0000-0000-0000-0000000000a1";
+    const post = "00000000-0000-0000-0000-0000000000f1";
+    const comment = "00000000-0000-0000-0000-0000000000f2";
+    await pg.exec(`
+      insert into identity.users (id, email, password_hash, display_name) values ('${u}', 'a@example.de', 'h', 'Anna');
+      insert into social.organizations (id, slug, name, category, city) values ('${org}', 'tsv', 'TSV', 'Sport', 'Stadt');
+      insert into social.posts (id, author_id, org_id, body) values ('${post}', '${u}', '${org}', 'Hallo');
+      insert into social.comments (id, post_id, author_id, body) values ('${comment}', '${post}', '${u}', 'Kommentar');
+      insert into social.reports (post_id, reporter_id, reason, org_id) values ('${post}', '${u}', 'spam', '${org}');
+      insert into social.media (owner_id, kind, width, height, bytes) values ('${u}', 'avatar', 1, 1, 1);
+    `);
+
+    for (const stmt of statements("0017_p4a_posts_orgs.sql")) await pg.exec(stmt);
+
+    // Bestand bleibt
+    expect((await pg.query<{ n: number }>("select count(*)::int as n from social.reports")).rows[0].n).toBe(1);
+    expect((await pg.query<{ e: string | null }>("select edited_at as e from social.posts")).rows[0].e).toBeNull();
+    // Beitragsmeldung weiter nur einmal offen, Kommentarmeldung derselben Person daneben moeglich und auch nur einmal
+    await expect(pg.exec(`insert into social.reports (post_id, reporter_id, reason) values ('${post}', '${u}', 'spam')`)).rejects.toThrow();
+    await pg.exec(`insert into social.reports (post_id, comment_id, reporter_id, reason) values ('${post}', '${comment}', '${u}', 'spam')`);
+    await expect(pg.exec(`insert into social.reports (post_id, comment_id, reporter_id, reason) values ('${post}', '${comment}', '${u}', 'hate')`)).rejects.toThrow();
+    const idx = await pg.query<{ indexdef: string }>("select indexdef from pg_indexes where indexname = 'reports_open_once_uq'");
+    expect(idx.rows[0].indexdef).toMatch(/comment_id IS NULL/);
+    // Kaskade: Kommentar weg -> seine Meldung weg
+    await pg.exec(`delete from social.comments where id = '${comment}'`);
+    expect((await pg.query<{ n: number }>("select count(*)::int as n from social.reports")).rows[0].n).toBe(1);
+
+    // Medien: ohne Besitzer nur mit Verein (CHECK); Vereinsbild ueberlebt den Nutzer, Logo-Verweis wird bei Loeschung NULL
+    await expect(pg.exec(`insert into social.media (kind, width, height, bytes) values ('org_logo', 1, 1, 1)`)).rejects.toThrow();
+    const logo = "00000000-0000-0000-0000-0000000000b1";
+    await pg.exec(`insert into social.media (id, org_id, kind, width, height, bytes) values ('${logo}', '${org}', 'org_logo', 1, 1, 1)`);
+    await pg.exec(`update social.organizations set logo_media_id = '${logo}' where id = '${org}'`);
+    await pg.exec(`delete from social.media where id = '${logo}'`);
+    expect((await pg.query<{ l: string | null }>("select logo_media_id as l from social.organizations")).rows[0].l).toBeNull();
+  });
+});

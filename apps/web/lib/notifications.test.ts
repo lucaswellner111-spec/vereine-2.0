@@ -20,6 +20,11 @@ describe("describeNotification", () => {
     expect(describeNotification(n)).toEqual({ text: "Anna folgt dir jetzt.", href: "/profil/anna" });
     expect(NOTIFICATION_ICONS.new_follower).toBeTruthy();
   });
+
+  it("Kommentar fuehrt zur Beitragsseite", () => {
+    const n = { id: "2", type: "comment", data: { commenter: "Ben", excerpt: "Super", postId: "p1" }, readAt: null, createdAt: "" } as NotificationItem;
+    expect(describeNotification(n)).toEqual({ text: "Ben hat kommentiert: „Super“", href: "/beitrag/p1" });
+  });
 });
 
 describe("mergeNotifications", () => {

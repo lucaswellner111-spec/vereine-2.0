@@ -19,6 +19,7 @@ import {
   type OrgRole,
   type OrgSummary,
   type PublicUser,
+  type UpdateOrgInput,
 } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
@@ -145,12 +146,24 @@ export class OrgsService {
       .limit(1);
     return {
       ...summary,
+      bannerId: org.bannerMediaId,
       viewer: {
         following: !!follow,
         membership: !membership ? "none" : membership.status === "active" ? "active" : "pending",
         role: membership?.status === "active" ? (membership.role as OrgRole) : null,
       },
     };
+  }
+
+  /** Vereinsprofil (Name, Kategorie, Ort, Ueber uns) aendern - nur Vorstand; die Adresse (Slug) bleibt. */
+  async update(slug: string, actor: PublicUser, input: UpdateOrgInput): Promise<OrgDetail> {
+    const org = await this.requireBySlug(slug);
+    await this.requireAdmin(org.id, actor.id);
+    await this.db
+      .update(organizations)
+      .set({ name: input.name, category: input.category, city: input.city, about: input.about })
+      .where(eq(organizations.id, org.id));
+    return this.detail(slug, actor.id);
   }
 
   async follow(slug: string, userId: string, on: boolean): Promise<OrgDetail> {
@@ -500,6 +513,7 @@ export class OrgsService {
       about: r.about,
       followers: f.get(r.id) ?? 0,
       members: m.get(r.id) ?? 0,
+      logoId: r.logoMediaId,
     }));
   }
 }

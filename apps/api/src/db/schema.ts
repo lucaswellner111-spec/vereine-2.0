@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -111,6 +113,9 @@ export const organizations = social.table(
     address: text("address").notNull().default(""),
     iban: text("iban").notNull().default(""),
     taxInfo: text("tax_info").notNull().default(""),
+    /** Vereinslogo/-banner (gehoeren dem Verein, social.media mit org_id). */
+    logoMediaId: uuid("logo_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
+    bannerMediaId: uuid("banner_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("organizations_tags_idx").using("gin", t.tags)],
@@ -166,6 +171,8 @@ export const posts = social.table(
     /** Tags aus dem festen Katalog, max. 3 (bei Vereinsbeitraegen standardmaessig die des Vereins). */
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Zuletzt bearbeitet (Text/Tags); null = nie. */
+    editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     // Moderation (DSA): ausgeblendete Beitraege bleiben mit Begruendung gespeichert.
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
@@ -204,6 +211,8 @@ export const comments = social.table(
 export const reports = social.table("reports", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  /** gesetzt = Meldung eines Kommentars (post_id ist dann der Beitrag des Kommentars). */
+  commentId: uuid("comment_id").references(() => comments.id, { onDelete: "cascade" }),
   reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   reason: text("reason").notNull(),
   note: text("note"),
@@ -216,8 +225,9 @@ export const reports = social.table("reports", {
 }, (t) => [
   index("reports_org_status_idx").on(t.orgId, t.status),
   index("reports_post_status_idx").on(t.postId, t.status),
-  // Je Person hoechstens eine offene Meldung pro Beitrag (Doppelklicks, Spam).
-  uniqueIndex("reports_open_once_uq").on(t.postId, t.reporterId).where(sql`status = 'open'`),
+  // Je Person hoechstens eine offene Meldung pro Beitrag bzw. pro Kommentar (Doppelklicks, Spam).
+  uniqueIndex("reports_open_once_uq").on(t.postId, t.reporterId).where(sql`status = 'open' AND comment_id IS NULL`),
+  uniqueIndex("reports_comment_open_once_uq").on(t.commentId, t.reporterId).where(sql`status = 'open' AND comment_id IS NOT NULL`),
 ]);
 
 export const notifications = social.table(
@@ -427,14 +437,20 @@ export const media = social.table(
   "media",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(), // avatar | post
+    // Nutzerbilder: owner_id; Vereinsbilder (Logo/Banner): org_id, owner_id NULL (bleiben bei Kontoloeschung)
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id").references((): AnyPgColumn => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // avatar | post | org_logo | org_banner
     width: integer("width").notNull(),
     height: integer("height").notNull(),
     bytes: integer("bytes").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("media_owner_idx").on(t.ownerId)],
+  (t) => [
+    index("media_owner_idx").on(t.ownerId),
+    index("media_org_idx").on(t.orgId),
+    check("media_owner_or_org_chk", sql`owner_id IS NOT NULL OR org_id IS NOT NULL`),
+  ],
 );
 
 export const postMedia = social.table(

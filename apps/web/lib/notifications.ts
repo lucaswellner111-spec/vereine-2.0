@@ -20,7 +20,7 @@ export function describeNotification(n: NotificationItem): { text: string; href:
   const d = n.data;
   switch (n.type) {
     case "comment":
-      return { text: `${d.commenter} hat kommentiert: „${d.excerpt}“`, href: "/feed" };
+      return { text: `${d.commenter} hat kommentiert: „${d.excerpt}“`, href: d.postId ? `/beitrag/${d.postId}` : "/feed" };
     case "membership_request":
       return { text: `Neuer Mitgliedsantrag bei ${d.orgName}`, href: "/verwaltung/antraege" };
     case "membership_decision":

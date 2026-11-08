@@ -6,6 +6,8 @@ import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
 import { orgMembers, organizations, posts, profiles, userFollows } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OrgsService } from "../orgs/orgs.service";
+import { ChatService } from "../chat/chat.service";
 import { isUniqueViolation } from "../common/pg-errors";
 import { ProfileAccess, type ProfileRow } from "./profile-access.service";
 
@@ -17,6 +19,8 @@ export class ProfilesService {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(OrgsService) private readonly orgs: OrgsService,
+    @Inject(ChatService) private readonly chat: ChatService,
   ) {}
 
   async me(user: PublicUser): Promise<ProfileView> {
@@ -173,9 +177,14 @@ export class ProfilesService {
     return new Map(rows.map((r) => [r.id, r.status === "active" ? "following" : "requested"]));
   }
 
+  private async canMessage(viewerId: string, otherId: string): Promise<boolean> {
+    const [contact, blocked] = await Promise.all([this.orgs.canContact(viewerId, otherId), this.chat.isBlockedBetween(viewerId, otherId)]);
+    return contact && !blocked;
+  }
+
   private async view(viewerId: string, p: ProfileRow): Promise<ProfileView> {
     const isMe = viewerId === p.userId;
-    const [names, followState, [postCount], [followers], [following], clubs] = await Promise.all([
+    const [names, followState, [postCount], [followers], [following], clubs, canMessage] = await Promise.all([
       this.directory.names([p.userId]),
       isMe ? Promise.resolve(new Map<string, FollowState>()) : this.followStates(viewerId, [p.userId]),
       this.db.select({ n: sql<number>`count(*)::int` }).from(posts).where(and(eq(posts.authorId, p.userId), isNull(posts.orgId), isNull(posts.deletedAt), isNull(posts.hiddenAt))),
@@ -189,6 +198,9 @@ export class ProfilesService {
             .where(and(eq(orgMembers.userId, p.userId), eq(orgMembers.status, "active")))
             .limit(20)
         : Promise.resolve(null),
+      // "Nachricht schreiben": gleiche Regel wie beim Chat (gemeinsamer Verein bzw. Vorstand eines gefolgten Vereins)
+      // Blockierung in beide Richtungen: dann kein Knopf (Abfrage ueber den Chat-Bereich, keine fremden Tabellen)
+      isMe ? Promise.resolve(false) : this.canMessage(viewerId, p.userId),
     ]);
     const follow = followState.get(p.userId) ?? "none";
     const canView = isMe || p.visibility === "public" || follow === "following";
@@ -204,7 +216,7 @@ export class ProfilesService {
       showClubs: p.showClubs,
       counts: { posts: postCount.n, followers: followers.n, following: following.n },
       clubs: canView ? clubs : null, // bei privaten Profilen auch Vereinszugehoerigkeit nicht sichtbar
-      viewer: { isMe, follow, canView },
+      viewer: { isMe, follow, canView, canMessage },
     };
   }
 }

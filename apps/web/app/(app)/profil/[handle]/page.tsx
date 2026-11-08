@@ -1,9 +1,10 @@
 "use client";
 
-import { Images, Lock, UserX } from "lucide-react";
+import { Images, Lock, MessageSquare, UserX } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState, type ReactNode } from "react";
-import type { FeedPost, PersonItem, ProfileMediaPage, ProfileView } from "@vereine/shared";
+import type { ConversationDetail, FeedPost, PersonItem, ProfileMediaPage, ProfileView } from "@vereine/shared";
 import { PostCard } from "@/components/post-card";
 import { Alert, ArrowLink, Avatar, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, ListSkeleton } from "@/components/ui";
 import { BackButton, Dialog, SegmentedControl, tabPanelProps } from "@/components/ui-client";
@@ -35,6 +36,8 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   pathRef.current = handle;
   const [moreBusy, runMore] = useBusy();
   const [followBusy, runFollow] = useBusy();
+  const [chatBusy, runChat] = useBusy();
+  const router = useRouter();
   usePageTitle(profile.data?.displayName ?? null);
   const [tab, setTab] = useState<Tab>("fotos");
   const [moreFailed, setMoreFailed] = useMoreFailed(`${handle}/${tab}`);
@@ -179,9 +182,30 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
             v.isMe ? (
               <LinkButton href="/einstellungen/profil" variant="secondary">Profil bearbeiten</LinkButton>
             ) : (
-              <Button variant={v.follow === "none" ? "primary" : "secondary"} aria-busy={followBusy || undefined} onClick={toggleFollow}>
-                {v.follow === "following" ? "Du folgst" : v.follow === "requested" ? "Angefragt" : "Folgen"}
-              </Button>
+              <>
+                <Button variant={v.follow === "none" ? "primary" : "secondary"} aria-busy={followBusy || undefined} onClick={toggleFollow}>
+                  {v.follow === "following" ? "Du folgst" : v.follow === "requested" ? "Angefragt" : "Folgen"}
+                </Button>
+                {v.canMessage && (
+                  <Button
+                    variant="secondary"
+                    busy={chatBusy}
+                    onClick={() =>
+                      void runChat(async () => {
+                        // Bestehende Direktunterhaltung wird von der API wiederverwendet
+                        try {
+                          const c = await api<ConversationDetail>("/chat/conversations", { method: "POST", body: { kind: "direct", userId: p.userId } });
+                          router.push(`/chat?c=${encodeURIComponent(c.id)}`);
+                        } catch (e) {
+                          toast.error(describeError(e));
+                        }
+                      })
+                    }
+                  >
+                    <MessageSquare size={16} aria-hidden /> Nachricht schreiben
+                  </Button>
+                )}
+              </>
             )
           }
         >

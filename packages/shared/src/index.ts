@@ -100,6 +100,14 @@ export const createOrgSchema = z.object({
   about: z.string().trim().max(600).default(""),
 });
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
+/** Vereinsprofil bearbeiten (nur Vorstand); die Adresse (Slug) bleibt fest. */
+export const updateOrgSchema = z.object({
+  name: z.string().trim().min(3).max(80),
+  category: z.enum(ORG_CATEGORIES),
+  city: z.string().trim().min(2).max(60),
+  about: z.string().trim().max(600).default(""),
+});
+export type UpdateOrgInput = z.infer<typeof updateOrgSchema>;
 /** Vereins-Adressen, die mit festen Routen (/orgs/mine, /orgs/managed, /vereine/neu) kollidieren wuerden. */
 export const RESERVED_ORG_SLUGS = ["mine", "managed", "neu"];
 /** Namensliste aktiver Mitglieder (fuer Vorstand/Moderation, z. B. Gruppen-Chat anlegen) - ohne Rollen und E-Mails. */
@@ -117,8 +125,12 @@ export type OrgSummary = {
   about: string;
   followers: number;
   members: number;
+  /** Vereinslogo (Medien-ID, Varianten logo/logo-sm) oder null. */
+  logoId: string | null;
 };
 export type OrgDetail = OrgSummary & {
+  /** Banner (Varianten banner/banner-sm) oder null. */
+  bannerId: string | null;
   viewer: { following: boolean; membership: "none" | "pending" | "active"; role: OrgRole | null };
 };
 
@@ -134,6 +146,12 @@ export const createPostSchema = z
   })
   .refine((p) => p.body.length > 0 || p.mediaIds.length > 0, { message: "Text oder Bild erforderlich.", path: ["body"] });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
+/** Beitrag bearbeiten: nur Text und Tags (Bilder bleiben). Leerer Text nur, wenn der Beitrag Bilder hat (prueft die API). */
+export const updatePostSchema = z.object({
+  body: z.string().trim().max(1000),
+  tags: tagList(MAX_POST_TAGS).default([]),
+});
+export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 
 export const createCommentSchema = z.object({ body: z.string().trim().min(1).max(500) });
 export const reportSchema = z.object({
@@ -151,12 +169,16 @@ export type FeedPost = {
   tags: string[];
   createdAt: string;
   author: { id: string; name: string; handle: string | null; avatarId: string | null };
-  org: { slug: string; name: string } | null;
+  org: { slug: string; name: string; logoId: string | null } | null;
   media: MediaRef[];
   likes: number;
   comments: number;
   likedByMe: boolean;
   canDelete: boolean;
+  /** Autor darf Text/Tags aendern (bei Vereinsbeitraegen nur mit Vorstand-/Moderationsrolle). */
+  canEdit: boolean;
+  /** Zeitpunkt der letzten Bearbeitung oder null. */
+  editedAt: string | null;
   reason: string;
 };
 export type FeedResponse = {
@@ -198,6 +220,8 @@ export type ReportItem = {
   note: string | null;
   createdAt: string;
   post: { id: string; body: string; authorName: string; hidden: boolean };
+  /** gesetzt = Meldung eines Kommentars unter diesem Beitrag */
+  comment: { id: string; body: string; authorName: string } | null;
 };
 
 // --- Termine & Teams ---------------------------------------------------------
@@ -410,7 +434,7 @@ export type ProfileView = {
   showClubs: boolean;
   counts: { posts: number; followers: number; following: number };
   clubs: { slug: string; name: string }[] | null;
-  viewer: { isMe: boolean; follow: FollowState; canView: boolean };
+  viewer: { isMe: boolean; follow: FollowState; canView: boolean; canMessage: boolean };
 };
 /** isPrivate: privates Profil (Folgen braucht Freigabe), fuer den optimistischen Zustand "Angefragt". */
 export type PersonItem = { userId: string; handle: string; displayName: string; avatarId: string | null; follow: FollowState; isPrivate: boolean };

@@ -17,6 +17,7 @@ import {
   decisionSchema,
   orgTagsSchema,
   setRoleSchema,
+  updateOrgSchema,
   type MemberItem,
   type OrgDetail,
   type OrgMemberName,
@@ -56,6 +57,12 @@ export class OrgsController {
   @Get(":slug")
   detail(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgDetail> {
     return this.orgs.detail(slug, user.id);
+  }
+
+  /** Vereinsprofil bearbeiten (nur Vorstand). */
+  @Put(":slug")
+  update(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
+    return this.orgs.update(slug, user, parse(updateOrgSchema, body));
   }
 
   @Put(":slug/tags")

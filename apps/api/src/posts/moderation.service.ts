@@ -60,19 +60,25 @@ export class ModerationService {
         body: posts.body,
         hidden: posts.hiddenAt,
         authorId: posts.authorId,
+        commentId: comments.id,
+        commentBody: comments.body,
+        commentAuthorId: comments.authorId,
       })
       .from(reports)
       .innerJoin(posts, eq(posts.id, reports.postId))
+      .leftJoin(comments, eq(comments.id, reports.commentId))
       .where(and(scope, eq(reports.status, status)))
       .orderBy(desc(reports.createdAt))
       .limit(100);
-    const names = await this.directory.names(rows.map((r) => r.authorId));
+    const names = await this.directory.names(rows.flatMap((r) => (r.commentAuthorId ? [r.authorId, r.commentAuthorId] : [r.authorId])));
+    const name = (id: string) => names.get(id) ?? "Gelöschter Nutzer";
     return rows.map((r) => ({
       id: r.id,
       reason: r.reason,
       note: r.note,
       createdAt: r.createdAt.toISOString(),
-      post: { id: r.postId, body: r.body, authorName: names.get(r.authorId) ?? "Gelöschter Nutzer", hidden: !!r.hidden },
+      post: { id: r.postId, body: r.body, authorName: name(r.authorId), hidden: !!r.hidden },
+      comment: r.commentId ? { id: r.commentId, body: r.commentBody ?? "", authorName: name(r.commentAuthorId!) } : null,
     }));
   }
 
@@ -195,6 +201,13 @@ export class ModerationService {
         .update(reports)
         .set({ status: "dismissed", resolvedBy: actorId, resolvedAt: now })
         .where(eq(reports.id, reportId));
+      return;
+    }
+
+    // Kommentarmeldung: "hide" loescht den Kommentar (Meldungen dazu folgen per Kaskade); protokolliert ohne Inhalt
+    if (report.commentId) {
+      await this.db.delete(comments).where(eq(comments.id, report.commentId));
+      await this.audit.record(actorId, "comment.deleted", { commentId: report.commentId, postId: report.postId, orgId: report.orgId, reportId });
       return;
     }
 

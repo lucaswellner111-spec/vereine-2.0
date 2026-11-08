@@ -13,7 +13,8 @@ import { CACHE, type Cache } from "../cache/cache.module";
 import { enforceLimit } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
 import { OrgEvents } from "../orgs/org-events";
-import { media, postMedia, posts, profiles } from "../db/schema";
+import { OrgsService } from "../orgs/orgs.service";
+import { media, organizations, postMedia, posts, profiles } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
 import { ProfileAccess } from "../profiles/profile-access.service";
 import { StorageService } from "./storage.service";
@@ -24,11 +25,18 @@ const MAX_SIDE = 12_000;
 const UPLOADS_PER_HOUR = 40;
 const ALLOWED = new Set(["jpeg", "png", "webp"]);
 
-type Kind = "avatar" | "post";
-const VARIANTS: Record<Kind, Record<string, { size: number; fit: "cover" | "inside" }>> = {
-  avatar: { avatar: { size: 256, fit: "cover" }, "avatar-sm": { size: 64, fit: "cover" } },
-  post: { thumb: { size: 480, fit: "cover" }, medium: { size: 1080, fit: "inside" } },
+type Kind = "avatar" | "post" | "org_logo" | "org_banner";
+type Variant = { width: number; height: number; fit: "cover" | "inside" };
+const square = (size: number, fit: Variant["fit"]): Variant => ({ width: size, height: size, fit });
+const VARIANTS: Record<Kind, Record<string, Variant>> = {
+  avatar: { avatar: square(256, "cover"), "avatar-sm": square(64, "cover") },
+  post: { thumb: square(480, "cover"), medium: square(1080, "inside") },
+  org_logo: { logo: square(256, "cover"), "logo-sm": square(64, "cover") },
+  org_banner: { banner: { width: 1500, height: 500, fit: "cover" }, "banner-sm": { width: 750, height: 250, fit: "cover" } },
 };
+/** Variante, deren Masse in media.width/height landen. */
+const MAIN_VARIANT = new Set(["medium", "avatar", "logo", "banner"]);
+export type OrgImageKind = "logo" | "banner";
 
 /**
  * Bilder: Typ wird am Inhalt erkannt (nicht am Dateinamen/Header), EXIF/Metadaten (z. B. GPS) werden entfernt,
@@ -45,6 +53,7 @@ export class MediaService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
+    @Inject(OrgsService) private readonly orgs: OrgsService,
   ) {}
 
   onModuleInit() {
@@ -54,14 +63,17 @@ export class MediaService implements OnModuleInit {
     this.orgEvents.onOrgDeleting((orgId, tx) => this.removeForOrg(orgId, tx));
   }
 
-  /** Zeilen in der Loesch-Transaktion entfernen; Dateien erst nach dem Commit (Rueckgabe). */
+  /** Zeilen in der Loesch-Transaktion entfernen (Beitragsbilder, Logo, Banner); Dateien erst nach dem Commit (Rueckgabe). */
   private async removeForOrg(orgId: string, tx: Database): Promise<(() => Promise<void>) | void> {
-    const rows = await tx
-      .select({ id: postMedia.mediaId })
-      .from(postMedia)
-      .innerJoin(posts, eq(posts.id, postMedia.postId))
-      .where(eq(posts.orgId, orgId));
-    const ids = [...new Set(rows.map((r) => r.id))];
+    const [rows, own] = await Promise.all([
+      tx
+        .select({ id: postMedia.mediaId })
+        .from(postMedia)
+        .innerJoin(posts, eq(posts.id, postMedia.postId))
+        .where(eq(posts.orgId, orgId)),
+      tx.select({ id: media.id }).from(media).where(eq(media.orgId, orgId)),
+    ]);
+    const ids = [...new Set([...rows, ...own].map((r) => r.id))];
     if (ids.length === 0) return;
     await tx.delete(media).where(inArray(media.id, ids));
     return async () => {
@@ -73,17 +85,63 @@ export class MediaService implements OnModuleInit {
 
   async uploadPostImage(user: PublicUser, data: Buffer): Promise<MediaRef> {
     await this.rateLimit(user.id);
-    return this.store(user.id, "post", data);
+    return this.store({ ownerId: user.id }, "post", data);
   }
 
   async setAvatar(user: PublicUser, data: Buffer): Promise<MediaRef> {
     await this.rateLimit(user.id);
     const profile = await this.access.ensure(user.id);
     if (!profile) throw new NotFoundException("Profil nicht gefunden.");
-    const ref = await this.store(user.id, "avatar", data);
+    const ref = await this.store({ ownerId: user.id }, "avatar", data);
     await this.db.update(profiles).set({ avatarMediaId: ref.id, updatedAt: new Date() }).where(eq(profiles.userId, user.id));
     if (profile.avatarMediaId) await this.deleteMedia([profile.avatarMediaId]);
     return ref;
+  }
+
+  /** Vereinslogo/-banner setzen (nur Vorstand). Gehoert dem Verein (owner_id NULL), das alte Bild wird geloescht. */
+  async setOrgImage(user: PublicUser, slug: string, kind: OrgImageKind, data: Buffer): Promise<MediaRef> {
+    const org = await this.requireOrgAdmin(user, slug);
+    await this.rateLimit(user.id);
+    const ref = await this.store({ orgId: org.id }, kind === "logo" ? "org_logo" : "org_banner", data);
+    let old: string | null;
+    try {
+      // Atomar: alten Verweis unter Zeilensperre lesen und ersetzen (parallele Uploads verlieren kein Bild)
+      old = await this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({ logo: organizations.logoMediaId, banner: organizations.bannerMediaId })
+          .from(organizations)
+          .where(eq(organizations.id, org.id))
+          .for("update");
+        if (!row) throw new NotFoundException("Verein nicht gefunden.");
+        await tx
+          .update(organizations)
+          .set(kind === "logo" ? { logoMediaId: ref.id } : { bannerMediaId: ref.id })
+          .where(eq(organizations.id, org.id));
+        return kind === "logo" ? row.logo : row.banner;
+      });
+    } catch (err) {
+      await this.deleteMedia([ref.id]); // frisch gespeichertes Bild nicht verwaisen lassen
+      throw err;
+    }
+    if (old && old !== ref.id) await this.deleteMedia([old]);
+    return ref;
+  }
+
+  async removeOrgImage(user: PublicUser, slug: string, kind: OrgImageKind): Promise<void> {
+    const org = await this.requireOrgAdmin(user, slug);
+    const old = kind === "logo" ? org.logoMediaId : org.bannerMediaId;
+    if (!old) return;
+    await this.db
+      .update(organizations)
+      .set(kind === "logo" ? { logoMediaId: null } : { bannerMediaId: null })
+      .where(eq(organizations.id, org.id));
+    await this.deleteMedia([old]);
+  }
+
+  private async requireOrgAdmin(user: PublicUser, slug: string) {
+    const org = await this.orgs.requireBySlug(slug);
+    if ((await this.orgs.activeRole(org.id, user.id)) !== "admin") throw new ForbiddenException("Nur der Vorstand ändert Logo und Banner.");
+    return org;
   }
 
   async removeAvatar(user: PublicUser): Promise<void> {
@@ -97,7 +155,8 @@ export class MediaService implements OnModuleInit {
     await enforceLimit(this.cache, `media:up:${userId}`, UPLOADS_PER_HOUR, 3600, "Zu viele Uploads. Bitte warte etwas."); // fail open
   }
 
-  private async store(ownerId: string, kind: Kind, data: Buffer): Promise<MediaRef> {
+  /** owner: Nutzerbild (ownerId) oder Vereinsbild (orgId). */
+  private async store(owner: { ownerId?: string; orgId?: string }, kind: Kind, data: Buffer): Promise<MediaRef> {
     if (data.length === 0 || data.length > MAX_UPLOAD_BYTES) throw new BadRequestException("Bild ist leer oder groesser als 8 MB.");
     let meta: Metadata;
     try {
@@ -118,12 +177,12 @@ export class MediaService implements OnModuleInit {
       for (const [name, v] of Object.entries(VARIANTS[kind])) {
         const out = await sharp(data, { limitInputPixels: MAX_PIXELS })
           .rotate() // EXIF-Ausrichtung anwenden; Metadaten werden beim Neukodieren verworfen
-          .resize(v.size, v.size, { fit: v.fit, withoutEnlargement: v.fit === "inside" })
+          .resize(v.width, v.height, { fit: v.fit, withoutEnlargement: v.fit === "inside" })
           .webp({ quality: 80 })
           .toBuffer({ resolveWithObject: true });
         await this.storage.put(`${id}/${name}.webp`, out.data);
         bytes += out.data.length;
-        if (name === "medium" || name === "avatar") {
+        if (MAIN_VARIANT.has(name)) {
           width = out.info.width;
           height = out.info.height;
         }
@@ -132,7 +191,7 @@ export class MediaService implements OnModuleInit {
       await this.storage.remove(id);
       throw new BadRequestException("Das Bild konnte nicht verarbeitet werden.");
     }
-    await this.db.insert(media).values({ id, ownerId, kind, width, height, bytes });
+    await this.db.insert(media).values({ id, ownerId: owner.ownerId ?? null, orgId: owner.orgId ?? null, kind, width, height, bytes });
     return { id, width, height };
   }
 
@@ -171,6 +230,7 @@ export class MediaService implements OnModuleInit {
 
   // --- Ausliefern -------------------------------------------------------------------------
 
+  /** Avatare und Vereinsbilder (org_logo/org_banner) sehen alle Angemeldeten; Beitragsbilder nach Beitragsregel. */
   async serve(user: PublicUser, id: string, variant: string): Promise<Buffer> {
     const [m] = await this.db.select().from(media).where(eq(media.id, id)).limit(1);
     if (!m || !(variant in VARIANTS[m.kind as Kind])) throw new NotFoundException("Bild nicht gefunden.");
@@ -210,7 +270,7 @@ export class MediaService implements OnModuleInit {
     return rows.length;
   }
 
-  /** Kontoloeschung: alle Dateien des Nutzers entfernen (Zeilen folgen per Kaskade). */
+  /** Kontoloeschung: alle Dateien des Nutzers entfernen (Zeilen folgen per Kaskade). Vereinsbilder (owner_id NULL) bleiben. */
   async eraseUser(userId: string): Promise<void> {
     const rows = await this.db.select({ id: media.id }).from(media).where(eq(media.ownerId, userId));
     for (const r of rows) await this.storage.remove(r.id);

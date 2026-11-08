@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import {
   createCommentSchema,
   createPostSchema,
@@ -17,6 +17,7 @@ import {
   type FeedPost,
   type FeedResponse,
   type PublicUser,
+  updatePostSchema,
 } from "@vereine/shared";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
@@ -135,6 +136,16 @@ export class PostsController {
     return this.posts.create(user, parse(createPostSchema, body));
   }
 
+  @Get("posts/:id")
+  get(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<FeedPost> {
+    return this.posts.get(user, id);
+  }
+
+  @Patch("posts/:id")
+  update(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<FeedPost> {
+    return this.posts.update(user, id, parse(updatePostSchema, body));
+  }
+
   @Delete("posts/:id")
   @HttpCode(204)
   remove(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
@@ -162,6 +173,12 @@ export class PostsController {
   @HttpCode(204)
   removeComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
     return this.posts.deleteComment(user, id);
+  }
+
+  @Post("comments/:id/report")
+  @HttpCode(204)
+  reportComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    return this.posts.reportComment(user, id, parse(reportSchema, body));
   }
 
   @Post("posts/:id/report")

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import {
   isTagId,
@@ -12,6 +12,7 @@ import {
   type MutedItem,
   type PublicUser,
   type ReportInput,
+  type UpdatePostInput,
 } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
@@ -81,8 +82,43 @@ export class PostsService {
       await this.db.delete(posts).where(eq(posts.id, row.id)); // kein halber Beitrag
       throw err;
     }
-    const [post] = await this.hydrate([row.id], user.id, EMPTY_CTX);
+    // Rolle wurde oben geprueft: Vereinsbeitrag darf der Autor gleich bearbeiten
+    const [post] = await this.hydrate([row.id], user.id, orgId ? { ...EMPTY_CTX, modOrgs: new Set([orgId]) } : EMPTY_CTX);
     return post;
+  }
+
+  /** Einzelner Beitrag (Detailseite): gleiche Sichtbarkeit wie Likes/Kommentare. */
+  async get(user: PublicUser, postId: string): Promise<FeedPost> {
+    await this.requirePost(postId, user.id);
+    const [post] = await this.hydrate([postId], user.id, await this.context(user.id));
+    return post;
+  }
+
+  /**
+   * Text/Tags aendern: nur der Autor, bei Vereinsbeitraegen zusaetzlich mit Vorstand-/Moderationsrolle.
+   * Bilder bleiben; leerer Text nur mit Bildern. Waehrend einer offenen Meldung gesperrt (Beweislage bleibt).
+   */
+  async update(user: PublicUser, postId: string, input: UpdatePostInput): Promise<FeedPost> {
+    const post = await this.requirePost(postId, user.id);
+    if (post.authorId !== user.id) throw new ForbiddenException("Nur der Autor darf den Beitrag bearbeiten.");
+    if (post.orgId) {
+      const role = await this.orgs.activeRole(post.orgId, user.id);
+      if (!role || !MODERATION_ROLES.includes(role)) throw new ForbiddenException("Vereinsbeiträge bearbeiten nur Vorstand und Moderation.");
+    }
+    await enforceLimit(this.cache, `post:edit:${user.id}`, 60, 3600, limitMessage("Bearbeitungen"));
+    if (!input.body) {
+      const [img] = await this.db.select({ id: postMedia.mediaId }).from(postMedia).where(eq(postMedia.postId, postId)).limit(1);
+      if (!img) throw new BadRequestException("Text oder Bild erforderlich.");
+    }
+    const [open] = await this.db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.postId, postId), isNull(reports.commentId), eq(reports.status, "open")))
+      .limit(1);
+    if (open) throw new ConflictException("Beitrag wird geprüft und kann gerade nicht bearbeitet werden.");
+    await this.db.update(posts).set({ body: input.body, tags: input.tags, editedAt: new Date() }).where(eq(posts.id, postId));
+    const [updated] = await this.hydrate([postId], user.id, await this.context(user.id));
+    return updated;
   }
 
   // --- Feed ---------------------------------------------------------------------------------
@@ -324,14 +360,36 @@ export class PostsService {
     const [open] = await this.db
       .select({ id: reports.id })
       .from(reports)
-      .where(and(eq(reports.postId, postId), eq(reports.reporterId, user.id), eq(reports.status, "open")))
+      .where(and(eq(reports.postId, postId), isNull(reports.commentId), eq(reports.reporterId, user.id), eq(reports.status, "open")))
       .limit(1);
     if (open) return;
     await enforceLimit(this.cache, `report:${user.id}`, 30, 3600, limitMessage("Meldungen"));
     await this.db
       .insert(reports)
       .values({ postId, orgId: post.orgId, reporterId: user.id, reason: input.reason, note: input.note })
-      .onConflictDoNothing(); // partieller Unique-Index (post_id, reporter_id) where status='open'
+      .onConflictDoNothing(); // partieller Unique-Index (post_id, reporter_id) where status='open' and comment_id is null
+  }
+
+  /**
+   * Kommentar melden: wer den Beitrag sehen darf, nicht den eigenen. Landet in der Queue des Vereins
+   * (Vereinsbeitrag) bzw. der Plattform (persoenlicher Beitrag); je Person eine offene Meldung pro Kommentar.
+   */
+  async reportComment(user: PublicUser, commentId: string, input: ReportInput): Promise<void> {
+    const [c] = await this.db.select({ postId: comments.postId, authorId: comments.authorId }).from(comments).where(eq(comments.id, commentId)).limit(1);
+    if (!c) throw new NotFoundException("Kommentar nicht gefunden.");
+    const post = await this.requirePost(c.postId, user.id);
+    if (c.authorId === user.id) throw new BadRequestException("Eigene Kommentare kannst du nicht melden.");
+    const [open] = await this.db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(and(eq(reports.commentId, commentId), eq(reports.reporterId, user.id), eq(reports.status, "open")))
+      .limit(1);
+    if (open) return;
+    await enforceLimit(this.cache, `report:${user.id}`, 30, 3600, limitMessage("Meldungen"));
+    await this.db
+      .insert(reports)
+      .values({ postId: post.id, commentId, orgId: post.orgId, reporterId: user.id, reason: input.reason, note: input.note })
+      .onConflictDoNothing(); // partieller Unique-Index (comment_id, reporter_id) where status='open'
   }
 
   async remove(user: PublicUser, postId: string): Promise<void> {
@@ -462,8 +520,8 @@ export class PostsService {
     const [rows, likeCounts, commentCounts, mine, mediaMap] = await Promise.all([
       this.db
         .select({
-          id: posts.id, body: posts.body, kind: posts.kind, tags: posts.tags, createdAt: posts.createdAt, authorId: posts.authorId,
-          orgId: organizations.id, orgSlug: organizations.slug, orgName: organizations.name,
+          id: posts.id, body: posts.body, kind: posts.kind, tags: posts.tags, createdAt: posts.createdAt, editedAt: posts.editedAt, authorId: posts.authorId,
+          orgId: organizations.id, orgSlug: organizations.slug, orgName: organizations.name, orgLogo: organizations.logoMediaId,
         })
         .from(posts)
         .leftJoin(organizations, eq(organizations.id, posts.orgId))
@@ -504,12 +562,14 @@ export class PostsService {
             tags: r.tags,
             createdAt: r.createdAt.toISOString(),
             author: { id: r.authorId, name: authorName, handle: prof?.handle ?? null, avatarId: prof?.avatarMediaId ?? null },
-            org: r.orgSlug ? { slug: r.orgSlug, name: r.orgName! } : null,
+            org: r.orgSlug ? { slug: r.orgSlug, name: r.orgName!, logoId: r.orgLogo } : null,
             media: mediaMap.get(r.id) ?? [],
             likes: l,
             comments: c,
             likedByMe: liked.has(id),
             canDelete: r.authorId === userId || canModerate(r.orgId),
+            canEdit: r.authorId === userId && (!r.orgId || canModerate(r.orgId)),
+            editedAt: r.editedAt?.toISOString() ?? null,
             reason: reasonFor(relation, r.orgName, l, c, { authorName }),
             orgId: r.orgId,
           };

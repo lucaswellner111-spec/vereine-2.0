@@ -646,6 +646,11 @@ export class ChatService implements OnModuleInit {
   }
 
   /** IDs aus `ids`, mit denen `userId` in irgendeiner Richtung eine Sperre hat. */
+  /** Besteht eine Blockierung zwischen zwei Personen (egal wer wen)? Fuer andere Bereiche (z. B. Profil "Nachricht schreiben"). */
+  async isBlockedBetween(userId: string, otherId: string): Promise<boolean> {
+    return (await this.blockedBetween(userId, [otherId])).has(otherId);
+  }
+
   private async blockedBetween(userId: string, ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.db

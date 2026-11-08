@@ -1,12 +1,15 @@
 "use client";
 
 import { use, useRef, useState } from "react";
-import { MAX_ORG_TAGS, type FeedPost, type OrgDetail } from "@vereine/shared";
+import { MAX_ORG_TAGS, type EventItem, type FeedPost, type OrgDetail, type TeamItem } from "@vereine/shared";
+import { EventCard } from "@/components/event-card";
 import { TagChips } from "@/components/tag-chips";
 import { LazyTagPicker as TagPicker } from "@/components/lazy";
 import { PostCard } from "@/components/post-card";
-import { Building2 } from "lucide-react";
-import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, SectionTitle } from "@/components/ui";
+import { Building2, CalendarDays, Settings, Share2, Users } from "lucide-react";
+import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, SectionTitle } from "@/components/ui";
+import { mediaUrl } from "@/lib/media";
+import { shareLink } from "@/lib/share";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/labels";
@@ -31,6 +34,12 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
   const [error, setError] = useState<string | null>(null);
   usePageTitle(org.data?.name ?? null);
   const [editTags, setEditTags] = useState<string[] | null>(null);
+  // Kommende Termine (sichtbare, hoechstens 3); Zeitpunkt einmal festhalten, sonst neuer Pfad bei jedem Rendern
+  const [now] = useState(() => new Date().toISOString());
+  const upcoming = useApi<EventItem[]>(`/orgs/${slug}/events?from=${encodeURIComponent(now)}`);
+  // Teams nur fuer aktive Mitglieder (sonst 403)
+  const isMember = org.data?.viewer.membership === "active";
+  const teams = useApi<TeamItem[]>(isMember ? `/orgs/${slug}/teams` : null);
 
   async function act(fn: () => Promise<OrgDetail>) {
     setError(null);
@@ -99,12 +108,39 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
       </ul>
     );
 
+  const withdraw = async () => {
+    if (!(await ask("Deinen Mitgliedsantrag zurückziehen? Du kannst später einen neuen stellen.", { title: "Antrag zurückziehen?", confirmLabel: "Zurückziehen" }))) return;
+    setError(null);
+    try {
+      await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
+      org.reload();
+      toast.success("Antrag zurückgezogen.");
+    } catch (e) {
+      setError(describeError(e));
+    }
+  };
+
+  const nextEvents = (upcoming.data ?? []).slice(0, 3);
+
   return (
     <>
       <BackLink href="/vereine">Alle Vereine</BackLink>
-      <Card className="mb-4">
+      <Card flush={!!o.bannerId} className="mb-4 overflow-hidden">
+        {o.bannerId && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mediaUrl(o.bannerId, "banner")}
+            srcSet={`${mediaUrl(o.bannerId, "banner-sm")} 750w, ${mediaUrl(o.bannerId, "banner")} 1500w`}
+            sizes="(min-width: 768px) 768px, 100vw"
+            alt=""
+            width={1500}
+            height={500}
+            className="aspect-[3/1] w-full bg-surface-2 object-cover"
+          />
+        )}
+        <div className={o.bannerId ? "p-4 sm:p-6" : undefined}>
         <DetailHeader
-          media={<Avatar name={o.name} size={64} />}
+          media={<Avatar name={o.name} size={64} mediaId={o.logoId} kind="org" />}
           title={o.name}
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
@@ -126,7 +162,12 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
                 Mitglied werden
               </Button>
             )}
-            {viewer.membership === "pending" && <Badge tone="accent">Antrag wartet auf Freigabe</Badge>}
+            {viewer.membership === "pending" && (
+              <>
+                <Badge tone="accent">Antrag wartet auf Freigabe</Badge>
+                <Button variant="ghost" onClick={() => void withdraw()}>Antrag zurückziehen</Button>
+              </>
+            )}
             {viewer.membership === "active" && viewer.role !== "admin" && (
               <Button
                 variant="ghost"
@@ -145,6 +186,14 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
                 Austreten
               </Button>
             )}
+            {viewer.role === "admin" && (
+              <LinkButton variant="secondary" href={`/verwaltung/vereinsdaten?verein=${encodeURIComponent(slug)}`}>
+                <Settings size={16} aria-hidden /> Verwalten
+              </LinkButton>
+            )}
+            <Button variant="ghost" aria-label="Verein teilen" onClick={() => void shareLink(o.name, `/vereine/${slug}`)}>
+              <Share2 size={16} aria-hidden /> <span className="max-sm:sr-only">Teilen</span>
+            </Button>
           </>
           }
         />
@@ -168,9 +217,48 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           </div>
         )}
         <p className="mt-2 text-xs text-muted">{o.members} {o.members === 1 ? "Mitglied" : "Mitglieder"} · {o.followers} Follower</p>
+        </div>
       </Card>
 
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+
+      <SectionTitle icon={CalendarDays} className="mb-3 mt-6">Kommende Termine</SectionTitle>
+      {upcoming.error && !upcoming.data ? (
+        <ErrorState message={upcoming.error} onRetry={upcoming.reload} />
+      ) : !upcoming.data ? (
+        <CardSkeletons count={1} />
+      ) : nextEvents.length === 0 ? (
+        <p className="text-sm text-muted">Gerade keine Termine.</p>
+      ) : (
+        <ul className="space-y-3">
+          {nextEvents.map((e) => (
+            <li key={e.id}>
+              <EventCard event={e} onChange={(u) => upcoming.setData((l) => (l ?? []).map((x) => (x.id === u.id ? u : x)))} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {nextEvents.length > 0 && <ArrowLink href="/kalender" className="mt-2">Alle Termine im Kalender</ArrowLink>}
+
+      {isMember && teams.data && teams.data.length > 0 && (
+        <>
+          <SectionTitle icon={Users} className="mb-3 mt-6">Teams</SectionTitle>
+          <Card flush className="divide-y divide-border">
+            {teams.data.map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 p-3 text-sm">
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{t.name}</span>
+                  {t.description && <span className="block truncate text-xs text-muted">{t.description}</span>}
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
+                  {t.isMember && <Badge tone="brand">Dein Team</Badge>}
+                  {t.members} {t.members === 1 ? "Mitglied" : "Mitglieder"}
+                </span>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
 
       <SectionTitle className="mb-3 mt-6">Beiträge</SectionTitle>
       {postList}

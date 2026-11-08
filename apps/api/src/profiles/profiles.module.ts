@@ -1,12 +1,14 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { OrgsModule } from "../orgs/orgs.module";
+import { ChatModule } from "../chat/chat.module";
 import { ProfileAccess } from "./profile-access.service";
 import { ProfilesController } from "./profiles.controller";
 import { ProfilesService } from "./profiles.service";
 
 @Module({
-  imports: [AuthModule, NotificationsModule],
+  imports: [AuthModule, NotificationsModule, OrgsModule, ChatModule],
   controllers: [ProfilesController],
   providers: [ProfilesService, ProfileAccess],
   exports: [ProfileAccess],
