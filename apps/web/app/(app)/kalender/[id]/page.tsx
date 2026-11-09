@@ -5,7 +5,7 @@ import { CalendarPlus, CalendarX2, Clock, ExternalLink, MapPin, Pencil, Share2, 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { EventAttendees, EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
-import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, SectionTitle } from "@/components/ui";
+import { Alert, ArrowLink, Avatar, BackLink, Badge, Button, Card, CardSkeletons, DetailHeader, EmptyState, ErrorState, LinkButton, SectionTitle, UserNameLink } from "@/components/ui";
 import { api, ApiError, describeError } from "@/lib/api";
 import { capacityText, EVENT_KIND_LABEL, myStatusText, RSVP_OPTIONS, RSVP_STATUS_LABEL, withRsvp } from "@/lib/events";
 import { EventAttendance, attendanceOpen } from "@/components/event-attendance";
@@ -250,7 +250,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       <p className="mb-1.5 text-xs font-medium text-muted">{RSVP_STATUS_LABEL[s]} ({list.length})</p>
                       <ul className="flex flex-wrap gap-1.5">
                         {list.map((p) => (
-                          <li key={p.userId} className="rounded-full bg-surface-2 px-3 py-1 text-sm">{p.name}</li>
+                          <li key={p.userId} className="rounded-full bg-surface-2 px-3 py-1 text-sm">
+                            <UserNameLink handle={p.handle} name={p.name} />
+                          </li>
                         ))}
                       </ul>
                     </div>

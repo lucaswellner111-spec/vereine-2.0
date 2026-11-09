@@ -6,7 +6,7 @@ import type { EventItem, ShiftItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useApi, useBusy } from "@/lib/use-api";
 import { toLocalInput } from "./event-form";
-import { Avatar, Badge, Button, Card, Field, ListSkeleton, SectionTitle } from "./ui";
+import { Badge, Button, Card, Field, ListSkeleton, SectionTitle, UserAvatarLink, UserNameLink } from "./ui";
 import { Dialog } from "./ui-client";
 import { ask, toast } from "./ui-hosts";
 
@@ -125,8 +125,8 @@ export function EventShifts({ event }: { event: EventItem }) {
                   <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Eingetragen bei ${s.title}`}>
                     {s.people.map((p) => (
                       <li key={p.userId} className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 py-0.5 pl-0.5 pr-2 text-sm">
-                        <Avatar name={p.name} mediaId={p.avatarId} size={22} />
-                        <span className="max-w-32 truncate">{p.name}</span>
+                        <UserAvatarLink handle={p.handle} name={p.name} mediaId={p.avatarId} size={22} decorative />
+                        <UserNameLink handle={p.handle} name={p.name} className="max-w-32 truncate" />
                         {event.canManage && (
                           <button
                             type="button"

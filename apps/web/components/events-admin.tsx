@@ -7,7 +7,7 @@ import { api, describeError } from "@/lib/api";
 import { capacityText, EVENT_KIND_LABEL, RSVP_STATUS_LABEL } from "@/lib/events";
 import { useApi } from "@/lib/use-api";
 import { EventForm } from "./event-form";
-import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton } from "./ui";
+import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, LinkButton, UserNameLink } from "./ui";
 import { ask } from "./ui-hosts";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -118,7 +118,7 @@ export function EventsAdmin({ slug, onError }: { slug: string; onError: (m: stri
                       const Icon = RSVP_ICON[p.status];
                       return (
                         <li key={p.userId} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-3 py-1">
-                          {p.name}
+                          <UserNameLink handle={p.handle} name={p.name} />
                           <Icon size={12} aria-hidden className="text-muted" />
                           <span className="sr-only">{RSVP_STATUS_LABEL[p.status]}</span>
                         </li>

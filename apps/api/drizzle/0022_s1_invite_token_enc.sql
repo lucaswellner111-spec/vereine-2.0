@@ -1,0 +1,1 @@
+ALTER TABLE "social"."org_invites" ADD COLUMN "token_enc" text;

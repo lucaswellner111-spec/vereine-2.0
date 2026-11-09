@@ -76,7 +76,7 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
     expect(list).toEqual([expect.objectContaining({ name: "Herren", members: 1, isMember: true })]);
     expect((await req(ben, "GET", `/orgs/${org}/teams`)).json()[0].isMember).toBe(false);
     expect((await req(nina, "GET", `/orgs/${org}/teams`)).statusCode).toBe(403);
-    expect((await req(vera, "GET", `/orgs/${org}/teams/${teamId}/members`)).json()).toEqual([{ userId: mia.id, name: "mia" }]);
+    expect((await req(vera, "GET", `/orgs/${org}/teams/${teamId}/members`)).json()).toEqual([{ userId: mia.id, name: "mia", handle: "mia" }]);
   });
 
   it("Termine anlegen: Rechte und Validierung", async () => {

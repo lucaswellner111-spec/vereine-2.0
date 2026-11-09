@@ -11,7 +11,7 @@ import { announceText, foreignNewMessages } from "@/lib/chat-announce";
 import { COARSE_POINTER_QUERY, enterSends, useAutoGrow, visibleOutbox } from "@/lib/chat-input";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { REPORT_REASONS } from "@/lib/labels";
-import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea } from "../ui";
+import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea, UserAvatarLink, UserNameLink } from "../ui";
 import { DropdownMenu, type MenuEntry } from "../ui-client";
 import { ask, toast } from "@/components/ui-hosts";
 import { AddMembersDialog } from "./add-members-dialog";
@@ -233,6 +233,7 @@ export function Thread({
   }
 
   const other = detail.kind === "direct" ? detail.members.find((m) => m.userId !== me.id) : undefined;
+  const handleOf = new Map(detail.members.map((m) => [m.userId, m.handle]));
   let lastDay = "";
 
   const messageMenu = (m: ChatMessage): MenuEntry[] =>
@@ -274,10 +275,14 @@ export function Thread({
       {liveRegion}
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 max-md:py-1.5 max-md:pl-1">
         {backButton}
-        <Avatar name={detail.title} size={32} mediaId={detail.avatarId} />
+        {other ? (
+          <UserAvatarLink handle={other.handle} name={detail.title} size={32} mediaId={detail.avatarId} decorative />
+        ) : (
+          <Avatar name={detail.title} size={32} mediaId={detail.avatarId} />
+        )}
         <div className="min-w-0 flex-1">
           <h2 id={`thread-title-${id}`} ref={titleRef} tabIndex={-1} className="truncate text-sm font-medium focus:outline-none focus-visible:underline">
-            {detail.title}
+            {other ? <UserNameLink handle={other.handle} name={detail.title} /> : detail.title}
           </h2>
           <p className="truncate text-xs text-muted">
             {detail.kind === "group" ? `${detail.members.length} Mitglieder` : "Direktnachricht"}
@@ -311,8 +316,8 @@ export function Thread({
               <ul className="flex flex-wrap gap-2">
                 {detail.members.map((m) => (
                   <li key={m.userId} className="inline-flex items-center gap-1.5 rounded-full bg-surface py-1 pl-1 pr-3">
-                    <Avatar name={m.name} size={24} mediaId={m.avatarId} />
-                    {m.name} {m.role === "owner" && <Badge tone="brand">Besitzer</Badge>}
+                    <UserAvatarLink handle={m.handle} name={m.name} size={24} mediaId={m.avatarId} decorative />
+                    <UserNameLink handle={m.handle} name={m.name} /> {m.role === "owner" && <Badge tone="brand">Besitzer</Badge>}
                     {detail.iAmOwner && m.userId !== me.id && (
                       <button
                         type="button"
@@ -417,7 +422,12 @@ export function Thread({
                     m.deleted ? "bg-surface-2 italic text-muted" : m.mine ? "bg-brand text-brand-contrast" : "bg-surface-2",
                   )}
                 >
-                  {detail.kind === "group" && !m.mine && <p className="mb-0.5 text-xs font-medium text-brand">{m.senderName}</p>}
+                  {detail.kind === "group" && !m.mine && (
+                    <p className="mb-0.5 text-xs font-medium text-brand">
+                      {/* Handle aus der Mitgliederliste; ehemalige Mitglieder ohne Link */}
+                      <UserNameLink handle={handleOf.get(m.senderId)} name={m.senderName} />
+                    </p>
+                  )}
                   <p className="whitespace-pre-wrap break-words">{m.deleted ? "Nachricht gelöscht" : m.body}</p>
                   <p className={clsx("mt-0.5 text-right text-[11px]", m.mine && !m.deleted ? "text-brand-contrast/85" : "text-muted")}>
                     {timeFmt.format(new Date(m.createdAt))}

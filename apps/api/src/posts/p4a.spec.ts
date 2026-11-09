@@ -160,7 +160,7 @@ describe("P4a: Beitraege, Kommentarmeldungen, Vereinsseite", () => {
 
       const queue = (await req(mo, "GET", `/orgs/${slug}/reports`)).json() as { id: string; comment: { id: string; body: string; authorName: string } | null }[];
       const item = queue.find((r) => r.comment?.id === c.id)!;
-      expect(item.comment).toEqual({ id: c.id, body: "Boeser Kommentar", authorName: "mia" });
+      expect(item.comment).toEqual({ id: c.id, body: "Boeser Kommentar", authorName: "mia", authorHandle: "mia" });
       expect(queue.find((r) => r.comment === null && r.id !== item.id)).toBeTruthy();
 
       expect((await req(mo, "POST", `/reports/${item.id}/resolve`, { action: "hide", reason: "Beleidigung entfernt" })).statusCode).toBe(204);

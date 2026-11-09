@@ -1,7 +1,7 @@
 "use client";
 
 import { ORG_ROLES, type MemberItem, type OrgRole } from "@vereine/shared";
-import { Button, Card, CardSkeletons, EmptyState, ErrorState, Select } from "./ui";
+import { Button, Card, CardSkeletons, EmptyState, ErrorState, Select, UserNameLink } from "./ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/labels";
@@ -53,7 +53,7 @@ export function MembersManager({
         return (
           <div key={m.userId} className="flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{m.name}</p>
+              <p className="truncate text-sm font-medium"><UserNameLink handle={m.handle} name={m.name} /></p>
               <p className="text-xs text-muted">seit {new Date(m.since).toLocaleDateString("de-DE")}</p>
               {mode === "active" && self && <p className="mt-0.5 text-xs text-muted">Deine eigene Rolle kann ein anderer Vorstand ändern.</p>}
             </div>

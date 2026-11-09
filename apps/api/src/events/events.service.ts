@@ -144,9 +144,10 @@ export class EventsService implements OnModuleInit {
       .from(eventRsvps)
       .where(eq(eventRsvps.eventId, id))
       .limit(2000);
-    const names = await this.directory.names(rows.map((r) => r.userId));
+    const ids = rows.map((r) => r.userId);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return rows
-      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer", status: r.status as RsvpState }))
+      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer", handle: handles.get(r.userId) ?? null, status: r.status as RsvpState }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
   }
 

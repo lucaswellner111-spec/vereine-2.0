@@ -7,7 +7,7 @@ import { tagLabel, type ModerationCommentItem, type ModerationPostItem } from "@
 import { api, describeError } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
 import { ReportQueue } from "./moderation-queue";
-import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, TextareaField } from "./ui";
+import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, TextareaField, UserNameLink } from "./ui";
 import { SegmentedControl, tabPanelProps } from "./ui-client";
 import { ask, toast } from "./ui-hosts";
 
@@ -88,7 +88,7 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
           <li key={p.id}>
             <Card className={clsx(p.hidden && "opacity-80")}>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="font-medium text-text">{p.authorName}</span>
+                <UserNameLink handle={p.authorHandle} name={p.authorName} className="font-medium text-text" />
                 <span>{when(p.createdAt)}</span>
                 {p.hidden && <Badge tone="danger">ausgeblendet</Badge>}
                 {p.openReports > 0 && <Badge tone="accent">{p.openReports} {p.openReports === 1 ? "Meldung" : "Meldungen"}</Badge>}
@@ -168,7 +168,7 @@ function CommentsPanel({ slug, onError }: { slug: string; onError: (m: string | 
       {list.data.map((c) => (
         <div key={c.id} className="flex items-start gap-3 p-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted"><span className="font-medium text-text">{c.authorName}</span> · {when(c.createdAt)} · unter „{c.postExcerpt}“</p>
+            <p className="text-xs text-muted"><UserNameLink handle={c.authorHandle} name={c.authorName} className="font-medium text-text" /> · {when(c.createdAt)} · unter „{c.postExcerpt}“</p>
             <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p>
           </div>
           <Button size="sm" variant="ghost" aria-label="Kommentar löschen" onClick={() => remove(c.id)}><MessageSquareX size={16} aria-hidden /></Button>

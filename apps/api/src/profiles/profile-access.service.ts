@@ -77,6 +77,15 @@ export class ProfileAccess {
     return new Map(rows.map((r) => [r.userId, r]));
   }
 
+  /**
+   * Benutzernamen fuer Profil-Links in Listen (Mitglieder, Teilnehmer, Chat). Der Handle ist kein Geheimnis: die
+   * Profilseite selbst prueft die Sichtbarkeit. Geloeschte Nutzer fehlen in der Map (dann kein Link).
+   */
+  async handles(userIds: string[]): Promise<Map<string, string>> {
+    const rows = await this.ensureMany(userIds);
+    return new Map([...rows].map(([id, p]) => [id, p.handle]));
+  }
+
   async ensure(userId: string): Promise<ProfileRow | undefined> {
     return (await this.ensureMany([userId])).get(userId);
   }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ReportItem } from "@vereine/shared";
-import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, TextareaField } from "./ui";
+import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, TextareaField, UserNameLink } from "./ui";
 import { api, describeError } from "@/lib/api";
 import { reportReasonLabel } from "@/lib/labels";
 import { useApi } from "@/lib/use-api";
@@ -51,7 +51,7 @@ export function ReportQueue({
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
               <Badge tone="danger">{reportReasonLabel(r.reason)}</Badge>
               <span>{new Date(r.createdAt).toLocaleString("de-DE")}</span>
-              <span>· Beitrag von {r.post.authorName}</span>
+              <span>· Beitrag von <UserNameLink handle={r.post.authorHandle} name={r.post.authorName} className="text-text" /></span>
             </div>
             <p className="mt-2 whitespace-pre-wrap break-words text-sm">{r.post.body}</p>
             {r.note && <p className="mt-1 text-xs text-muted">Hinweis: {r.note}</p>}

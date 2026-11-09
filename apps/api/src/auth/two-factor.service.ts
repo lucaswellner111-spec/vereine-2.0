@@ -1,10 +1,11 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { BadRequestException, ConflictException, HttpException, Inject, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { hash, verify } from "@node-rs/argon2";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import type { TwoFactorSetup, TwoFactorStatus } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
+import { authSecretKey, decryptGcm, encryptGcm } from "../common/secret-key";
 import { DB, type Database } from "../db/db.module";
 import { auditLog, recoveryCodes, userTotp } from "../db/schema";
 import { newSecret, otpauthUrl, stepAt, verifyTotp } from "./totp";
@@ -24,43 +25,22 @@ const ARGON = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } a
  */
 @Injectable()
 export class TwoFactorService {
-  private readonly log = new Logger("TwoFactor");
-  private devKey?: Buffer;
-
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
+  /** Hauptschluessel direkt (bestehende TOTP-Geheimnisse sind damit verschluesselt; nicht auf HKDF umstellen). */
   private key(): Buffer {
-    const raw = process.env.AUTH_SECRET_KEY;
-    if (raw) {
-      const key = Buffer.from(raw, "base64");
-      if (key.length !== 32) throw new ServiceUnavailableException("AUTH_SECRET_KEY muss 32 Byte (base64) lang sein.");
-      return key;
-    }
-    if (process.env.NODE_ENV === "production") {
-      throw new ServiceUnavailableException("Zwei-Faktor-Anmeldung ist auf diesem Server nicht konfiguriert.");
-    }
-    if (!this.devKey) {
-      this.log.warn("AUTH_SECRET_KEY fehlt: temporaerer Entwicklungsschluessel (2FA-Daten nicht dauerhaft lesbar).");
-      this.devKey = randomBytes(32);
-    }
-    return this.devKey;
+    return authSecretKey("Zwei-Faktor-Anmeldung ist auf diesem Server nicht konfiguriert.");
   }
 
   private encrypt(text: string): string {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.key(), iv);
-    const enc = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
-    return [iv, cipher.getAuthTag(), enc].map((b) => b.toString("base64url")).join(".");
+    return encryptGcm(this.key(), text);
   }
 
   private decrypt(blob: string): string {
-    const [iv, tag, enc] = blob.split(".").map((p) => Buffer.from(p, "base64url"));
-    const d = createDecipheriv("aes-256-gcm", this.key(), iv);
-    d.setAuthTag(tag);
-    return Buffer.concat([d.update(enc), d.final()]).toString("utf8");
+    return decryptGcm(this.key(), blob);
   }
 
   // --- Herausforderung (nach dem Passwort) ---------------------------------------

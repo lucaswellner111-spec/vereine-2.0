@@ -1,33 +1,39 @@
 import { createHash, randomBytes } from "node:crypto";
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type {
   CreatedInvite,
   CreateInviteInput,
   InviteInfo,
   InviteItem,
+  InviteLink,
   OrgBillingProfile,
   OrgBillingProfileInput,
   PublicUser,
 } from "@vereine/shared";
+import { AuditService } from "../auth/audit.service";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
+import { decryptGcm, derivedKey, encryptGcm } from "../common/secret-key";
 import { DB, type Database } from "../db/db.module";
 import { follows, orgInvites, orgMembers, organizations } from "../db/schema";
 import { OrgsService } from "./orgs.service";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 type InviteRow = typeof orgInvites.$inferSelect;
+const inviteKey = () => derivedKey("invite", "Einladungslinks sind auf diesem Server nicht konfiguriert.");
 
 /**
  * Vereinsstammdaten fuer Rechnungen und Einladungslinks.
  * Einladungslinks ersetzen den Import von Mitgliederlisten: Personen treten selbst bei (Datenminimierung,
- * keine Konten ohne Zustimmung). Der Token wird nur als Hash gespeichert und ist 256 Bit lang.
+ * keine Konten ohne Zustimmung). Der Token ist 256 Bit lang; gesucht wird ueber den SHA-256-Hash, zusaetzlich liegt er
+ * AES-256-GCM-verschluesselt vor (Teilschluessel per HKDF), damit der Vorstand den Link erneut anzeigen kann (protokolliert).
  */
 @Injectable()
 export class OrgAdminService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   // --- Stammdaten ---------------------------------------------------------------
@@ -62,7 +68,7 @@ export class OrgAdminService {
         : r.uses >= r.maxUses
           ? "used_up"
           : "active";
-    return { id: r.id, maxUses: r.maxUses, uses: r.uses, expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), status };
+    return { id: r.id, maxUses: r.maxUses, uses: r.uses, expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), status, linkAvailable: !!r.tokenEnc };
   }
 
   /** Kontoloeschung: Verweis auf die erstellende Person entfernen (Einladung bleibt fuer den Verein gueltig). */
@@ -80,6 +86,15 @@ export class OrgAdminService {
         .limit(RETENTION_BATCH);
       return (await this.db.delete(orgInvites).where(inArray(orgInvites.id, ids)).returning({ id: orgInvites.id })).length;
     });
+  }
+
+  /** Ohne konfigurierten Schluessel (Produktion) bleibt die Einladung nutzbar, nur nicht erneut anzeigbar. */
+  private encryptToken(token: string): string | null {
+    try {
+      return encryptGcm(inviteKey(), token);
+    } catch {
+      return null;
+    }
   }
 
   async listInvites(user: PublicUser, slug: string): Promise<InviteItem[]> {
@@ -101,12 +116,31 @@ export class OrgAdminService {
       .values({
         orgId: org.id,
         tokenHash: sha256(token),
+        tokenEnc: this.encryptToken(token),
         maxUses: input.maxUses,
         expiresAt: new Date(Date.now() + input.expiresInDays * 86400_000),
         createdBy: user.id,
       })
       .returning();
     return { ...this.item(row), token };
+  }
+
+  /** Link einer aktiven Einladung erneut anzeigen (nur Vorstand, Zugriff im Audit-Protokoll). */
+  async inviteLink(user: PublicUser, slug: string, id: string): Promise<InviteLink> {
+    const org = await this.requireAdmin(user, slug);
+    const [row] = await this.db.select().from(orgInvites).where(and(eq(orgInvites.id, id), eq(orgInvites.orgId, org.id))).limit(1);
+    if (!row || this.item(row).status !== "active") throw new NotFoundException("Einladung nicht gefunden oder nicht mehr aktiv.");
+    const gone = new ConflictException("Dieser Link kann nicht erneut angezeigt werden. Bitte neu erstellen.");
+    if (!row.tokenEnc) throw gone;
+    const key = inviteKey(); // Konfigurationsfehler (Produktion ohne Schluessel) nicht als "neu erstellen" melden
+    let token: string;
+    try {
+      token = decryptGcm(key, row.tokenEnc);
+    } catch {
+      throw gone; // z. B. Schluessel gewechselt
+    }
+    await this.audit.record(user.id, "org.invite.link.viewed", { orgId: org.id, inviteId: row.id });
+    return { token };
   }
 
   async revokeInvite(user: PublicUser, slug: string, id: string): Promise<void> {

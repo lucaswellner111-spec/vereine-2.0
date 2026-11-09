@@ -308,6 +308,70 @@ export function Avatar({
   );
 }
 
+// ---------- Personen verlinken ----------
+
+/** Profilseite zu einem Benutzernamen; ohne Handle null (dann wird nicht verlinkt). */
+export function profileHref(handle: string | null | undefined): string | null {
+  return handle ? `/profil/${encodeURIComponent(handle)}` : null;
+}
+
+/**
+ * Avatar, der zum Profil fuehrt. Ohne Handle nur Darstellung.
+ * `decorative`: steht direkt neben einem UserNameLink zur selben Person – dann ist der Avatar per Maus/Touch
+ * klickbar, aber kein eigener Tab-Stopp und fuer Screenreader unsichtbar (keine doppelten Links).
+ */
+export function UserAvatarLink({
+  handle,
+  name,
+  mediaId,
+  size = 36,
+  decorative = false,
+  className,
+}: {
+  handle: string | null | undefined;
+  name: string;
+  mediaId?: string | null;
+  size?: number;
+  decorative?: boolean;
+  className?: string;
+}) {
+  const href = profileHref(handle);
+  const avatar = <Avatar name={name} mediaId={mediaId} size={size} />;
+  if (!href) return avatar;
+  return (
+    <Link
+      href={href}
+      aria-label={decorative ? undefined : `Profil von ${name}`}
+      aria-hidden={decorative || undefined}
+      tabIndex={decorative ? -1 : undefined}
+      className={clsx("hit-area relative inline-flex shrink-0 rounded-full", className)}
+    >
+      {avatar}
+    </Link>
+  );
+}
+
+/** Name, der zum Profil fuehrt. Ohne Handle nur Text. className fuer Schrift/Layout (z. B. font-medium, truncate). */
+export function UserNameLink({
+  handle,
+  name,
+  className,
+  children,
+}: {
+  handle: string | null | undefined;
+  name: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const href = profileHref(handle);
+  if (!href) return <span className={className}>{children ?? name}</span>;
+  return (
+    <Link href={href} className={clsx("hit-area relative rounded hover:underline", className)}>
+      {children ?? name}
+    </Link>
+  );
+}
+
 export function Alert({ tone = "danger", children }: { tone?: "danger" | "info" | "success"; children: ReactNode }) {
   return (
     <div

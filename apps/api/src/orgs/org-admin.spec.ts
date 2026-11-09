@@ -56,6 +56,12 @@ describe("Vereinsstammdaten und Einladungslinks", () => {
     await req(vera, "PUT", `/orgs/${org}/members/${kai.id}/role`, { role: "treasurer" });
   });
 
+  it("Mitgliederliste liefert den Benutzernamen fuer den Profil-Link", async () => {
+    const list = (await req(vera, "GET", `/orgs/${org}/members?status=active`)).json() as { userId: string; handle: string | null }[];
+    expect(list.length).toBeGreaterThanOrEqual(3);
+    for (const m of list) expect(m.handle).toMatch(/^[a-z0-9_]{3,}$/);
+  });
+
   it("IBAN-Pruefsumme", () => {
     expect(isValidIban(IBAN)).toBe(true);
     expect(isValidIban("DE89 3704 0044 0532 0130 01")).toBe(false);
@@ -112,6 +118,52 @@ describe("Vereinsstammdaten und Einladungslinks", () => {
     const [row] = await db.select().from(schema.orgInvites).where(eq(schema.orgInvites.id, inviteId));
     expect(row.tokenHash).not.toBe(token);
     expect(row.tokenHash).toHaveLength(64);
+    expect(row.tokenEnc).toBeTruthy();
+    expect(row.tokenEnc).not.toContain(token);
+    expect(list[0].linkAvailable).toBe(true);
+  });
+
+  it("Link erneut anzeigen: nur Vorstand, protokolliert, nur aktive, alte ohne token_enc mit Hinweis", async () => {
+    const url = `/orgs/${org}/invites/${inviteId}/link`;
+    expect((await req(null, "GET", url)).statusCode).toBe(401);
+    expect((await req(kai, "GET", url)).statusCode).toBe(403); // Kassenwart
+    expect((await req(mia, "GET", url)).statusCode).toBe(403); // Mitglied
+    expect((await req(nina, "GET", url)).statusCode).toBe(403); // Fremde
+    expect((await req(vera, "GET", `/orgs/${org}/invites/00000000-0000-4000-8000-000000000000/link`)).statusCode).toBe(404);
+    expect((await req(vera, "GET", `/orgs/${org}/invites/kein-uuid/link`)).statusCode).toBe(400);
+
+    const before = await db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "org.invite.link.viewed"));
+    const res = await req(vera, "GET", url);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ token });
+    const after = await db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "org.invite.link.viewed"));
+    expect(after.length).toBe(before.length + 1);
+    expect(after.at(-1)).toMatchObject({ userId: vera.id, meta: { inviteId } });
+    expect(JSON.stringify(after.at(-1)?.meta)).not.toContain(token);
+
+    // Einladung eines anderen Vereins ist ueber diesen Verein nicht abrufbar
+    await req(nina, "POST", "/orgs", { name: "SV Fremd", category: "Sport", city: "Anderswo" });
+    const foreign = (await req(nina, "POST", "/orgs/sv-fremd/invites", {})).json();
+    expect((await req(vera, "GET", `/orgs/${org}/invites/${foreign.id}/link`)).statusCode).toBe(404);
+
+    // widerrufen und abgelaufen: nicht mehr abrufbar
+    const r = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
+    await req(vera, "DELETE", `/orgs/${org}/invites/${r.id}`);
+    expect((await req(vera, "GET", `/orgs/${org}/invites/${r.id}/link`)).statusCode).toBe(404);
+    const e = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
+    await db.update(schema.orgInvites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.orgInvites.id, e.id));
+    expect((await req(vera, "GET", `/orgs/${org}/invites/${e.id}/link`)).statusCode).toBe(404);
+
+    // alte Einladung ohne token_enc
+    const old = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
+    await db.update(schema.orgInvites).set({ tokenEnc: null }).where(eq(schema.orgInvites.id, old.id));
+    const oldRes = await req(vera, "GET", `/orgs/${org}/invites/${old.id}/link`);
+    expect(oldRes.statusCode).toBe(409);
+    expect(oldRes.json().message).toContain("Bitte neu erstellen");
+    const listed = (await req(vera, "GET", `/orgs/${org}/invites`)).json().find((i: { id: string }) => i.id === old.id);
+    expect(listed.linkAvailable).toBe(false);
+    // Aufraeumen, damit die Obergrenze im spaeteren Test gleich bleibt
+    await req(vera, "DELETE", `/orgs/${org}/invites/${old.id}`);
   });
 
   it("Beitritt per Link: sofort aktives Mitglied und Follower, Mehrfachnutzung zaehlt nicht doppelt", async () => {
@@ -125,7 +177,7 @@ describe("Vereinsstammdaten und Einladungslinks", () => {
     expect(detail.viewer).toMatchObject({ membership: "active", role: "member", following: true });
     // erneut annehmen: bereits Mitglied, kein weiterer Verbrauch
     expect((await req(ben, "POST", `/invites/${token}/accept`)).json().alreadyMember).toBe(true);
-    expect((await req(vera, "GET", `/orgs/${org}/invites`)).json()[0].uses).toBe(1);
+    expect((await req(vera, "GET", `/orgs/${org}/invites`)).json().find((i: { id: string }) => i.id === inviteId).uses).toBe(1);
   });
 
   it("Ausstehende Antraege werden durch den Link freigeschaltet", async () => {

@@ -19,6 +19,7 @@ import { feeClasses, memberCounters, memberProfiles } from "../db/schema";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
 import { berlinDate } from "../common/berlin-date";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { isUniqueViolation } from "../common/pg-errors";
 
 type ProfileRow = typeof memberProfiles.$inferSelect;
@@ -51,6 +52,7 @@ export class MembersService implements OnModuleInit {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   onModuleInit() {
@@ -120,6 +122,7 @@ export class MembersService implements OnModuleInit {
       .map((p) => ({
         userId: p.userId,
         name: names.get(p.userId) ?? DELETED,
+        handle: null,
         memberNo: p.memberNo,
         role: roleBy.get(p.userId)!,
         joinedOn: p.joinedOn,
@@ -133,7 +136,9 @@ export class MembersService implements OnModuleInit {
     items.sort((a, b) => a.name.localeCompare(b.name, "de"));
     const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
     const offset = Math.max(q.offset ?? 0, 0);
-    return { total: items.length, items: items.slice(offset, offset + limit) };
+    const page = items.slice(offset, offset + limit);
+    const handles = await this.access.handles(page.map((i) => i.userId)); // nur fuer die angezeigte Seite
+    return { total: items.length, items: page.map((i) => ({ ...i, handle: handles.get(i.userId) ?? null })) };
   }
 
   private async record(orgId: string, userId: string): Promise<MemberRecord> {

@@ -10,6 +10,7 @@ import { comments, organizations, posts, reports } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { MODERATION_ROLES } from "./posts.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 
 /**
  * Moderation auf Vereinsebene (DSA-konform: Meldeweg, Entscheidung mit Begruendung, Benachrichtigung
@@ -25,6 +26,7 @@ export class ModerationService {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CACHE) private readonly cache: Cache,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   private async requireModerator(orgId: string, userId: string) {
@@ -73,15 +75,17 @@ export class ModerationService {
       .where(and(scope, eq(reports.status, status)))
       .orderBy(desc(reports.createdAt))
       .limit(100);
-    const names = await this.directory.names(rows.flatMap((r) => (r.commentAuthorId ? [r.authorId, r.commentAuthorId] : [r.authorId])));
+    const ids = rows.flatMap((r) => (r.commentAuthorId ? [r.authorId, r.commentAuthorId] : [r.authorId]));
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     const name = (id: string) => names.get(id) ?? "Gelöschter Nutzer";
+    const handle = (id: string) => handles.get(id) ?? null;
     return rows.map((r) => ({
       id: r.id,
       reason: r.reason,
       note: r.note,
       createdAt: r.createdAt.toISOString(),
-      post: { id: r.postId, body: r.body, authorName: name(r.authorId), hidden: !!r.hidden },
-      comment: r.commentId ? { id: r.commentId, body: r.commentBody ?? "", authorName: name(r.commentAuthorId!) } : null,
+      post: { id: r.postId, body: r.body, authorName: name(r.authorId), authorHandle: handle(r.authorId), hidden: !!r.hidden },
+      comment: r.commentId ? { id: r.commentId, body: r.commentBody ?? "", authorName: name(r.commentAuthorId!), authorHandle: handle(r.commentAuthorId!) } : null,
     }));
   }
 
@@ -118,11 +122,13 @@ export class ModerationService {
       .orderBy(desc(posts.createdAt), desc(posts.id))
       .limit(50)
       .offset(Math.max(0, offset));
-    const names = await this.directory.names(rows.map((r) => r.authorId));
+    const ids = rows.map((r) => r.authorId);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return rows.map((r) => ({
       id: r.id,
       body: r.body,
       authorName: names.get(r.authorId) ?? "Gelöschter Nutzer",
+      authorHandle: handles.get(r.authorId) ?? null,
       createdAt: r.createdAt.toISOString(),
       tags: r.tags,
       hidden: !!r.hiddenAt,
@@ -173,11 +179,13 @@ export class ModerationService {
       .where(and(eq(posts.orgId, org.id), isNull(posts.deletedAt)))
       .orderBy(desc(comments.createdAt))
       .limit(50);
-    const names = await this.directory.names(rows.map((r) => r.authorId));
+    const ids = rows.map((r) => r.authorId);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return rows.map((r) => ({
       id: r.id,
       body: r.body,
       authorName: names.get(r.authorId) ?? "Gelöschter Nutzer",
+      authorHandle: handles.get(r.authorId) ?? null,
       createdAt: r.createdAt.toISOString(),
       postId: r.postId,
       postExcerpt: r.postBody.slice(0, 80),

@@ -239,6 +239,8 @@ export const setRoleSchema = z.object({ role: z.enum(ORG_ROLES) });
 export type MemberItem = {
   userId: string;
   name: string;
+  /** Fuer den Profil-Link; null bei geloeschtem Konto. */
+  handle: string | null;
   role: OrgRole;
   status: "pending" | "active";
   since: string;
@@ -257,9 +259,9 @@ export type ReportItem = {
   reason: string;
   note: string | null;
   createdAt: string;
-  post: { id: string; body: string; authorName: string; hidden: boolean };
+  post: { id: string; body: string; authorName: string; authorHandle: string | null; hidden: boolean };
   /** gesetzt = Meldung eines Kommentars unter diesem Beitrag */
-  comment: { id: string; body: string; authorName: string } | null;
+  comment: { id: string; body: string; authorName: string; authorHandle: string | null } | null;
 };
 
 // --- Termine & Teams ---------------------------------------------------------
@@ -269,7 +271,7 @@ export const createTeamSchema = z.object({
   description: z.string().trim().max(200).default(""),
 });
 export type TeamItem = { id: string; name: string; description: string; members: number; isMember: boolean };
-export type TeamMemberItem = { userId: string; name: string };
+export type TeamMemberItem = { userId: string; name: string; handle: string | null };
 
 export const EVENT_VISIBILITY = ["members", "public"] as const;
 /** Art des Termins (Anzeige, Filter, Anwesenheitsquote). */
@@ -350,7 +352,7 @@ export type EventItem = {
   waitlistPosition: number | null;
   canManage: boolean;
 };
-export type RsvpItem = { userId: string; name: string; status: RsvpState };
+export type RsvpItem = { userId: string; name: string; handle: string | null; status: RsvpState };
 
 // --- Helferlisten (Dienste an einem Termin) ---
 const shiftTime = z.string().datetime({ offset: true }).nullable().optional();
@@ -481,7 +483,7 @@ export type ChatMessage = {
   createdAt: string;
   mine: boolean;
 };
-export type ConversationMember = { userId: string; name: string; role: "owner" | "member"; avatarId: string | null };
+export type ConversationMember = { userId: string; name: string; handle: string | null; role: "owner" | "member"; avatarId: string | null };
 export type ConversationSummary = {
   id: string;
   kind: "direct" | "group";
@@ -526,7 +528,9 @@ export type ChatReportItem = {
   note: string | null;
   createdAt: string;
   reporterName: string;
+  reporterHandle: string | null;
   senderName: string;
+  senderHandle: string | null;
   /** null = Unterhaltung existiert nicht mehr (die Beweiskopie der Meldung bleibt trotzdem lesbar). */
   conversationKind: "direct" | "group" | null;
   /** Nur die gemeldete Nachricht, null wenn bereits geloescht. */
@@ -683,9 +687,12 @@ export type InviteItem = {
   expiresAt: string;
   createdAt: string;
   status: "active" | "expired" | "used_up" | "revoked";
+  /** true, wenn der Link (verschluesselt gespeichert) erneut angezeigt werden kann; aeltere Einladungen nicht. */
+  linkAvailable: boolean;
 };
-/** Der Klartext-Token wird nur einmal bei der Erstellung geliefert. */
+/** Der Klartext-Token wird bei der Erstellung geliefert und kann danach nur vom Vorstand erneut abgerufen werden (protokolliert). */
 export type CreatedInvite = InviteItem & { token: string };
+export type InviteLink = { token: string };
 export type InviteInfo = { orgName: string; orgSlug: string; alreadyMember: boolean };
 
 export const cancelEventSchema = z.object({ scope: z.enum(["single", "series"]).default("single") });
@@ -805,6 +812,7 @@ export type AdminMemberProfileInput = z.infer<typeof adminMemberProfileSchema>;
 export type MemberRegistryItem = {
   userId: string;
   name: string;
+  handle: string | null;
   memberNo: number;
   role: OrgRole;
   joinedOn: string;
@@ -853,6 +861,7 @@ export type ModerationPostItem = {
   id: string;
   body: string;
   authorName: string;
+  authorHandle: string | null;
   createdAt: string;
   tags: string[];
   hidden: boolean;
@@ -860,7 +869,7 @@ export type ModerationPostItem = {
   comments: number;
   openReports: number;
 };
-export type ModerationCommentItem = { id: string; body: string; authorName: string; createdAt: string; postId: string; postExcerpt: string };
+export type ModerationCommentItem = { id: string; body: string; authorName: string; authorHandle: string | null; createdAt: string; postId: string; postExcerpt: string };
 
 // --- Oeffentliche Vereinsseite (ohne Login) -------------------------------------------
 // Bewusst ohne Personendaten: keine Namen, keine Autoren, keine Beitragsbilder, nur oeffentliche Termine.

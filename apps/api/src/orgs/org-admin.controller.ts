@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, UseGuards } from "@nestjs/common";
 import {
   createInviteSchema,
   orgBillingProfileSchema,
   type CreatedInvite,
   type InviteInfo,
   type InviteItem,
+  type InviteLink,
   type OrgBillingProfile,
   type PublicUser,
 } from "@vereine/shared";
@@ -35,6 +36,12 @@ export class OrgAdminController {
   @Post("orgs/:slug/invites")
   createInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<CreatedInvite> {
     return this.admin.createInvite(user, slug, parse(createInviteSchema, body ?? {}));
+  }
+
+  @Get("orgs/:slug/invites/:id/link")
+  @Header("Cache-Control", "private, no-store")
+  inviteLink(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<InviteLink> {
+    return this.admin.inviteLink(user, slug, id);
   }
 
   @Delete("orgs/:slug/invites/:id")

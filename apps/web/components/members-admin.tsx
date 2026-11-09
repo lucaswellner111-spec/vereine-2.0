@@ -7,7 +7,7 @@ import { dateDe, eurCents, parseEuroToCents } from "@/lib/money";
 import { ROLE_LABEL } from "@/lib/labels";
 import { useApi, useBusy } from "@/lib/use-api";
 import clsx from "clsx";
-import { Alert, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, stackTable, TextareaField } from "./ui";
+import { Alert, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, stackTable, TextareaField, UserNameLink } from "./ui";
 import { Dialog } from "./ui-client";
 import { ask, toast } from "./ui-hosts";
 
@@ -271,7 +271,7 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
               {page.items.map((m) => (
                 <tr key={m.userId} className={stackTable.tr}>
                   <td className={stackTable.td}><CellLabel>Nr.</CellLabel><span className="font-mono text-xs">{m.memberNo}</span></td>
-                  <td className={stackTable.tdMain}>{m.name} {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
+                  <td className={stackTable.tdMain}><UserNameLink handle={m.handle} name={m.name} /> {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Rolle</CellLabel>{ROLE_LABEL[m.role]}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Ort</CellLabel>{m.city || "–"}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Beitragsklasse</CellLabel>{m.feeClassName ?? "–"}</td>

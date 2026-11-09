@@ -3,7 +3,7 @@
 import { ShieldOff } from "lucide-react";
 import { useState } from "react";
 import type { ChatReportItem } from "@vereine/shared";
-import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
 import { api, describeError } from "@/lib/api";
@@ -91,7 +91,10 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
                 <Badge tone="danger">{reportReasonLabel(r.reason)}</Badge>
                 <span>{new Date(r.createdAt).toLocaleString("de-DE")}</span>
                 <span>· {r.conversationKind === "group" ? "Gruppe" : r.conversationKind === "direct" ? "Direktnachricht" : "Unterhaltung gelöscht"}</span>
-                <span>· von {r.senderName}, gemeldet von {r.reporterName}</span>
+                <span>
+                  · von <UserNameLink handle={r.senderHandle} name={r.senderName} className="text-text" />, gemeldet von{" "}
+                  <UserNameLink handle={r.reporterHandle} name={r.reporterName} className="text-text" />
+                </span>
               </div>
               <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-surface-2 p-3 text-sm">{r.text ?? "Nachricht bereits gelöscht."}</p>
               {r.note && <p className="mt-1 text-xs text-muted">Hinweis: {r.note}</p>}

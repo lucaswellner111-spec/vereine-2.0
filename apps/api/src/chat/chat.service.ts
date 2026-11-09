@@ -248,7 +248,14 @@ export class ChatService implements OnModuleInit {
     const members = await this.db.select().from(conversationMembers).where(eq(conversationMembers.conversationId, id));
     const [names, profs] = await Promise.all([this.directory.names(members.map((m) => m.userId)), this.access.ensureMany(members.map((m) => m.userId))]);
     const list: ConversationMember[] = members
-      .map((m) => ({ userId: m.userId, name: names.get(m.userId) ?? DELETED_USER, role: m.role as "owner" | "member", avatarId: profs.get(m.userId)?.avatarMediaId ?? null }))
+      .map((m) => ({
+        userId: m.userId,
+        name: names.get(m.userId) ?? DELETED_USER,
+        // Nur wenn das Konto noch existiert (sonst kein Profil-Link)
+        handle: names.has(m.userId) ? profs.get(m.userId)?.handle ?? null : null,
+        role: m.role as "owner" | "member",
+        avatarId: profs.get(m.userId)?.avatarMediaId ?? null,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
     const [summary] = await this.summarize(user, [conv]);
     const other = conv.kind === "direct" ? members.find((m) => m.userId !== user.id) : undefined;
@@ -542,9 +549,8 @@ export class ChatService implements OnModuleInit {
       .where(eq(messageReports.status, status))
       .orderBy(desc(messageReports.createdAt))
       .limit(100);
-    const names = await this.directory.names(
-      rows.flatMap(({ r, m }) => [r.reporterId, r.senderId ?? m?.senderId ?? null]).filter((x): x is string => !!x),
-    );
+    const people = rows.flatMap(({ r, m }) => [r.reporterId, r.senderId ?? m?.senderId ?? null]).filter((x): x is string => !!x);
+    const [names, handles] = await Promise.all([this.directory.names(people), this.access.handles(people)]);
     await this.audit.record(admin.id, "platform.chat-reports.viewed", { reportIds: rows.map(({ r }) => r.id) });
     return rows.map(({ r, m, c }) => {
       // Offen: Beweiskopie immer zeigen (auch wenn Nachricht/Unterhaltung weg sind). Erledigt: nur solange die Nachricht existiert.
@@ -556,7 +562,9 @@ export class ChatService implements OnModuleInit {
         note: r.note,
         createdAt: r.createdAt.toISOString(),
         reporterName: (r.reporterId && names.get(r.reporterId)) || DELETED_USER,
+        reporterHandle: (r.reporterId && handles.get(r.reporterId)) || null,
         senderName: (senderId && names.get(senderId)) || DELETED_USER,
+        senderHandle: (senderId && handles.get(senderId)) || null,
         conversationKind: (c?.kind as "direct" | "group" | undefined) ?? null,
         text,
       };

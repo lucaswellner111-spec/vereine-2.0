@@ -14,7 +14,7 @@ import { LazyLightbox, LazyTagPicker as TagPicker } from "./lazy";
 import { PollView } from "./poll-view";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
-import { Alert, Avatar, Badge, Button, Card, Input, TextareaField } from "./ui";
+import { Alert, Avatar, Badge, Button, Card, Input, TextareaField, UserAvatarLink, UserNameLink } from "./ui";
 import { Dialog, DropdownMenu, type MenuEntry } from "./ui-client";
 import { REPORT_REASONS, type ReportReason } from "@/lib/labels";
 
@@ -224,7 +224,6 @@ export function PostCard({
     ...(canDeleteComment(c) ? [{ id: "delete", label: "Löschen", icon: Trash2, danger: true, onSelect: () => void deleteComment(c) }] : []),
   ];
 
-  const authorHref = post.author.handle ? `/profil/${post.author.handle}` : null;
   const mediaIds = post.media.map((m) => m.id);
 
   return (
@@ -232,19 +231,15 @@ export function PostCard({
       <div className="flex items-start gap-3">
         {post.org ? (
           <Avatar name={post.org.name} mediaId={post.org.logoId} kind="org" />
-        ) : authorHref ? (
-          <Link href={authorHref} aria-label={`Profil von ${post.author.name}`}><Avatar name={post.author.name} mediaId={post.author.avatarId} /></Link>
         ) : (
-          <Avatar name={post.author.name} />
+          <UserAvatarLink handle={post.author.handle} name={post.author.name} mediaId={post.author.avatarId} decorative />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             {post.org ? (
               <Link href={`/vereine/${post.org.slug}`} className="font-medium hover:underline">{post.org.name}</Link>
-            ) : authorHref ? (
-              <Link href={authorHref} className="font-medium hover:underline">{post.author.name}</Link>
             ) : (
-              <span className="font-medium">{post.author.name}</span>
+              <UserNameLink handle={post.author.handle} name={post.author.name} className="font-medium" />
             )}
             {!post.org && post.author.handle && <span className="text-xs text-muted">@{post.author.handle}</span>}
             <Link href={postHref(post.id)} className="text-xs text-muted hover:underline">
@@ -316,11 +311,7 @@ export function PostCard({
                     <li key={c.id} className="text-sm">
                       <div className="flex items-start gap-1">
                         <div className="min-w-0 flex-1">
-                          {c.author.handle ? (
-                            <Link href={`/profil/${c.author.handle}`} className="font-medium hover:underline">{c.author.name}</Link>
-                          ) : (
-                            <span className="font-medium">{c.author.name}</span>
-                          )}{" "}
+                          <UserNameLink handle={c.author.handle} name={c.author.name} className="font-medium" />{" "}
                           <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
                           <p className="break-words text-muted">{c.body}</p>
                         </div>

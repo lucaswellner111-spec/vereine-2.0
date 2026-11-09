@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { MemberItem, TeamItem, TeamMemberItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useApi, useBusy } from "@/lib/use-api";
-import { Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Select } from "./ui";
+import { Button, Card, CardSkeletons, EmptyState, ErrorState, Field, Select, UserNameLink } from "./ui";
 import { ask } from "./ui-hosts";
 
 export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
@@ -105,7 +105,7 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                       {members.length === 0 && <li className="text-xs text-muted">Noch niemand im Team.</li>}
                       {members.map((m) => (
                         <li key={m.userId} className="inline-flex items-center gap-1 rounded-full bg-surface-2 py-1 pl-3 pr-1 text-sm">
-                          {m.name}
+                          <UserNameLink handle={m.handle} name={m.name} />
                           <button
                             type="button"
                             aria-label={`${m.name} entfernen`}

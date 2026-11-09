@@ -31,6 +31,7 @@ import { invalidatePublicOrg } from "../common/public-cache";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { follows, orgMembers, organizations } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { OrgEvents } from "./org-events";
 
 type OrgRow = typeof organizations.$inferSelect;
@@ -59,6 +60,7 @@ export class OrgsService {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgEvents) private readonly events: OrgEvents,
     @Inject(CACHE) private readonly cache: Cache,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   /**
@@ -287,10 +289,12 @@ export class OrgsService {
       .where(and(eq(orgMembers.orgId, org.id), status ? eq(orgMembers.status, status) : undefined))
       .orderBy(orgMembers.createdAt)
       .limit(500);
-    const names = await this.directory.names(rows.map((r) => r.userId));
+    const ids = rows.map((r) => r.userId);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return rows.map((r) => ({
       ...r,
       name: names.get(r.userId) ?? "Gelöschter Nutzer",
+      handle: handles.get(r.userId) ?? null,
       role: r.role as OrgRole,
       status: r.status as "pending" | "active",
       since: r.since.toISOString(),

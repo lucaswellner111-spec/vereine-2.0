@@ -7,6 +7,7 @@ import { eventAttendance, eventRsvps, eventShiftSignups, eventShifts, events, te
 import { isUniqueViolation } from "../common/pg-errors";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { EventsService } from "./events.service";
 
 @Injectable()
@@ -17,6 +18,7 @@ export class TeamsService implements OnModuleInit {
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(EventsService) private readonly events: EventsService,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   onModuleInit() {
@@ -108,9 +110,10 @@ export class TeamsService implements OnModuleInit {
     await this.requireAdmin(org.id, user.id);
     await this.requireTeam(org.id, teamId);
     const rows = await this.db.select({ userId: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, teamId)).limit(2000);
-    const names = await this.directory.names(rows.map((r) => r.userId));
+    const ids = rows.map((r) => r.userId);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return rows
-      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer" }))
+      .map((r) => ({ userId: r.userId, name: names.get(r.userId) ?? "Gelöschter Nutzer", handle: handles.get(r.userId) ?? null }))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
   }
 
