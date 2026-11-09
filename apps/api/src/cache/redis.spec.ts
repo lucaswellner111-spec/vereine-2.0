@@ -1,11 +1,9 @@
 import "reflect-metadata";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import RedisMock from "ioredis-mock";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
@@ -13,13 +11,13 @@ import { configureApp } from "../app.setup";
 import { AuthService } from "../auth/auth.service";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { CACHE, REDIS, type Cache } from "./cache.module";
 
 const password = "ein-sehr-langes-passwort";
 
 async function boot(overrides: { redis?: unknown; cache?: Cache } = {}, rateLimit = false) {
-  const db = drizzle(new PGlite(), { schema });
-  await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+  const db = await createTestDb();
   let builder = Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db);
   if (overrides.redis) builder = builder.overrideProvider(REDIS).useValue(overrides.redis);
   if (overrides.cache) builder = builder.overrideProvider(CACHE).useValue(overrides.cache);

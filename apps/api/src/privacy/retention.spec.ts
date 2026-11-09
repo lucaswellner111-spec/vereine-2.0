@@ -2,15 +2,14 @@ import "reflect-metadata";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { StorageService } from "../media/storage.service";
 import { Logger } from "@nestjs/common";
 import { vi } from "vitest";
@@ -35,8 +34,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
 
   beforeAll(async () => {
     process.env.MEDIA_DIR = dir;
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).compile();
     const app = moduleRef;
     await app.init();

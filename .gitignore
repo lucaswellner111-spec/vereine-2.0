@@ -18,3 +18,8 @@ apps/api/data/
 # Demo-Daten: Bilder (Lizenz beim Nutzer) und lokale Ausgaben nie einchecken
 infra/demo/images/
 infra/demo/out/
+
+# Playwright-Ausgaben
+e2e/playwright-report/
+e2e/test-results/
+e2e/blob-report/

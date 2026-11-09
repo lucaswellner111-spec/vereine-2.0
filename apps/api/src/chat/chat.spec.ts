@@ -1,17 +1,15 @@
 import "reflect-metadata";
-import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { ChatCrypto } from "./chat-crypto.service";
 import { ChatService } from "./chat.service";
 import { REALTIME_BUS, type BusMessage, type RealtimeBus } from "./realtime-bus";
@@ -25,8 +23,7 @@ describe("Chat", () => {
   const published: BusMessage[] = [];
 
   beforeAll(async () => {
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const bus: RealtimeBus = { publish: async (m) => void published.push(m), subscribe: async () => undefined, close: async () => undefined };
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(DB).useValue(db)

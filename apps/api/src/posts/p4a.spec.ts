@@ -2,12 +2,10 @@ import "reflect-metadata";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module";
@@ -15,6 +13,7 @@ import { configureApp } from "../app.setup";
 import { AuthService } from "../auth/auth.service";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { StorageService } from "../media/storage.service";
 
 const password = "ein-sehr-langes-passwort";
@@ -29,8 +28,7 @@ describe("P4a: Beitraege, Kommentarmeldungen, Vereinsseite", () => {
 
   beforeAll(async () => {
     process.env.MEDIA_DIR = dir;
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await configureApp(app, { rateLimit: false });

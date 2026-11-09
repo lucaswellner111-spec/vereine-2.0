@@ -2,17 +2,16 @@ import "reflect-metadata";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { REALTIME_BUS, type RealtimeBus } from "./realtime-bus";
 
 const password = "ein-sehr-langes-passwort";
@@ -25,8 +24,7 @@ describe("Chat P4c", () => {
 
   beforeAll(async () => {
     process.env.MEDIA_DIR = dir;
-    const db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    const db = await createTestDb();
     const bus: RealtimeBus = { publish: async () => undefined, subscribe: async () => undefined, close: async () => undefined };
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).overrideProvider(REALTIME_BUS).useValue(bus).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());

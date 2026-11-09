@@ -11,7 +11,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 | CSP mit Nonces statt 'unsafe-inline' | Härtung gegen XSS | Next.js-Middleware |
 | Monitoring + Alarme (Prometheus/Grafana/Loki) | Auslöser der Server-Aufteilung sichtbar machen, Worker-Ausfall erkennen | – |
 | Virenscan für Uploads (ClamAV) | Bilder werden neu kodiert (sharp); Scan zusätzlich bei Dateianhängen | RAM (~1 GB) → größerer Server |
-| Pentest, Dependency-Scanning in CI (npm audit, Dependabot) | Vor Echtbetrieb | – |
+| Pentest, Dependabot (npm audit läuft bereits in CI) | Vor Echtbetrieb | – |
 
 ## Profile / Feed / Medien (neu)
 - Feed-Ereignisse (Impression, Klick, Verweildauer) mit kurzer Aufbewahrung als Datenbasis für ML-Ranking – nur mit Einwilligung.
@@ -41,7 +41,8 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - ML-Ranking (Phase 4): Ereignis-Erfassung (Impressionen/Klicks, nur mit Einwilligung), Modell, A/B-Tests. Voraussetzung: Feed-Algorithmus v2 und genügend Daten.
 - Kalender: Termine einer Serie lassen sich nur gemeinsam absagen (ab einem Termin); Einzeländerungen/Verschieben von Serien fehlen.
 - Push: Einstellungen je Mitteilungsart und je Unterhaltung (stumm schalten), Absendername optional, Ruhezeiten; E-Mail-Benachrichtigungen (Mailanbieter).
-- Qualität: Ende-zu-Ende-Tests (Playwright) in CI, Lasttest mit k6 auf Staging ausführen, Barrierefreiheitsprüfung.
+- Qualität: ~~Ende-zu-Ende-Tests (Playwright) in CI~~ und ~~automatische axe-Prüfung (6 Kernseiten)~~ erledigt (P6, 2026-11-08); ~~API-Tests gegen echtes Postgres~~ erledigt (CI-Job `api-postgres`). Offen: Lasttest mit k6 auf Staging ausführen, manuelle Barrierefreiheitsprüfung (Screenreader, Tastatur) und axe auf weiteren Seiten (Verwaltung, Chat, Profil), E2E für 2FA, Kontolöschung, Moderation, Beitragslauf.
+- E2E-Hinweis: Der Web-Produktions-Build erlaubt per CSP nur `wss:`; lokal (HTTP, ws://localhost:4000) fällt der Chat in den E2E-Tests daher auf Polling zurück. Auf klubnest.de (HTTPS) unkritisch.
 - Monitoring: Prometheus/Grafana/Alertmanager auf dem Server aufsetzen (Messwerte unter /metrics sind vorbereitet).
 - Spenden-Grundgerüst (Datenmodell, Anbieter-Schnittstelle, Test-Anbieter) – bewusst noch nicht begonnen, hängt an der Wahl des Zahlungsanbieters (Mollie/Stripe Connect).
 - Mitgliederstammdaten und Beitragsklassen sind gebaut (Etappe 1). Offen: Aufnahmeformular mit Einwilligungen/Eltern, Import (nur per Einladung), Abteilungen = Teams (Zuordnung in der Liste fehlt), AVV-Akzeptanz beim Vereins-Onboarding, Row-Level-Security vor weiteren Verwaltungsmodulen.
@@ -67,7 +68,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Erscheinungsbild/Tags: offen (Stand 2026-11-03)
 - Interessen-Tags je Nutzer (`social.user_tags`) mit „Vereine für dich“, danach Ranking-Bonus **nur mit Einwilligung**; Datenschutz-Eintrag in `docs/DATENSCHUTZ-LAUNCH.md` vorher anlegen (Profildaten, nicht öffentlich, mit Konto löschbar).
 - Termine mit Typ-Tags (Training, Spiel, Versammlung), Suche über Vereine/Personen/Tags, Tag-Seiten `/tags/<id>`, „Vereine in deiner Nähe“ (Geodaten, Datenschutz prüfen).
-- Design: `Dialog` statt `confirm()`, `Skeleton` statt „Lade …“, Leerzustände mit Handlungsaufforderung, restliche Seiten (Profile, Chat, Spenden) auf die neuen Komponenten, Tab-Leisten innerhalb von Seiten vereinheitlichen, Barrierefreiheitsprüfung (axe), Mobil-Test auf echten Geräten.
+- Design: `Dialog` statt `confirm()`, `Skeleton` statt „Lade …“, Leerzustände mit Handlungsaufforderung, restliche Seiten (Profile, Chat, Spenden) auf die neuen Komponenten, Tab-Leisten innerhalb von Seiten vereinheitlichen, ~~Barrierefreiheitsprüfung (axe)~~ (automatisch in E2E, P6), Mobil-Test auf echten Geräten.
 - Demo-Daten auf der Domain haben noch keine Tags (Skript `infra/demo/seed.mjs` setzt sie bei neuem Lauf; bestehende Vereine: `PUT /orgs/<slug>/tags`).
 - Moderation: Sperren/Verwarnungen von Nutzern im Verein, Einspruchsverfahren (DSA Art. 20), Transparenzbericht, automatische Spam-Hinweise, Moderationsprotokoll als Ansicht für den Vorstand, Moderation von Chat-Gruppen eines Vereins.
 - Bedienkomfort offen: Kurzprofil-Karte beim Antippen von Namen, Wochenansicht im Kalender, Terminen Typen (Training/Spiel) geben, Tastaturkürzel-Übersicht, Skeletons je Seite feiner abstimmen. Recherche-Ideen Block 2 (Anwesenheit, Warteliste, Umfragen, Helferlisten, Fahrgemeinschaften): siehe `docs/RESEARCH-MARKT-UND-UI.md`.

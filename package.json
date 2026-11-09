@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "packageManager": "npm@11.9.0",
   "engines": {
@@ -15,7 +16,8 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "e2e": "npm run e2e -w @vereine/e2e"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

@@ -1,10 +1,8 @@
 import "reflect-metadata";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FeeClassItem, FeeRunItem, FeeRunPreview, InvoiceDetail, InvoiceSummary, NotificationsResponse } from "@vereine/shared";
@@ -12,6 +10,7 @@ import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { JobsService } from "../jobs/jobs.service";
 import { MembersService } from "../members/members.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -26,8 +25,7 @@ describe("Beitragslauf (Entwuerfe je Beitragsklasse)", () => {
   let runs: FeeRunsService;
 
   beforeAll(async () => {
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await configureApp(app, { rateLimit: false });
@@ -264,8 +262,7 @@ describe("Beitragslauf ohne Grenze bei 2000 Mitgliedern", () => {
   let db: ReturnType<typeof drizzle<typeof schema>>;
 
   beforeAll(async () => {
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await configureApp(app, { rateLimit: false });

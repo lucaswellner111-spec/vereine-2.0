@@ -1,17 +1,16 @@
 import "reflect-metadata";
 import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { handleSchema } from "@vereine/shared";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "./app.module";
 import { configureApp } from "./app.setup";
 import { DB } from "./db/db.module";
 import * as schema from "./db/schema";
+import { createTestDb } from "./testing/test-db";
 
 const password = "ein-sehr-langes-passwort";
 
@@ -21,8 +20,7 @@ describe("Haertung", () => {
   let db: ReturnType<typeof drizzle<typeof schema>>;
 
   beforeAll(async () => {
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DB).useValue(db).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await configureApp(app, { rateLimit: false });

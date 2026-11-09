@@ -1,10 +1,7 @@
 import "reflect-metadata";
-import { join } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configureApp } from "../app.setup";
 import { AuthModule } from "../auth/auth.module";
@@ -12,6 +9,7 @@ import { CacheModule } from "../cache/cache.module";
 import { DB, DbModule } from "../db/db.module";
 import { JobsModule } from "../jobs/jobs.module";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testing/test-db";
 import { PrivacyModule } from "./privacy.module";
 
 const credentials = { email: "lena@example.de", password: "ein-sehr-langes-passwort" };
@@ -22,8 +20,7 @@ describe("Privacy", () => {
   let cookie: string;
 
   beforeAll(async () => {
-    db = drizzle(new PGlite(), { schema });
-    await migrate(db, { migrationsFolder: join(__dirname, "..", "..", "drizzle") });
+    db = await createTestDb();
     const moduleRef = await Test.createTestingModule({
       imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule],
     })

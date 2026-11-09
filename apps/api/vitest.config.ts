@@ -6,6 +6,7 @@ export default defineConfig({
     include: ["src/**/*.spec.ts"],
     testTimeout: 30000,
     hookTimeout: 90000,
+    globalSetup: ["./vitest.global-setup.ts"],
   },
   plugins: [
     swc.vite({
