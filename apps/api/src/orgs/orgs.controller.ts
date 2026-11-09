@@ -25,7 +25,7 @@ import {
   type OrgSummary,
   type PublicUser,
 } from "@vereine/shared";
-import { CurrentUser, SessionGuard } from "../auth/session.guard";
+import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { OrgsService } from "./orgs.service";
 
@@ -52,6 +52,7 @@ export class OrgsController {
 
   @Post()
   create(@CurrentUser() user: PublicUser, @Body() body: unknown): Promise<OrgDetail> {
+    requireVerifiedEmail(user);
     return this.orgs.create(user, parse(createOrgSchema, body));
   }
 

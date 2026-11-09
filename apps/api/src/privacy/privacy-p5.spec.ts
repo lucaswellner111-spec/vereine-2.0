@@ -13,6 +13,7 @@ import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const inHours = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
@@ -53,10 +54,11 @@ describe("Datenschutz P5: vollstaendige Auskunft, Bilder-ZIP, Loeschung", () => 
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
     const cookie = String(login.headers["set-cookie"]).split(";")[0];
     const me = await app.inject({ method: "GET", url: "/profiles/me", headers: { cookie } });
-    return { cookie, id: reg.json().id, email, handle: me.json().handle };
+    return { cookie, id: login.json().id, email, handle: me.json().handle };
   }
   const req = (u: U, method: "GET" | "POST" | "PUT" | "DELETE", url: string, payload?: object) =>
     app.inject({ method, url, payload: method === "GET" ? undefined : payload ?? {}, headers: { cookie: u.cookie } });

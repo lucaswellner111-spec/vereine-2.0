@@ -109,3 +109,21 @@ describe("Oeffentlicher Bereich", () => {
     }
   });
 });
+
+/**
+ * Der Mail-Bereich (Schema `mail`) kennt nur seine Sperrliste; Empfaenger kommen als Adresse von den Fachdiensten
+ * (Kontakte ueber UsersDirectory.mailContacts). So kann der Versand spaeter als eigener Dienst laufen.
+ */
+describe("Mail-Bereich", () => {
+  const MAIL_TABLES = ["mailArea", "mailSuppressions"];
+  it("importiert nur mail-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "mail"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !MAIL_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

@@ -5,7 +5,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 ## Sicherheit
 | Punkt | Warum | Blockiert durch |
 |---|---|---|
-| E-Mail-Bestätigung + Passwort-Reset | Schließt die Konto-Enumeration bei der Registrierung (409 verrät, ob eine E-Mail existiert) und erlaubt Wiederherstellung | Mailanbieter + SPF/DKIM/DMARC |
+| E-Mail-Bestätigung + Passwort-Reset | **Gebaut in S2** (Registrierung antwortet immer 202, kein 409 mehr); aktiv erst mit `MAIL_DRIVER=smtp` | Scaleway-AVV + SPF/DKIM/DMARC |
 | Passkeys (WebAuthn); 2FA-Pflicht für Vorstände/Plattform-Admins | TOTP ist gebaut (freiwillig); Pflicht und Passkeys fehlen | – |
 | Datenbank-Rollen je Bereich (identity/social/chat/billing) | Least Privilege: ein SQL-Fehler im Chat soll keine Nutzerdaten lesen können | Refactor auf mehrere DB-Verbindungen; sinnvoll beim DB-Server-Umzug |
 | CSP mit Nonces statt 'unsafe-inline' | Härtung gegen XSS | Next.js-Middleware |
@@ -120,7 +120,7 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - GiroCode: Name im SEPA-Zeichensatz (Latin-1 bleibt, anderes wird „?“); ohne abschließenden Zeilenumbruch nach dem Verwendungszweck (EPC069-12: nach dem letzten belegten Feld kein Trenner). Mit echten Banking-Apps (Sparkasse, VR, ING, DKB) testen.
 
 ## Paket P5 (Datenschutz-Lücken, Aufräum-Jobs, Mail): offen (Stand 2026-11-08)
-- **Mailversand aktivieren (nächste Etappe):** `MailService.send` ist fertig, aber noch ohne Aufrufer. Offen: E-Mail-Bestätigung bei Registrierung, „Passwort vergessen“ (Token-Tabelle, Gültigkeit, Rate-Limit), Einladung per Mail, Rechnungsmail beim Finalisieren; Basis-URL für Links (`APP_URL`), Abmelde-/Einstellungsseite für nicht zwingende Mails.
+- ~~Mailversand aktivieren~~ – erledigt in S2 (siehe unten).
 - **Scaleway TEM (Paris/FR):** AVV abschließen, Unterauftragsverarbeiter-Liste, Datenschutzerklärung, Domain-Einträge SPF/DKIM/DMARC; Zugangsdaten nur als Server-Secret (`SMTP_USER`/`SMTP_PASS`), nie im Repo. Für Rechnungsmails muss der AVV mit dem Verein den Mail-Anbieter nennen.
 - **Fristen mit DSB bestätigen:** Benachrichtigungen 180 Tage (früher Vorschlag 90), Zugriffsprotokoll 12 Monate / Moderation 24 Monate / Rechnungsaktionen 10 Jahre, Anwesenheit 24 Monate, gelöschte Beiträge 30 Tage (offene Meldung hält länger), abgelaufene/widerrufene Einladungen 30 Tage. Konstanten in `apps/api/src/privacy/retention.service.ts`.
 - **Mail-Jobdaten in Redis:** Adresse und Link (Token) liegen bis zum Versand in der Queue-Redis (AOF-persistiert); nach Erfolg und nach dem letzten Fehlversuch werden sie sofort entfernt. Tokens für Passwort-Reset trotzdem kurz gültig halten (Vorschlag 30–60 Min.) und nur gehasht speichern.
@@ -131,3 +131,15 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **DSA-Frage Kontolöschung:** Löscht jemand sein Konto, verschwinden seine Beiträge und Kommentare per Kaskade – samt **offener Meldungen** darüber (die Ausnahme „offene Meldung hält den Beitrag“ gilt nur für das eigene Löschen eines Beitrags und den 30-Tage-Job). Mit Anwalt/DSB klären, ob gemeldete Inhalte als Beweis (verschlüsselte Kopie, Frist) die Kontolöschung überstehen müssen (wie Chat-Meldungen, Art. 17 Abs. 3 lit. e DSGVO).
 - Aufräumjob: schlägt ein Schritt fehl, laufen die anderen weiter; der Job meldet am Ende einen Fehler mit den Schrittnamen (BullMQ wiederholt ihn). Ein Monitoring-Alarm darauf fehlt noch.
 - Anwesenheits-Export (CSV/PDF) für Vereine weiter offen (nicht Teil von P5).
+
+## Paket S2 (Mail mit Scaleway + Kostenbremse): offen (Stand 2026-11-09)
+- **Aktivieren auf dem Server:** `MAIL_DRIVER=smtp`, `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` (optional `MAIL_REPLY_TO`, `MAIL_DAILY_LIMIT`, `MAIL_MONTHLY_LIMIT`) nur als Server-Secret in `/opt/vereine/.env`; `APP_URL` kommt aus `WEB_ORIGIN`. Vorher Scaleway-AVV, SPF/DKIM/DMARC, Datenschutzerklärung.
+- **Kostenbremse nicht persistent:** Zähler liegen im Cache-Redis (allkeys-lru, ohne AOF). Ein Redis-Neustart setzt Tages-/Monatszähler zurück – das Monatslimit ist eine Bremse, keine harte Grenze. Zusätzlich im Scaleway-Konto ein Monatslimit/Budget-Alarm setzen. SKALIERUNG: bei mehreren API-Instanzen bleibt es korrekt (gemeinsames Redis), bei Redis-Cluster Keys prüfen.
+- **Bounces/Beschwerden:** `SuppressionsService.recordBounce` ist vorbereitet, aber ohne Aufrufer – Scaleway-Webhook (signiert) anbinden, sonst landen harte Bounces nicht auf der Sperrliste.
+- **Zurückgestellte Mails** (Kontingent voll): Einladungen/Rechnungen werden bis zu 3-mal auf den nächsten Morgen verschoben, Auth- und Sammelmails verworfen. Kein Hinweis an die auslösende Person – ggf. Anzeige im Vorstandsbereich.
+- **Registrierung ohne Enumeration:** Restrisiko Pre-Account-Hijacking (fremde Adresse zuerst registriert) akzeptiert: das Konto ist erst nach Klick im Postfach nutzbar, erneute Registrierung einer unbestätigten Adresse speichert kein Passwort und ändert das Konto nicht, sondern schickt „Registrierung abschließen“ mit einem Passwort-festlegen-Link (Reset, 1 h); nach 7 Tagen ohne Bestätigung gelöscht. Verbleibend nur der klassische Fall „Angreifer registriert zuerst, Opfer klickt den ursprünglichen Bestätigungslink statt der neuesten Mail“ – dann hilft „Passwort vergessen“ (beendet alle Sitzungen). Optional: In der Bestätigungsmail darauf hinweisen, dass sie zu einer Registrierung zu einem bestimmten Zeitpunkt gehört. Das Passwort wird in allen Fällen gehasht (gleiche Antwortzeit), nicht gemessen.
+- **Altkonten (vor S2)** haben keine bestätigte Adresse: Banner + Sperre für Verein gründen/Einladungen. Vor dem Launch entscheiden, ob sie eine Bestätigung erzwingen sollen (Demo-Konten haben `.invalid`-Adressen).
+- **Rechtsfragen (DSB):** Sperrlisten-Fristen 12/36 Monate; Sammelmail als Einwilligung vs. Vertrag; Einladung per Mail an fremde Adresse (lit. f des Vereins, Hinweis in AVV/Nutzungsbedingungen); Rechnungsmail im Auftrag des Vereins.
+- **Sammelmail:** läuft stündlich ab 07:00 (Berlin), höchstens einmal am Tag, nur Anzahlen; Likes nie. SKALIERUNG: Abfrage je Nutzer – bei vielen Tausend Abonnenten in Batches/Jobs aufteilen.
+- **Weitere Mails später:** Termin-Erinnerungen, Austritt/Beitragsklasse – bewusst nicht in S2.
+- **Secrets-Trennung (ARCHITEKTUR Punkt 5):** SMTP-Zugang liegt derzeit in `api` **und** `worker`, weil der Treiber beim Start die Konfiguration prüft; versendet wird nur im Worker. Später den Treiber in der API erst beim Versand anlegen und `SMTP_USER`/`SMTP_PASS` nur dem Worker geben.

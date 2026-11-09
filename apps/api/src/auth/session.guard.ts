@@ -8,7 +8,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import type { PublicUser } from "@vereine/shared";
+import { EMAIL_NOT_VERIFIED, type PublicUser } from "@vereine/shared";
 import { AuthService } from "./auth.service";
 
 export const SESSION_COOKIE = "sid";
@@ -44,3 +44,8 @@ export const CurrentUser = createParamDecorator(
   (_data: unknown, context: ExecutionContext): PublicUser =>
     context.switchToHttp().getRequest<AuthedRequest>().user as PublicUser,
 );
+
+/** Aktionen mit Aussenwirkung (Verein gruenden, Einladungen) erst mit bestaetigter E-Mail-Adresse. */
+export function requireVerifiedEmail(user: PublicUser): void {
+  if (!user.emailVerified) throw new ForbiddenException(EMAIL_NOT_VERIFIED);
+}

@@ -3,12 +3,14 @@ import {
   resolveChatReportSchema,
   resolveReportSchema,
   type ChatReportItem,
+  type MailQuota,
   type PublicUser,
   type ReportItem,
 } from "@vereine/shared";
 import { CurrentUser, PlatformAdminGuard } from "../auth/session.guard";
 import { ChatService } from "../chat/chat.service";
 import { parse } from "../common/parse";
+import { MailService } from "../mail/mail.service";
 import { ModerationService } from "../posts/moderation.service";
 
 const statusOf = (s?: string) => (s === "dismissed" || s === "actioned" ? s : "open");
@@ -20,7 +22,14 @@ export class PlatformController {
   constructor(
     @Inject(ModerationService) private readonly moderation: ModerationService,
     @Inject(ChatService) private readonly chat: ChatService,
+    @Inject(MailService) private readonly mail: MailService,
   ) {}
+
+  /** Mail-Kontingent fuer die Plattform-Seite ("Mail-Kontingent 82 %"). */
+  @Get("mail-quota")
+  async mailQuota(): Promise<MailQuota> {
+    return { driver: this.mail.driverName, ...(await this.mail.quota()) };
+  }
 
   @Get("reports")
   reports(@CurrentUser() admin: PublicUser, @Query("status") status?: string): Promise<ReportItem[]> {

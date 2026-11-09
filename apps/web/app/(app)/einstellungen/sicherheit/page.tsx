@@ -8,6 +8,7 @@ import { TwoFactorCard } from "@/components/two-factor-card";
 import { api, describeError } from "@/lib/api";
 import { useApi, useBusy } from "@/lib/use-api";
 import { ask, toast } from "@/components/ui-hosts";
+import { useAuth } from "@/lib/auth";
 
 const dateFmt = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -18,6 +19,25 @@ export default function SecurityPage() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [mailBusy, runMail] = useBusy();
+  const [newEmail, setNewEmail] = useState("");
+  const [mailPw, setMailPw] = useState("");
+
+  function changeEmail(e: FormEvent) {
+    e.preventDefault();
+    void runMail(async () => {
+      setError(null);
+      try {
+        await api("/auth/email/change", { method: "POST", body: { newEmail, password: mailPw } });
+        toast.success(`Prüfe dein Postfach: Bestätige die neue Adresse über den Link an ${newEmail.trim()}. Bis dahin gilt die bisherige.`);
+        setNewEmail("");
+        setMailPw("");
+      } catch (err) {
+        setError(describeError(err));
+      }
+    });
+  }
 
   function changePassword(e: FormEvent) {
     e.preventDefault();
@@ -48,7 +68,7 @@ export default function SecurityPage() {
   return (
     <>
       <SettingsBackLink />
-      <PageHeader title="Sicherheit" subtitle="Passwort und angemeldete Geräte." />
+      <PageHeader title="Sicherheit" subtitle="Passwort, E-Mail-Adresse und angemeldete Geräte." />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <TwoFactorCard onError={setError} />
@@ -59,6 +79,19 @@ export default function SecurityPage() {
           <Field id="cur" label="Aktuelles Passwort" type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
           <Field id="new" label="Neues Passwort" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={next} onChange={(e) => setNext(e.target.value)} hint="Mindestens 12 Zeichen. Ein Satz aus mehreren Wörtern ist ideal." />
           <Button type="submit" busy={pwBusy} disabled={!current || next.length < 12}>Passwort ändern</Button>
+        </form>
+      </Card>
+
+      <h2 className="mb-2 font-semibold">E-Mail-Adresse</h2>
+      <Card className="mb-6">
+        <p className="mb-3 text-sm text-muted">
+          Aktuell: <span className="font-medium text-text">{user?.email}</span>{" "}
+          {user?.emailVerified === false ? <Badge tone="accent">unbestätigt</Badge> : <Badge tone="brand">bestätigt</Badge>}
+        </p>
+        <form onSubmit={changeEmail} className="max-w-sm space-y-3">
+          <Field id="new-email" label="Neue E-Mail-Adresse" type="email" autoComplete="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} hint="Wir schicken einen Bestätigungslink an die neue Adresse und einen Hinweis an die bisherige." />
+          <Field id="mail-pw" label="Passwort zur Bestätigung" type="password" autoComplete="current-password" required value={mailPw} onChange={(e) => setMailPw(e.target.value)} />
+          <Button type="submit" busy={mailBusy} disabled={!newEmail || !mailPw}>Adresse ändern</Button>
         </form>
       </Card>
 

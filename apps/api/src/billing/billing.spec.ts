@@ -10,6 +10,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { BillingService } from "./billing.service";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const dayOffset = (d: number) => new Date(Date.now() + d * 86400_000).toISOString().slice(0, 10);
@@ -41,8 +42,9 @@ describe("Rechnungen (Verein -> Mitglied)", () => {
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
-    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: reg.json().id };
+    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: login.json().id };
   }
   const req = (u: U | null, method: "GET" | "POST" | "PUT" | "DELETE", url: string, payload?: object) =>
     app.inject({ method, url, payload, headers: u ? { cookie: u.cookie } : {} });

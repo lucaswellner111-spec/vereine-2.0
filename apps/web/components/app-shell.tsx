@@ -17,6 +17,7 @@ import { LazyCommandPalette, LazyKeyboardShortcuts } from "./lazy";
 import { MobileMoreSheet } from "./mobile-more-sheet";
 import { NotificationBell } from "./notification-bell";
 import { OfflineBanner } from "./offline-banner";
+import { EmailVerifyBanner } from "./email-verify-banner";
 import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
 import { Avatar, Button, Select, Skeleton } from "./ui";
@@ -298,7 +299,10 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             : "py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]",
         )}
       >
-        <div className="mx-auto max-w-3xl">{children}</div>
+        <div className="mx-auto max-w-3xl">
+          {!immersive && <EmailVerifyBanner user={user} />}
+          {children}
+        </div>
       </main>
 
       <nav

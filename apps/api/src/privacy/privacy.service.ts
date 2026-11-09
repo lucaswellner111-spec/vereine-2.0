@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, desc, eq, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   CONSENT_PURPOSES,
   LEGAL_VERSION,
@@ -25,6 +25,9 @@ import { PostsService } from "../posts/posts.service";
 import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
 import { OrgsService } from "../orgs/orgs.service";
+import { DigestService } from "../notifications/digest.service";
+import { SuppressionsService } from "../mail/suppressions.service";
+import { ago, RETENTION } from "../common/retention";
 
 /** Nach dieser Zeit schliesst der Job `privacy.erase-pending` abgebrochene Kontoloeschungen ab. */
 const ERASE_GRACE_MS = 15 * 60_000;
@@ -56,6 +59,8 @@ export class PrivacyService implements OnModuleInit {
     @Inject(TwoFactorService) private readonly twoFactor: TwoFactorService,
     @Inject(CalendarFeedService) private readonly calendar: CalendarFeedService,
     @Inject(OrgAdminService) private readonly orgAdmin: OrgAdminService,
+    @Inject(DigestService) private readonly digest: DigestService,
+    @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
   ) {}
 
   onModuleInit() {
@@ -129,6 +134,9 @@ export class PrivacyService implements OnModuleInit {
       socialProfile: social.profile,
       twoFactor,
       calendarFeed: { active: calendar.enabled, since: calendar.createdAt },
+      email: await this.auth.exportEmailInfo(user.id),
+      emailSettings: await this.digest.exportFor(user.id),
+      mailSuppressions: await this.suppressions.exportFor(user.email),
       consents: consentHistory.map((c) => ({
         purpose: c.purpose,
         granted: c.granted,
@@ -192,6 +200,8 @@ export class PrivacyService implements OnModuleInit {
    * aktives Mitglied die Person ist, werden mitgeloescht (Variante A; finalisierte Rechnungen bleiben erhalten).
    */
   async eraseEverything(userId: string): Promise<void> {
+    const [account] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    if (account) await this.suppressions.eraseFor(account.email); // Bounce-Sperren der Kontoadresse (Abmeldungen bleiben)
     await this.chat.eraseUser(userId);
     await this.members.eraseUser(userId); // Mitgliederstammdaten in allen Vereinen
     await this.billing.anonymizeRecipient(userId); // Rechnungen bleiben (GoBD), aber ohne Personenbezug
@@ -214,6 +224,20 @@ export class PrivacyService implements OnModuleInit {
     });
     // Zusagen sind per Kaskade weg: freie Plaetze aus Wartelisten fuellen (sonst spaetestens der 10-Minuten-Job)
     await this.events.fillAllWaitlists().catch(() => undefined);
+  }
+
+  /**
+   * Loeschfrist: Registrierungen, die nie bestaetigt wurden (Konto war nie nutzbar), nach 7 Tagen vollstaendig loeschen
+   * (Job privacy.retention). Bestaetigungslinks gelten nur 24 h; danach kann man sich einfach neu registrieren.
+   */
+  async erasePendingRegistrations(): Promise<number> {
+    const stale = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.pendingVerification, true), isNull(users.deletedAt), lt(users.createdAt, ago(RETENTION.pendingAccounts))))
+      .limit(500);
+    for (const { id } of stale) await this.eraseEverything(id);
+    return stale.length;
   }
 
   /** Job: gesperrte Konten (deleted_at aelter als `olderThanMs`), die noch existieren, fertig loeschen. */

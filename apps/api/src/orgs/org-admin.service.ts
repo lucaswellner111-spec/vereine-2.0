@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type {
   CreatedInvite,
@@ -16,6 +16,9 @@ import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retent
 import { decryptGcm, derivedKey, encryptGcm } from "../common/secret-key";
 import { DB, type Database } from "../db/db.module";
 import { follows, orgInvites, orgMembers, organizations } from "../db/schema";
+import { appLink } from "../common/app-url";
+import { addressHash } from "../mail/mail-limits";
+import { MailService } from "../mail/mail.service";
 import { OrgsService } from "./orgs.service";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -34,6 +37,7 @@ export class OrgAdminService {
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(MailService) private readonly mail: MailService,
   ) {}
 
   // --- Stammdaten ---------------------------------------------------------------
@@ -128,7 +132,37 @@ export class OrgAdminService {
   /** Link einer aktiven Einladung erneut anzeigen (nur Vorstand, Zugriff im Audit-Protokoll). */
   async inviteLink(user: PublicUser, slug: string, id: string): Promise<InviteLink> {
     const org = await this.requireAdmin(user, slug);
-    const [row] = await this.db.select().from(orgInvites).where(and(eq(orgInvites.id, id), eq(orgInvites.orgId, org.id))).limit(1);
+    const token = await this.activeToken(org.id, id);
+    await this.audit.record(user.id, "org.invite.link.viewed", { orgId: org.id, inviteId: id });
+    return { token };
+  }
+
+  /**
+   * Einladung per Mail (nur Vorstand). Die Adresse wird nicht gespeichert und nicht protokolliert. Limits: 100 je Verein
+   * und Tag, 20 je Konto und Tag, je Empfaenger 5/Stunde. Hat sich die Adresse von Einladungen abgemeldet, wird still
+   * nichts verschickt (der Vorstand erfaehrt nicht, wer sich abgemeldet hat).
+   */
+  async mailInvite(user: PublicUser, slug: string, id: string, email: string): Promise<void> {
+    const org = await this.requireAdmin(user, slug);
+    const token = await this.activeToken(org.id, id);
+    const result = await this.mail.send(
+      email,
+      "invite",
+      { orgName: org.name, link: appLink(`/einladung/${token}`), inviterName: user.displayName },
+      { actorId: user.id, orgId: org.id, unsubscribe: { k: "invite", h: addressHash(email) } },
+    );
+    const limited: Record<string, string> = {
+      "limited:org": "Heute wurden für diesen Verein schon 100 Einladungen per Mail verschickt. Bitte versuche es morgen erneut oder teile den Link.",
+      "limited:actor": "Du hast heute schon 20 Mails ausgelöst. Bitte versuche es morgen erneut oder teile den Link.",
+      "limited:recipient": "An diese Adresse wurden gerade schon mehrere Mails geschickt. Bitte versuche es später erneut.",
+    };
+    if (limited[result]) throw new HttpException({ message: limited[result], statusCode: 429 }, 429);
+    await this.audit.record(user.id, "org.invite.mailed", { orgId: org.id, inviteId: id });
+  }
+
+  /** Token einer aktiven Einladung entschluesseln (fuer Anzeige und Mail). */
+  private async activeToken(orgId: string, id: string): Promise<string> {
+    const [row] = await this.db.select().from(orgInvites).where(and(eq(orgInvites.id, id), eq(orgInvites.orgId, orgId))).limit(1);
     if (!row || this.item(row).status !== "active") throw new NotFoundException("Einladung nicht gefunden oder nicht mehr aktiv.");
     const gone = new ConflictException("Dieser Link kann nicht erneut angezeigt werden. Bitte neu erstellen.");
     if (!row.tokenEnc) throw gone;
@@ -139,8 +173,7 @@ export class OrgAdminService {
     } catch {
       throw gone; // z. B. Schluessel gewechselt
     }
-    await this.audit.record(user.id, "org.invite.link.viewed", { orgId: org.id, inviteId: row.id });
-    return { token };
+    return token;
   }
 
   async revokeInvite(user: PublicUser, slug: string, id: string): Promise<void> {

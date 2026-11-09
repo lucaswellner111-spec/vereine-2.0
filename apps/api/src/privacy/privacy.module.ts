@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module";
 import { BillingModule } from "../billing/billing.module";
 import { ChatModule } from "../chat/chat.module";
 import { EventsModule } from "../events/events.module";
+import { MailModule } from "../mail/mail.module";
 import { MediaModule } from "../media/media.module";
 import { MembersModule } from "../members/members.module";
 import { NotificationsModule } from "../notifications/notifications.module";
@@ -14,7 +15,7 @@ import { PrivacyService } from "./privacy.service";
 import { RetentionService } from "./retention.service";
 
 @Module({
-  imports: [AuthModule, BillingModule, ChatModule, EventsModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule],
+  imports: [AuthModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule],
   controllers: [PrivacyController],
   providers: [PrivacyService, RetentionService],
 })

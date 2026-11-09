@@ -32,9 +32,34 @@ export const users = identity.table("users", {
   displayName: text("display_name").notNull(),
   /** Plattform-Rolle (null = normaler Nutzer, "admin" = Plattform-Moderation). Nur per CLI vergeben. */
   platformRole: text("platform_role"),
+  /** Zeitpunkt der Bestaetigung der aktuellen Adresse (null = unbestaetigt: Banner, keine Vereinsgruendung/Einladungen). */
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  /**
+   * true = per Registrierung angelegt und noch nie bestaetigt. Anmelden geht erst ueber den Link in der Mail
+   * (sonst verriete "Registrieren + Anmelden", ob eine Adresse schon ein Konto hat). Alte Konten: false.
+   */
+  pendingVerification: boolean("pending_verification").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+/**
+ * Einmal-Links fuer E-Mail-Bestaetigung (24 h), Passwort vergessen (1 h) und E-Mail-Wechsel (24 h, neue Adresse in
+ * `new_email`). Gespeichert wird nur der SHA-256-Hash des Tokens; Loeschfrist: 7 Tage nach Ablauf/Nutzung.
+ */
+export const authTokens = identity.table(
+  "auth_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(), // verify | reset | email_change
+    newEmail: text("new_email"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("auth_tokens_user_purpose_idx").on(t.userId, t.purpose), index("auth_tokens_expires_idx").on(t.expiresAt)],
+);
 
 // Session-ID im Cookie ist ein Zufallstoken; gespeichert wird nur der SHA-256-Hash.
 export const sessions = identity.table(
@@ -309,6 +334,17 @@ export const notifications = social.table(
     index("notifications_created_idx").on(t.createdAt),
   ],
 );
+
+/** E-Mail-Einstellungen fuer Benachrichtigungen: nur die taegliche Sammelmail, standardmaessig aus (Opt-in). */
+export const notificationPrefs = social.table("notification_prefs", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  emailDigest: boolean("email_digest").notNull().default(false),
+  /** Seit wann die Sammelmail an ist (Nachweis der eigenen Wahl); null = aus. */
+  digestSince: timestamp("digest_since", { withTimezone: true }),
+  /** Zeitpunkt der letzten Sammelmail (nur Benachrichtigungen danach kommen in die naechste). */
+  lastDigestAt: timestamp("last_digest_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // --- Termine & Teams ---------------------------------------------------------
 
@@ -778,3 +814,22 @@ export const memberCounters = membersArea.table("member_counters", {
   orgId: uuid("org_id").primaryKey(),
   lastNo: integer("last_no").notNull().default(0),
 });
+
+// --- Mail (eigener Bereich, nur eigene Tabellen, keine Fremdschluessel) ---------------------------
+
+export const mailArea = pgSchema("mail");
+
+/**
+ * Sperrliste: Adressen nur als HMAC-Hash (Teilschluessel "mail-address"), nie im Klartext.
+ * scope: all (harter Bounce/Beschwerde, spaeter per Webhook) | invite (Abmeldung von Einladungs-Mails).
+ */
+export const mailSuppressions = mailArea.table(
+  "suppressions",
+  {
+    addressHash: text("address_hash").notNull(),
+    scope: text("scope").notNull(),
+    reason: text("reason").notNull(), // unsubscribe | bounce | complaint
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.addressHash, t.scope] }), index("mail_suppressions_created_idx").on(t.createdAt)],
+);

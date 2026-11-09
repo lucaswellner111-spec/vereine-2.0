@@ -10,6 +10,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { occurrences } from "./recurrence";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const berlin = (d: Date) => d.toLocaleString("sv-SE", { timeZone: "Europe/Berlin" });
@@ -53,8 +54,9 @@ describe("Terminserien und Kalender-Abo", () => {
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
-    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: reg.json().id };
+    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: login.json().id };
   }
   const req = (u: U | null, method: "GET" | "POST" | "PUT" | "DELETE", url: string, payload?: object) =>
     app.inject({ method, url, payload, headers: u ? { cookie: u.cookie } : {} });

@@ -26,8 +26,13 @@ test("Termin anlegen, Mitglied tritt per Einladungslink bei und sagt zu", async 
   const member = await ctx.newPage();
   await signupApi(member.request, "Mitglied", info);
   await member.goto(`/einladung/${token}`);
-  await member.getByRole("button", { name: "Verein beitreten" }).click();
-  await expect(member).toHaveURL(new RegExp(`/vereine/${slug}`));
+  // Unter Last kann der erste Klick vor der Hydration kommen: wiederholen, bis die Seite wechselt
+  await expect(async () => {
+    if (/\/einladung\//.test(member.url())) {
+      await member.getByRole("button", { name: "Verein beitreten" }).click({ timeout: 2_000 });
+    }
+    await expect(member).toHaveURL(new RegExp(`/vereine/${slug}`), { timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 
   await member.goto("/kalender");
   await expect(member.getByRole("link", { name: title, exact: true })).toBeVisible();

@@ -10,18 +10,16 @@ import {
 import { hash, verify } from "@node-rs/argon2";
 import { and, desc, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
 import {
-  LEGAL_VERSION,
   type LoginInput,
   type PublicUser,
-  type RegisterInput,
   type SessionInfo,
 } from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { JobsService } from "../jobs/jobs.service";
 import { TwoFactorService } from "./two-factor.service";
 import { DB, type Database } from "../db/db.module";
-import { auditLog, consents, sessions, users } from "../db/schema";
-import { isUniqueViolation } from "../common/pg-errors";
+import { auditLog, authTokens, sessions, users } from "../db/schema";
+import { ago, RETENTION } from "../common/retention";
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Sessions werden kurz gecacht: spart eine DB-Abfrage pro Request (SKALIERUNG). */
@@ -49,7 +47,7 @@ export function describeDevice(ua?: string): string {
 }
 
 // OWASP-Empfehlung fuer argon2id: m=19 MiB, t=2, p=1 (Algorithm 2 = argon2id)
-const ARGON_OPTIONS = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
+export const ARGON_OPTIONS = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -71,6 +69,26 @@ export class AuthService implements OnModuleInit {
     this.jobs.every("sessions.purge", 60 * 60 * 1000);
   }
 
+  /** Loeschfrist Einmal-Links: 7 Tage nach Ablauf (Job privacy.retention). */
+  async purgeExpiredTokens(): Promise<number> {
+    const removed = await this.db.delete(authTokens).where(lt(authTokens.expiresAt, ago(RETENTION.authTokens))).returning({ h: authTokens.tokenHash });
+    return removed.length;
+  }
+
+  /** Datenauskunft: Bestaetigungsstatus und offene Einmal-Links (ohne Token-Hashes). */
+  async exportEmailInfo(userId: string) {
+    const [user] = await this.db.select({ verifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, userId)).limit(1);
+    const open = await this.db
+      .select()
+      .from(authTokens)
+      .where(and(eq(authTokens.userId, userId), isNull(authTokens.usedAt), gt(authTokens.expiresAt, new Date())));
+    return {
+      emailVerifiedAt: user?.verifiedAt?.toISOString() ?? null,
+      pendingEmailChange: open.find((t) => t.purpose === "email_change")?.newEmail ?? null,
+      openLinks: open.map((t) => ({ purpose: t.purpose, createdAt: t.createdAt.toISOString(), expiresAt: t.expiresAt.toISOString() })),
+    };
+  }
+
   async purgeExpiredSessions(): Promise<number> {
     const removed = await this.db.delete(sessions).where(lt(sessions.expiresAt, new Date())).returning({ id: sessions.tokenHash });
     return removed.length;
@@ -80,6 +98,15 @@ export class AuthService implements OnModuleInit {
   async invalidateUserSessions(userId: string): Promise<void> {
     const rows = await this.db.select({ tokenHash: sessions.tokenHash }).from(sessions).where(eq(sessions.userId, userId));
     await this.cache.del(...rows.map((r) => sessionKey(r.tokenHash)));
+  }
+
+  /**
+   * Alle Sitzungen beenden (z. B. Passwort-Reset): erst in der DB loeschen, DANN den Cache leeren - sonst koennte ein
+   * paralleler Request die Sitzung zwischen Cache-Leeren und DB-Loeschen erneut cachen (bis zu 60 s gueltig).
+   */
+  async endAllSessions(userId: string): Promise<void> {
+    const removed = await this.db.delete(sessions).where(eq(sessions.userId, userId)).returning({ hash: sessions.tokenHash });
+    if (removed.length) await this.cache.del(...removed.map((r) => sessionKey(r.hash))).catch(() => undefined);
   }
 
   /**
@@ -94,38 +121,6 @@ export class AuthService implements OnModuleInit {
       return removed.map((r) => r.hash);
     });
     await this.cache.del(...hashes.map(sessionKey)).catch(() => undefined);
-  }
-
-  async register(input: RegisterInput): Promise<PublicUser> {
-    const passwordHash = await hash(input.password, ARGON_OPTIONS);
-    try {
-      const user = await this.db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(users)
-          .values({
-            email: input.email,
-            passwordHash,
-            displayName: input.displayName,
-          })
-          .returning();
-        await tx.insert(consents).values(
-          (["terms", "privacy"] as const).map((purpose) => ({
-            userId: created.id,
-            purpose,
-            granted: true,
-            version: LEGAL_VERSION,
-          })),
-        );
-        await tx.insert(auditLog).values({ userId: created.id, action: "user.registered" });
-        return created;
-      });
-      return this.toPublic(user);
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        throw new ConflictException("Diese E-Mail-Adresse ist bereits registriert.");
-      }
-      throw err;
-    }
   }
 
   async login(input: LoginInput, userAgent?: string, ip = "unknown"): Promise<{ user: PublicUser; token: string } | { challenge: string }> {
@@ -149,7 +144,8 @@ export class AuthService implements OnModuleInit {
       .limit(1);
 
     const valid = await verify(user?.passwordHash ?? (await this.dummyHash), input.password);
-    if (!user || !valid) {
+    // Nie bestaetigte Registrierung: dieselbe Antwort wie bei falschem Passwort (siehe EmailFlowsService).
+    if (!user || !valid || user.pendingVerification) {
       await this.cache.incr(ipKey, LOGIN_FAIL_WINDOW_S).catch(() => undefined);
       await this.cache.incr(emailKey, LOGIN_FAIL_EMAIL_WINDOW_S).catch(() => undefined);
       throw new UnauthorizedException("E-Mail oder Passwort ist falsch.");
@@ -170,7 +166,7 @@ export class AuthService implements OnModuleInit {
     return this.startSession(user, userAgent);
   }
 
-  private async startSession(user: typeof users.$inferSelect, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
+  async startSession(user: typeof users.$inferSelect, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
     const token = randomBytes(32).toString("base64url");
     await this.db.insert(sessions).values({
       tokenHash: sha256(token),
@@ -305,13 +301,14 @@ export class AuthService implements OnModuleInit {
     return user;
   }
 
-  private toPublic(user: typeof users.$inferSelect): PublicUser {
+  toPublic(user: typeof users.$inferSelect): PublicUser {
     return {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
       createdAt: user.createdAt.toISOString(),
       isPlatformAdmin: user.platformRole === "admin",
+      emailVerified: !!user.emailVerifiedAt,
     };
   }
 }

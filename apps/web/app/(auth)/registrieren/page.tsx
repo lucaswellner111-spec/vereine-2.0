@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Checkbox, Field } from "@/components/ui";
 import { describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { safeNext, withNext } from "@/lib/next-url";
+import { rememberNext, safeNext, withNext } from "@/lib/next-url";
 
 export default function RegisterPage() {
   const { register } = useAuth();
-  const router = useRouter();
   // Erst nach dem Laden gesetzt, damit Server- und Client-Ausgabe uebereinstimmen.
   const [nextTarget, setNextTarget] = useState("");
   useEffect(() => setNextTarget(safeNext(window.location.search, "")), []);
@@ -20,6 +18,7 @@ export default function RegisterPage() {
   const [privacy, setPrivacy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -34,12 +33,28 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       await register({ ...form, confirmAge16: true, acceptTerms: true, acceptPrivacy: true });
-      router.replace(safeNext(window.location.search));
+      rememberNext(safeNext(window.location.search, ""));
+      setSentTo(form.email.trim());
+      setForm((f) => ({ ...f, password: "" }));
     } catch (err) {
       setError(describeError(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (sentTo) {
+    // Gleiche Ansicht fuer neue und schon registrierte Adressen (verraet nicht, ob es ein Konto gibt).
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold">Prüfe dein Postfach</h1>
+        <p className="text-sm text-muted">
+          Wir haben eine E-Mail an <span className="font-medium text-text">{sentTo}</span> geschickt. Klicke auf den Link darin, um dein Konto zu bestätigen – danach bist du direkt angemeldet. Der Link ist 24 Stunden gültig.
+        </p>
+        <p className="text-sm text-muted">Keine Mail da? Schau im Spam-Ordner nach oder registriere dich in ein paar Minuten noch einmal.</p>
+        <Link href={withNext("/login", nextTarget)} className="block text-center text-sm font-medium text-brand hover:underline">Zur Anmeldung</Link>
+      </div>
+    );
   }
 
   return (

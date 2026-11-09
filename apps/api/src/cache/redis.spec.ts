@@ -13,6 +13,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { CACHE, REDIS, type Cache } from "./cache.module";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 
@@ -44,8 +45,9 @@ describe("Redis: Session-Cache, Rate-Limit, Aufraeumen, Health", () => {
       method: "POST", url: "/auth/register",
       payload: { email: "r@example.de", password, displayName: "Rita", confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
-    userId = reg.json().id;
+    await confirmEmailForTest(app, "r@example.de");
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "r@example.de", password } });
+    userId = login.json().id;
     cookie = String(login.headers["set-cookie"]).split(";")[0];
   });
 
@@ -105,6 +107,7 @@ describe("Redis: Session-Cache, Rate-Limit, Aufraeumen, Health", () => {
       method: "POST", url: "/auth/register",
       payload: { email: "s@example.de", password, displayName: "Sam", confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, "s@example.de");
     await app.inject({ method: "POST", url: "/auth/login", payload: { email: "s@example.de", password } });
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, "s@example.de"));
     await db.insert(schema.sessions).values({ tokenHash: "alt", userId: user.id, expiresAt: new Date(Date.now() - 1000) });
@@ -170,6 +173,7 @@ describe("Rate-Limit: strenge Routen und Login-Sperre", () => {
     const redis = new RedisMock({ port: 6392 });
     const { app } = await boot({ redis });
     await register(app, "lock@example.de");
+    await confirmEmailForTest(app, "lock@example.de");
     const login = (ip: string, pw: string) =>
       app.inject({ method: "POST", url: "/auth/login", remoteAddress: ip, payload: { email: "lock@example.de", password: pw } });
     for (let i = 0; i < 10; i++) expect((await login("203.0.113.1", "falsch-falsch-falsch")).statusCode).toBe(401);
@@ -197,8 +201,9 @@ describe("Rate-Limit: strenge Routen und Login-Sperre", () => {
     const users: { id: string; cookie: string }[] = [];
     for (const name of ["fa", "fb"]) {
       const reg = await register(app, `${name}@example.de`);
+      await confirmEmailForTest(app, `${name}@example.de`);
       const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: `${name}@example.de`, password } });
-      users.push({ id: reg.json().id, cookie: String(login.headers["set-cookie"]).split(";")[0] });
+      users.push({ id: login.json().id, cookie: String(login.headers["set-cookie"]).split(";")[0] });
     }
     const [a, b] = users;
     const as = (u: typeof a, method: "POST", url: string, payload: object = {}) => app.inject({ method, url, payload, headers: { cookie: u.cookie } });

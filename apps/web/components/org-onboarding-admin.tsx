@@ -59,13 +59,45 @@ function InviteLinkPanel({ url, qr }: { url: string; qr: string }) {
   );
 }
 
+/** Link einer aktiven Einladung per Mail verschicken (Adresse wird nicht gespeichert; max. 100 Mails je Verein und Tag). */
+function InviteMailForm({ slug, inviteId }: { slug: string; inviteId: string }) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, run] = useBusy();
+
+  function send(e: FormEvent) {
+    e.preventDefault();
+    void run(async () => {
+      setError(null);
+      try {
+        await api(`/orgs/${slug}/invites/${inviteId}/mail`, { method: "POST", body: { email } });
+        toast.success(`Einladung an ${email.trim()} verschickt.`);
+        setEmail("");
+      } catch (err) {
+        setError(describeError(err));
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={send} className="space-y-2 rounded-lg border border-border p-3">
+      {error && <Alert>{error}</Alert>}
+      <div className="flex flex-wrap items-end gap-2">
+        <Field id={`inv-mail-${inviteId}`} label="Per E-Mail einladen" type="email" autoComplete="off" required value={email} onChange={(e) => setEmail(e.target.value)} className="min-w-0 flex-1" />
+        <Button type="submit" variant="secondary" busy={busy} disabled={!email}>Senden</Button>
+      </div>
+      <p className="text-xs text-muted">Wir speichern die Adresse nicht. Die Mail enthält den Link und einen Abmeldelink; wer sich abmeldet, bekommt keine Einladungen mehr.</p>
+    </form>
+  );
+}
+
 type Shown = { invite: InviteItem; link: { url: string; qr: string } | null; error: string | null };
 
 export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const list = useApi<InviteItem[]>(`/orgs/${slug}/invites`);
   const rows = list.data;
   const load = list.reload;
-  const [created, setCreated] = useState<{ url: string; qr: string } | null>(null);
+  const [created, setCreated] = useState<{ id: string; url: string; qr: string } | null>(null);
   const [maxUses, setMaxUses] = useState("50");
   const [days, setDays] = useState("14");
   const [creating, runCreate] = useBusy();
@@ -96,7 +128,7 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
       try {
         const inv = await api<CreatedInvite>(`/orgs/${slug}/invites`, { method: "POST", body: { maxUses: Number(maxUses), expiresInDays: Number(days) } });
         const url = inviteUrl(inv.token);
-        setCreated({ url, qr: await qrDataUrl(url) });
+        setCreated({ id: inv.id, url, qr: await qrDataUrl(url) });
         load();
       } catch (err) {
         onError(describeError(err));
@@ -130,6 +162,7 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
           <div className="mt-4 space-y-2">
             <Alert tone="success">Neuer Link erstellt. Du findest ihn auch später in der Liste unten.</Alert>
             <InviteLinkPanel url={created.url} qr={created.qr} />
+            <InviteMailForm slug={slug} inviteId={created.id} />
           </div>
         )}
       </Card>
@@ -184,7 +217,10 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
           ) : shown.error ? (
             <Alert>{shown.error}</Alert>
           ) : shown.link ? (
-            <InviteLinkPanel url={shown.link.url} qr={shown.link.qr} />
+            <div className="space-y-3">
+              <InviteLinkPanel url={shown.link.url} qr={shown.link.qr} />
+              <InviteMailForm slug={slug} inviteId={shown.invite.id} />
+            </div>
           ) : (
             <CardSkeletons count={1} />
           ))}

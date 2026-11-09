@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { ConsentPurpose } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { consents, users } from "../db/schema";
@@ -22,6 +22,20 @@ export class UsersDirectory {
       .from(users)
       .where(and(inArray(users.id, unique), isNull(users.deletedAt))); // gesperrt (in Loeschung) = "Geloeschter Nutzer"
     return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  /**
+   * Kontaktdaten fuer Mails (Rechnung, Sammelmail): nur Konten mit BESTAETIGTER Adresse, ohne gesperrte Konten.
+   * Fehlende IDs = keine Mail.
+   */
+  async mailContacts(ids: string[]): Promise<Map<string, { email: string; name: string }>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+    const rows = await this.db
+      .select({ id: users.id, email: users.email, name: users.displayName })
+      .from(users)
+      .where(and(inArray(users.id, unique), isNull(users.deletedAt), isNotNull(users.emailVerifiedAt)));
+    return new Map(rows.map((r) => [r.id, { email: r.email, name: r.name }]));
   }
 
   /** Nutzersuche nach Anzeigename (Teiltreffer, ohne geloeschte Konten). */

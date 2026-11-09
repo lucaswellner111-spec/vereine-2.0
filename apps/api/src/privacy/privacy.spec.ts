@@ -10,6 +10,7 @@ import { DB, DbModule } from "../db/db.module";
 import { JobsModule } from "../jobs/jobs.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 import { PrivacyModule } from "./privacy.module";
 
 const credentials = { email: "lena@example.de", password: "ein-sehr-langes-passwort" };
@@ -43,6 +44,7 @@ describe("Privacy", () => {
         acceptPrivacy: true,
       },
     });
+    await confirmEmailForTest(app, credentials.email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: credentials });
     cookie = String(login.headers["set-cookie"]).split(";")[0];
   });

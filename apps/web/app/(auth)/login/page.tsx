@@ -56,7 +56,12 @@ export default function LoginPage() {
     <form onSubmit={onSubmit} className="space-y-4">
       <h1 className="text-xl font-semibold">Anmelden</h1>
       {deleted && <Alert tone="success">Dein Konto und deine Daten wurden gelöscht.</Alert>}
-      {error && <Alert>{error}</Alert>}
+      {error && (
+        <Alert>
+          {error}
+          {!challenge && <span className="mt-1 block text-xs">Gerade registriert? Anmelden kannst du dich erst, nachdem du den Link in der Bestätigungs-Mail geöffnet hast.</span>}
+        </Alert>
+      )}
       {challenge ? (
         <>
           <p className="text-sm text-muted">Gib den 6-stelligen Code aus deiner Authenticator-App ein. Ohne Zugriff auf die App funktioniert auch ein Notfallcode.</p>
@@ -66,6 +71,9 @@ export default function LoginPage() {
         <>
           <Field id="email" label="E-Mail" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Field id="password" label="Passwort" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <p className="-mt-2 text-right text-sm">
+            <Link href="/passwort-vergessen" className="text-brand hover:underline">Passwort vergessen?</Link>
+          </p>
         </>
       )}
       <Button type="submit" busy={busy} className="w-full">

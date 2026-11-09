@@ -4,6 +4,7 @@ import type { HealthResponse } from "@vereine/shared";
 import { CACHE, type Cache } from "./cache/cache.module";
 import { DB, type Database } from "./db/db.module";
 import { JobsService } from "./jobs/jobs.service";
+import { MailService } from "./mail/mail.service";
 
 @Controller("health")
 export class HealthController {
@@ -11,6 +12,7 @@ export class HealthController {
     @Inject(DB) private readonly db: Database,
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(MailService) private readonly mail: MailService,
   ) {}
 
   @Get()
@@ -25,11 +27,16 @@ export class HealthController {
     const cache = await this.cache.ping();
     // Warteschlange: viele wartende/fehlgeschlagene Jobs = Worker steht oder haengt (Alarm-Kriterium, nicht Bereitschaft)
     const queue = await this.jobs.stats().catch(() => null);
+    // Mail-Kontingent (Kostenbremse): nur Zahlen, ab 80 % "warning" (nicht wichtige Mails werden dann zurueckgehalten)
+    const quota = await this.mail.quota().catch(() => null);
     const body = {
       status: db && cache ? "ok" : "degraded",
       db: db ? "up" : "down",
       cache: cache ? `up (${this.cache.kind})` : "down",
       jobs: queue ? { mode: this.jobs.mode, ...queue } : { mode: this.jobs.mode },
+      mail: quota
+        ? { driver: this.mail.driverName, percent: quota.percent, warning: quota.warning, day: `${quota.day.used}/${quota.day.limit}`, month: `${quota.month.used}/${quota.month.limit}` }
+        : { driver: this.mail.driverName },
     };
     if (!db || !cache) throw new ServiceUnavailableException(body);
     return body;

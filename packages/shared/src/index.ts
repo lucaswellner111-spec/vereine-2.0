@@ -56,8 +56,40 @@ export const publicUserSchema = z.object({
   displayName: z.string(),
   createdAt: z.string(),
   isPlatformAdmin: z.boolean().optional(),
+  /** false = Adresse noch nicht bestaetigt (Banner; Verein gruenden und Einladungen gesperrt). */
+  emailVerified: z.boolean().optional(),
 });
 export type PublicUser = z.infer<typeof publicUserSchema>;
+
+// --- E-Mail-Ablaeufe (Bestaetigung, Passwort vergessen, Adresse aendern) ------------------------
+
+/** Meldung, wenn eine Aktion eine bestaetigte Adresse verlangt (Verein gruenden, Einladungen). */
+export const EMAIL_NOT_VERIFIED = "Bitte bestätige zuerst deine E-Mail-Adresse.";
+/** Einheitliche Antwort der Registrierung und von "Passwort vergessen" (verraet nicht, ob ein Konto existiert). */
+export const CHECK_INBOX_MESSAGE = "Prüfe dein Postfach.";
+
+const emailField = z.string().trim().toLowerCase().email().max(254);
+const tokenField = z.string().trim().min(20).max(200).regex(/^[A-Za-z0-9_-]+$/);
+
+export const emailTokenSchema = z.object({ token: tokenField });
+export const forgotPasswordSchema = z.object({ email: emailField });
+export const resetPasswordSchema = z.object({ token: tokenField, newPassword: z.string().min(12).max(128) });
+export const changeEmailSchema = z.object({ newEmail: emailField, password: z.string().min(1).max(128) });
+export const unsubscribeSchema = z.object({ token: z.string().min(10).max(400) });
+export const inviteMailSchema = z.object({ email: emailField });
+export const emailPrefsSchema = z.object({ digest: z.boolean() });
+
+export type CheckInboxResponse = { message: string };
+export type ConfirmEmailResult = { user: PublicUser; loggedIn: boolean; changed: boolean };
+/** Sammelmail fuer Benachrichtigungen (Opt-in). `available` = Adresse bestaetigt (sonst kann nichts verschickt werden). */
+export type EmailPrefs = { digest: boolean; since: string | null; available: boolean };
+export type MailQuota = {
+  driver: "log" | "smtp" | "memory";
+  day: { used: number; limit: number; percent: number };
+  month: { used: number; limit: number; percent: number };
+  percent: number;
+  warning: boolean;
+};
 
 /** Zwecke, die Nutzer selbst ein-/ausschalten duerfen (terms/privacy sind Vertragsgrundlage). */
 export const OPTIONAL_CONSENTS = ["personalized_feed", "analytics", "marketing_email"] as const;

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, UseGuards } from "@nestjs/common";
 import {
   createInviteSchema,
+  inviteMailSchema,
   orgBillingProfileSchema,
   type CreatedInvite,
   type InviteInfo,
@@ -9,7 +10,7 @@ import {
   type OrgBillingProfile,
   type PublicUser,
 } from "@vereine/shared";
-import { CurrentUser, SessionGuard } from "../auth/session.guard";
+import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { OrgAdminService } from "./org-admin.service";
 
@@ -35,7 +36,16 @@ export class OrgAdminController {
 
   @Post("orgs/:slug/invites")
   createInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<CreatedInvite> {
+    requireVerifiedEmail(user);
     return this.admin.createInvite(user, slug, parse(createInviteSchema, body ?? {}));
+  }
+
+  /** Link einer aktiven Einladung per Mail verschicken (Adresse wird nicht gespeichert; 100 Mails/Tag je Verein). */
+  @Post("orgs/:slug/invites/:id/mail")
+  @HttpCode(202)
+  mailInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    requireVerifiedEmail(user);
+    return this.admin.mailInvite(user, slug, id, parse(inviteMailSchema, body).email);
   }
 
   @Get("orgs/:slug/invites/:id/link")

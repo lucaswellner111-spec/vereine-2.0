@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PUSH_HOST_ERROR, type PrivatePushState } from "@vereine/shared";
 import { SettingsBackLink } from "@/components/settings-back-link";
+import { EmailDigestCard } from "@/components/email-digest-card";
 import { Alert, Badge, Button, Card, PageHeader, CardSkeletons } from "@/components/ui";
 import { ApiError, api, describeError } from "@/lib/api";
 
@@ -112,6 +113,7 @@ export default function NotificationSettingsPage() {
           </div>
         )}
       </Card>
+      <EmailDigestCard onError={setError} />
     </>
   );
 }

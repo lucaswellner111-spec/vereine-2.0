@@ -10,6 +10,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { EventsService } from "./events.service";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const inHours = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
@@ -40,8 +41,9 @@ describe("Termine P4b: Bearbeiten, Limit/Warteliste, Helferlisten, Anwesenheit, 
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
-    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: reg.json().id, name };
+    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: login.json().id, name };
   }
   const req = (u: U, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", url: string, payload?: object) =>
     app.inject({ method, url, payload, headers: { cookie: u.cookie } });

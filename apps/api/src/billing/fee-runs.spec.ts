@@ -15,6 +15,7 @@ import { JobsService } from "../jobs/jobs.service";
 import { MembersService } from "../members/members.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { FEE_RUN_MAX_ATTEMPTS, FeeRunsService } from "./fee-runs.service";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const dayOffset = (d: number) => new Date(Date.now() + d * 86400_000).toISOString().slice(0, 10);
@@ -45,8 +46,9 @@ describe("Beitragslauf (Entwuerfe je Beitragsklasse)", () => {
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
-    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: reg.json().id };
+    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: login.json().id };
   }
   const req = (u: U | null, method: "GET" | "POST" | "PUT" | "DELETE", url: string, payload?: object) =>
     app.inject({ method, url, payload, headers: u ? { cookie: u.cookie } : {} });
@@ -277,6 +279,7 @@ describe("Beitragslauf ohne Grenze bei 2000 Mitgliedern", () => {
   it("erzeugt Entwuerfe fuer alle Mitglieder ueber 2000 (Keyset, keine stille Grenze)", async () => {
     const email = "gross-vera@example.de";
     await app.inject({ method: "POST", url: "/auth/register", payload: { email, password, displayName: "Vera", confirmAge16: true, acceptTerms: true, acceptPrivacy: true } });
+    await confirmEmailForTest(app, email);
     const cookie = String((await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } })).headers["set-cookie"]).split(";")[0];
     const call = (method: "GET" | "POST", url: string, payload?: object) => app.inject({ method, url, payload, headers: { cookie } });
     await call("POST", "/orgs", { name: "SV Gross", category: "Sport", city: "Riesenstadt" });

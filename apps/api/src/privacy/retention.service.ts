@@ -5,10 +5,13 @@ import { JobsService } from "../jobs/jobs.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgAdminService } from "../orgs/org-admin.service";
 import { PostsService } from "../posts/posts.service";
+import { AuthService } from "../auth/auth.service";
+import { SuppressionsService } from "../mail/suppressions.service";
+import { PrivacyService } from "./privacy.service";
 
 export { RETENTION, RETENTION_BATCH } from "../common/retention";
 
-type Step = "notifications" | "deletedPosts" | "auditLog" | "attendance" | "invites";
+type Step = "notifications" | "deletedPosts" | "auditLog" | "attendance" | "invites" | "authTokens" | "pendingAccounts" | "mailSuppressions";
 
 /**
  * Taeglicher Aufraeumjob `privacy.retention`. Kennt keine Tabellen: jeder Bereich loescht seine eigenen Daten
@@ -25,6 +28,9 @@ export class RetentionService implements OnModuleInit {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(OrgAdminService) private readonly invites: OrgAdminService,
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
+    @Inject(PrivacyService) private readonly privacy: PrivacyService,
   ) {}
 
   onModuleInit() {
@@ -39,6 +45,9 @@ export class RetentionService implements OnModuleInit {
       ["auditLog", () => this.audit.purgeExpired()],
       ["attendance", () => this.events.purgeExpiredAttendance()],
       ["invites", () => this.invites.purgeExpiredInvites()],
+      ["authTokens", () => this.auth.purgeExpiredTokens()],
+      ["pendingAccounts", () => this.privacy.erasePendingRegistrations()],
+      ["mailSuppressions", () => this.suppressions.purgeExpired()],
     ];
   }
 

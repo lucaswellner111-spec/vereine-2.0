@@ -1,5 +1,6 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Query, UseGuards } from "@nestjs/common";
-import { markNotificationsReadSchema, notificationsQuerySchema, type NotificationsResponse, type PublicUser } from "@vereine/shared";
+import { Body, Controller, Get, HttpCode, Inject, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { emailPrefsSchema, markNotificationsReadSchema, notificationsQuerySchema, type EmailPrefs, type NotificationsResponse, type PublicUser } from "@vereine/shared";
+import { DigestService } from "./digest.service";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { NotificationsService } from "./notifications.service";
@@ -7,7 +8,21 @@ import { NotificationsService } from "./notifications.service";
 @Controller("notifications")
 @UseGuards(SessionGuard)
 export class NotificationsController {
-  constructor(@Inject(NotificationsService) private readonly service: NotificationsService) {}
+  constructor(
+    @Inject(NotificationsService) private readonly service: NotificationsService,
+    @Inject(DigestService) private readonly digest: DigestService,
+  ) {}
+
+  /** Taegliche Sammelmail (Opt-in). */
+  @Get("email-prefs")
+  emailPrefs(@CurrentUser() user: PublicUser): Promise<EmailPrefs> {
+    return this.digest.prefs(user);
+  }
+
+  @Put("email-prefs")
+  setEmailPrefs(@CurrentUser() user: PublicUser, @Body() body: unknown): Promise<EmailPrefs> {
+    return this.digest.setPrefs(user, parse(emailPrefsSchema, body).digest);
+  }
 
   @Get()
   list(@CurrentUser() user: PublicUser, @Query() query: unknown): Promise<NotificationsResponse> {

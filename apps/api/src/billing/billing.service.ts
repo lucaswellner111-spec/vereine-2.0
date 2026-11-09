@@ -14,6 +14,8 @@ import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
 import { invoiceCounters, invoiceItems, invoices } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
+import { appLink } from "../common/app-url";
+import { MailService } from "../mail/mail.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
@@ -48,6 +50,7 @@ export class BillingService implements OnModuleInit {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
+    @Inject(MailService) private readonly mail: MailService,
   ) {}
 
   onModuleInit() {
@@ -255,8 +258,27 @@ export class BillingService implements OnModuleInit {
         orgName: row.issuerName,
         amount: formatEur(finalized.totalCents),
       });
+      await this.mailInvoice(row.recipientUserId, finalized).catch(() => undefined); // Mail ist Zusatz, nie Grund fuer Fehler
     }
     return this.detail(finalized);
+  }
+
+  /**
+   * Hinweis-Mail an das Mitglied (nur mit bestaetigter Adresse): Nummer, Betrag, Faelligkeit und Link, KEIN PDF-Anhang.
+   * Ohne ausloesendes Konto (Kassenwart finalisiert ggf. viele Rechnungen); Limits je Empfaenger und global greifen.
+   */
+  private async mailInvoice(userId: string, inv: typeof invoices.$inferSelect): Promise<void> {
+    const contact = (await this.directory.mailContacts([userId])).get(userId);
+    if (!contact) return;
+    const [y, m, d] = inv.dueDate.split("-");
+    await this.mail.send(contact.email, "invoice-new", {
+      name: contact.name,
+      orgName: inv.issuerName,
+      number: inv.number ?? "",
+      amount: formatEur(inv.totalCents),
+      dueDate: `${d}.${m}.${y}`,
+      link: appLink("/rechnungen"),
+    });
   }
 
   async deleteDraft(user: PublicUser, id: string): Promise<void> {

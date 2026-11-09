@@ -29,16 +29,39 @@ export function unique(prefix: string, info: TestInfo): string {
   return `${prefix}-${Date.now().toString(36)}-${info.workerIndex}${info.parallelIndex}-${(counter++).toString(36)}`;
 }
 
-/** Konto ueber die API anlegen und im Kontext anmelden (Cookie landet im Kontext; Vorbedingung, kein Test-Flow). */
+/**
+ * Letzte Mail an eine Adresse aus dem Dev-Postfach des lokalen API-Servers (dev/pglite-server.ts, MAIL_DRIVER=log).
+ * Mails werden im Job verschickt; kurz nachfragen, bis sie da ist.
+ */
+export async function lastMailApi(request: APIRequestContext, to: string, template: string): Promise<{ text: string; headers: Record<string, string> }> {
+  let found: { text: string; headers: Record<string, string> } | null = null;
+  await expect(async () => {
+    const res = await request.get(`/api/__dev/mails?to=${encodeURIComponent(to)}&template=${template}`);
+    expect(res.status()).toBe(200);
+    found = await res.json();
+  }).toPass({ timeout: 10_000 });
+  return found!;
+}
+
+/** Token aus einem Mail-Link (#t=…). */
+export const tokenFromMail = (text: string) => /#t=([A-Za-z0-9_-]+)/.exec(text)?.[1] ?? "";
+
+/**
+ * Konto ueber die API anlegen, per Link aus der Bestaetigungs-Mail bestaetigen und damit im Kontext anmelden
+ * (Cookie landet im Kontext; Vorbedingung, kein Test-Flow).
+ */
 export async function signupApi(request: APIRequestContext, name: string, info: TestInfo): Promise<User> {
   const email = `${unique(name.toLowerCase(), info)}@example.de`;
   const reg = await request.post("/api/auth/register", {
     data: { email, password: PASSWORD, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
   });
-  expect(reg.status(), await reg.text()).toBe(201);
-  const login = await request.post("/api/auth/login", { data: { email, password: PASSWORD } });
-  expect(login.status()).toBe(200);
-  return { name, email, id: (await reg.json()).id };
+  expect(reg.status(), await reg.text()).toBe(202);
+  const mail = await lastMailApi(request, email, "verify-email");
+  const confirm = await request.post("/api/auth/email/confirm", { data: { token: tokenFromMail(mail.text) } });
+  expect(confirm.status(), await confirm.text()).toBe(200);
+  const body = await confirm.json();
+  expect(body.loggedIn).toBe(true);
+  return { name, email, id: body.user.id };
 }
 
 export async function createOrgApi(request: APIRequestContext, name: string): Promise<string> {

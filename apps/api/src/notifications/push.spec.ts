@@ -19,6 +19,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { NotificationsService } from "./notifications.service";
 import { pushMessage } from "./push.service";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 const sub = (n: number) => ({
@@ -48,8 +49,9 @@ describe("Web-Push", () => {
   async function signup(name: string) {
     const email = `${name}@example.de`;
     const reg = await call("POST", "/auth/register", { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true });
+    await confirmEmailForTest(app, email);
     const login = await call("POST", "/auth/login", { email, password });
-    return { id: reg.json().id as string, cookie: String(login.headers["set-cookie"]).split(";")[0] };
+    return { id: login.json().id as string, cookie: String(login.headers["set-cookie"]).split(";")[0] };
   }
 
   it("verlangt Anmeldung, liefert den oeffentlichen Schluessel und zaehlt Geraete", async () => {

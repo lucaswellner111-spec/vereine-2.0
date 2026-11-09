@@ -2,7 +2,7 @@
 
 import { ShieldOff } from "lucide-react";
 import { useState } from "react";
-import type { ChatReportItem } from "@vereine/shared";
+import type { ChatReportItem, MailQuota } from "@vereine/shared";
 import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
@@ -36,6 +36,7 @@ export default function PlatformPage() {
       <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>
       <PageHeader title="Plattform-Moderation" subtitle="Meldungen ohne Vereinszuständigkeit. Jeder Zugriff auf Chat-Inhalte wird protokolliert." />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      <MailQuotaCard />
       <SegmentedControl
         aria-label="Meldungsart"
         mode="tabs"
@@ -59,6 +60,24 @@ export default function PlatformPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** Kostenbremse sichtbar machen: "Mail-Kontingent 82 %" (Tag/Monat), ab 80 % werden nicht wichtige Mails zurueckgehalten. */
+function MailQuotaCard() {
+  const q = useApi<MailQuota>("/platform/mail-quota").data;
+  if (!q) return null;
+  return (
+    <Card className="mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">Mail-Kontingent {q.percent} %</p>
+        <Badge tone={q.percent >= 100 ? "danger" : q.warning ? "accent" : "neutral"}>{q.driver === "smtp" ? "Versand aktiv" : "Versand aus (Protokoll)"}</Badge>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Heute {q.day.used} von {q.day.limit}, diesen Monat {q.month.used} von {q.month.limit}.
+        {q.warning && " Ab 80 % gehen nur noch wichtige Mails (Bestätigung, Passwort) raus; Einladungen und Rechnungs-Mails warten bis morgen, die Sammelmail entfällt."}
+      </p>
+    </Card>
   );
 }
 

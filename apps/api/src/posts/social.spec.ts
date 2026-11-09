@@ -8,6 +8,7 @@ import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 
 const password = "ein-sehr-langes-passwort";
 
@@ -34,6 +35,7 @@ describe("Vereine, Beitraege, Feed", () => {
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
     return String(login.headers["set-cookie"]).split(";")[0];
   }

@@ -10,6 +10,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { NotificationsService } from "./notifications.service";
+import { confirmEmailForTest } from "../testing/auth";
 
 describe("Benachrichtigungen: Paging und einzeln gelesen", () => {
   let app: NestFastifyApplication;
@@ -36,8 +37,9 @@ describe("Benachrichtigungen: Paging und einzeln gelesen", () => {
       method: "POST", url: "/auth/register",
       payload: { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, email);
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
-    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: reg.json().id };
+    return { cookie: String(login.headers["set-cookie"]).split(";")[0], id: login.json().id };
   }
   const req = (u: U, method: "GET" | "POST", url: string, payload?: object) =>
     app.inject({ method, url, payload: method === "GET" ? undefined : payload ?? {}, headers: { cookie: u.cookie } });

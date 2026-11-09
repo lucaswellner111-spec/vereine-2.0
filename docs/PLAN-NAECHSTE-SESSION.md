@@ -4,6 +4,11 @@
 
 # Plan nächste Session (2026-11-09): Mail, Benachrichtigungen, Profil-Links, iOS-Feinschliff, Launch-Vorbereitung
 
+## Stand 2026-11-09 (Abend)
+- **Erledigt:** S0 (c72cfec, CI grün), S1 (d3910c0, live, 23 Migrationen), S2 Mail (Commit „S2“, live mit `MAIL_DRIVER=smtp`, Migration 0023; SPF bereinigt, Scaleway grün). Registrierung: immer „Prüfe dein Postfach“, Anmeldung erst nach Bestätigung (gegen Konto-Enumeration; Abweichung vom ursprünglichen „sofort nutzbar“).
+- **Offen:** Testmail an den Nutzer nur nach seinem Ja (Header SPF/DKIM pass prüfen); Budget-Limit im Scaleway-Konto setzen; Bounce-Webhook. **Als Nächstes S3**, dann S4/S5.
+- E2E lokal unter Last wacklig (Klicks vor Hydration) – bei Bedarf Workers auf 2 senken.
+
 ## Context
 Stand: P1–P5 live (letzter Commit 5e9c533, 22 Migrationen). **P6 ist zu etwa 90 % gebaut, aber nicht committet** (Nutzungslimit):
 - `e2e/` (Playwright, axe, Fremd-Host-Wächter)

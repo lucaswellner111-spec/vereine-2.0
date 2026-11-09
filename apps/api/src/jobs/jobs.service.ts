@@ -5,7 +5,7 @@ import Redis from "ioredis";
 export type JobHandler = (data: any) => Promise<void>;
 
 /** Abweichende Zustell-Optionen je Job (z. B. Mail: mehr Versuche, Daten nach Erfolg sofort aus Redis entfernen). */
-export type EnqueueOptions = { attempts?: number; backoffMs?: number; removeOnComplete?: boolean | number; removeOnFail?: boolean | number };
+export type EnqueueOptions = { attempts?: number; backoffMs?: number; removeOnComplete?: boolean | number; removeOnFail?: boolean | number; delayMs?: number };
 
 const QUEUE = "jobs";
 
@@ -64,8 +64,16 @@ export class JobsService implements OnModuleDestroy {
 
   /** Einmaliger Job. Inline sofort und abgewartet (deterministisch fuer Tests), BullMQ asynchron mit Wiederholungen. */
   async enqueue(name: string, data: object = {}, opts: EnqueueOptions = {}): Promise<void> {
-    if (this.mode === "inline") return this.run(name, data);
+    if (this.mode === "inline") {
+      if (!opts.delayMs) return this.run(name, data);
+      // Verzoegert (z. B. Mail auf morgen verschoben): Timer im selben Prozess, geht beim Neustart verloren (nur lokal/Tests).
+      const t = setTimeout(() => void this.run(name, data).catch((e) => this.log.error(`${name}: ${e.message}`)), opts.delayMs);
+      t.unref();
+      this.timers.push(t as unknown as NodeJS.Timeout);
+      return;
+    }
     await this.queue!.add(name, data, {
+      ...(opts.delayMs ? { delay: opts.delayMs } : {}),
       attempts: opts.attempts ?? 3,
       backoff: { type: "exponential", delay: opts.backoffMs ?? 5_000 },
       removeOnComplete: opts.removeOnComplete ?? 1_000,
@@ -100,7 +108,7 @@ export class JobsService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    this.timers.forEach(clearInterval);
+    this.timers.forEach((t) => { clearInterval(t); clearTimeout(t); });
     await this.worker?.close();
     await this.queue?.close();
     this.connections.forEach((c) => c.disconnect());

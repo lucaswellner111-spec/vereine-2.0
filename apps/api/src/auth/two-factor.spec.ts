@@ -10,6 +10,7 @@ import { CACHE } from "../cache/cache.module";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 import { base32Decode, base32Encode, hotp, STEP_SECONDS, stepAt, verifyTotp } from "./totp";
 
 const password = "ein-sehr-langes-passwort";
@@ -65,6 +66,7 @@ describe("Zwei-Faktor-Anmeldung", () => {
   async function signup(name: string) {
     const email = `${name}@example.de`;
     await call("POST", "/auth/register", { email, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true });
+    await confirmEmailForTest(app, email);
     const login = await call("POST", "/auth/login", { email, password });
     return { email, cookie: String(login.headers["set-cookie"]).split(";")[0] };
   }

@@ -9,6 +9,7 @@ import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 import { describeDevice } from "./auth.service";
 
 const password = "ein-sehr-langes-passwort";
@@ -32,11 +33,14 @@ describe("Konto-Sicherheit", () => {
     await app.close();
   });
 
-  const register = (name: string) =>
-    app.inject({
+  const register = async (name: string) => {
+    const res = await app.inject({
       method: "POST", url: "/auth/register",
       payload: { email: `${name}@example.de`, password, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
+    await confirmEmailForTest(app, `${name}@example.de`);
+    return res;
+  };
   const login = async (name: string, pw = password, ua = CHROME_WIN) =>
     app.inject({ method: "POST", url: "/auth/login", payload: { email: `${name}@example.de`, password: pw }, headers: { "user-agent": ua } });
   const cookieOf = (res: { headers: Record<string, unknown> }) => String(res.headers["set-cookie"]).split(";")[0];

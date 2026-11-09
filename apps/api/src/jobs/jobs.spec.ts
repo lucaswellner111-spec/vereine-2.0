@@ -9,6 +9,7 @@ import { configureApp } from "../app.setup";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
+import { confirmEmailForTest } from "../testing/auth";
 import { NotificationsService } from "../notifications/notifications.service";
 import { JobsService } from "./jobs.service";
 
@@ -62,11 +63,13 @@ describe("Jobs im Zusammenspiel", () => {
   });
 
   async function signup(name: string) {
-    const res = await app.inject({
+    await app.inject({
       method: "POST", url: "/auth/register",
       payload: { email: `${name}@example.de`, password: "ein-sehr-langes-passwort", displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },
     });
-    return res.json().id as string;
+    await confirmEmailForTest(app, `${name}@example.de`);
+    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: `${name}@example.de`, password: "ein-sehr-langes-passwort" } });
+    return login.json().id as string;
   }
 
   it("Module registrieren ihre Jobs (Worker findet sie nach dem Start)", async () => {

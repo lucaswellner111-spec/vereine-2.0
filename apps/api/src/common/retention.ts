@@ -15,6 +15,13 @@ export const RETENTION = {
   attendance: "24 months",
   /** Abgelaufene/widerrufene Einladungen bleiben noch kurz in der Liste des Vorstands sichtbar. */
   invites: "30 days",
+  /** Einmal-Links (Bestaetigung, Passwort, E-Mail-Wechsel): 7 Tage nach Ablauf. */
+  authTokens: "7 days",
+  /** Registrierungen ohne Bestaetigung (Konto nie nutzbar) werden danach geloescht. */
+  pendingAccounts: "7 days",
+  /** Sperrliste: harte Bounces/Beschwerden bzw. Abmeldungen von Einladungs-Mails. */
+  mailBounce: "12 months",
+  mailUnsubscribe: "36 months",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */

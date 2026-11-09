@@ -17,7 +17,14 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
+  CHECK_INBOX_MESSAGE,
+  changeEmailSchema,
   changePasswordSchema,
+  emailTokenSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  type CheckInboxResponse,
+  type ConfirmEmailResult,
   loginSchema,
   registerSchema,
   twoFactorCodeSchema,
@@ -31,15 +38,63 @@ import {
 } from "@vereine/shared";
 import { parse } from "../common/parse";
 import { AuthService, SESSION_TTL_MS } from "./auth.service";
+import { EmailFlowsService } from "./email-flows.service";
 import { CurrentUser, SESSION_COOKIE, SessionGuard } from "./session.guard";
 
 @Controller("auth")
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(EmailFlowsService) private readonly flows: EmailFlowsService,
+  ) {}
 
+  /** Immer dieselbe Antwort (202), auch fuer vorhandene Adressen; angemeldet wird erst ueber den Link in der Mail. */
   @Post("register")
-  register(@Body() body: unknown): Promise<PublicUser> {
-    return this.auth.register(parse(registerSchema, body));
+  @HttpCode(202)
+  async register(@Body() body: unknown, @Req() req: FastifyRequest): Promise<CheckInboxResponse> {
+    await this.flows.register(parse(registerSchema, body), req.ip);
+    return { message: CHECK_INBOX_MESSAGE };
+  }
+
+  /** Link aus der Bestaetigungs- bzw. Adresswechsel-Mail einloesen. Frische Registrierung: meldet direkt an. */
+  @Post("email/confirm")
+  @HttpCode(200)
+  async confirmEmail(@Body() body: unknown, @Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply): Promise<ConfirmEmailResult> {
+    const { token } = parse(emailTokenSchema, body);
+    const { sessionToken, ...result } = await this.flows.confirm(token, req.cookies[SESSION_COOKIE], req.headers["user-agent"]);
+    if (sessionToken) this.setSession(reply, sessionToken);
+    return result;
+  }
+
+  @Post("email/resend")
+  @UseGuards(SessionGuard)
+  @HttpCode(204)
+  resendVerification(@CurrentUser() user: PublicUser, @Req() req: FastifyRequest): Promise<void> {
+    return this.flows.resend(user, req.ip);
+  }
+
+  @Post("email/change")
+  @UseGuards(SessionGuard)
+  @HttpCode(202)
+  async changeEmail(@CurrentUser() user: PublicUser, @Body() body: unknown, @Req() req: FastifyRequest): Promise<CheckInboxResponse> {
+    const { newEmail, password } = parse(changeEmailSchema, body);
+    await this.flows.requestEmailChange(user, newEmail, password, req.ip);
+    return { message: CHECK_INBOX_MESSAGE };
+  }
+
+  /** Immer 202, egal ob es das Konto gibt. */
+  @Post("password/forgot")
+  @HttpCode(202)
+  async forgotPassword(@Body() body: unknown, @Req() req: FastifyRequest): Promise<CheckInboxResponse> {
+    await this.flows.forgotPassword(parse(forgotPasswordSchema, body).email, req.ip);
+    return { message: CHECK_INBOX_MESSAGE };
+  }
+
+  @Post("password/reset")
+  @HttpCode(204)
+  resetPassword(@Body() body: unknown): Promise<void> {
+    const { token, newPassword } = parse(resetPasswordSchema, body);
+    return this.flows.resetPassword(token, newPassword);
   }
 
   private setSession(reply: FastifyReply, token: string) {
