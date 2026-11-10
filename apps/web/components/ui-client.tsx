@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Check, Copy, MoreHorizontal, Search, X, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, Copy, Loader2, MoreHorizontal, Search, X, type LucideIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -763,5 +763,84 @@ export function DropdownMenu({ label, items, align = "end", side = "bottom", tri
       )}
       {menu}
     </>
+  );
+}
+
+// ---------- Large Title und Pull-to-Refresh ----------
+
+/** Hoehe der Kopfleiste am Handy (ohne Safe Area), siehe app-shell.tsx. */
+const MOBILE_HEADER_PX = 56;
+
+/**
+ * Seitenkopf mit grossem Titel (genau ein h1). Am Handy erscheint beim Wegscrollen des Titels unter der
+ * Kopfleiste eine kleine, durchscheinende Leiste mit dem Titel (dekorativ, aria-hidden). Desktop wie PageHeader.
+ * Bei reduzierter Bewegung ohne Ueberblendung.
+ */
+export function LargeTitleHeader({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      ([entry]) => setCollapsed(!entry.isIntersecting && entry.boundingClientRect.top < MOBILE_HEADER_PX),
+      { rootMargin: `-${MOBILE_HEADER_PX}px 0px 0px 0px` },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <>
+      <div aria-hidden className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-[9] h-0 md:hidden">
+        <div
+          className={clsx(
+            "glass hairline-b absolute -inset-x-4 top-0 flex h-11 items-center justify-center px-12 text-[0.9375rem] font-semibold tracking-tight transition-opacity duration-200 motion-reduce:transition-none",
+            collapsed ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
+          <span className="truncate">{title}</span>
+        </div>
+      </div>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 ref={titleRef} className="text-[2.125rem] font-extrabold leading-tight tracking-[-0.025em] sm:text-3xl">
+            {title}
+          </h1>
+          {subtitle && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
+        </div>
+        {action}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Anzeige zu usePullToRefresh (lib/use-pull-to-refresh.ts): waechst beim Ziehen, dreht sich beim Neuladen.
+ * Rein visuell (aria-hidden), nur am Handy; schiebt den Inhalt nach unten.
+ */
+export function PullIndicator({ pull, refreshing, threshold = 70 }: { pull: number; refreshing: boolean; threshold?: number }) {
+  const height = refreshing ? 48 : pull;
+  const progress = Math.min(1, pull / threshold);
+  return (
+    <div
+      aria-hidden
+      className={clsx("flex items-end justify-center overflow-hidden md:hidden", pull === 0 && "transition-[height] duration-200 motion-reduce:transition-none")}
+      style={{ height }}
+    >
+      {(refreshing || pull > 0) && (
+        <span
+          className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface text-brand shadow-card"
+          style={refreshing ? undefined : { opacity: 0.4 + progress * 0.6 }}
+        >
+          {refreshing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <ArrowDown size={16} style={{ transform: `rotate(${progress >= 1 ? 180 : 0}deg)` }} className="transition-transform motion-reduce:transition-none" />
+          )}
+        </span>
+      )}
+    </div>
   );
 }

@@ -10,6 +10,7 @@ import { useChat, useChatEvents } from "@/lib/chat";
 import { announceText, foreignNewMessages } from "@/lib/chat-announce";
 import { COARSE_POINTER_QUERY, enterSends, useAutoGrow, visibleOutbox } from "@/lib/chat-input";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { layoutMessages } from "@/lib/chat-groups";
 import { REPORT_REASONS } from "@/lib/labels";
 import { Alert, Avatar, Badge, Button, ErrorState, Select, Skeleton, Textarea, UserAvatarLink, UserNameLink } from "../ui";
 import { DropdownMenu, type MenuEntry } from "../ui-client";
@@ -17,7 +18,6 @@ import { ask, toast } from "@/components/ui-hosts";
 import { AddMembersDialog } from "./add-members-dialog";
 
 const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
-const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 
 /** Eigene Nachricht, die noch beim Server ist (temporaere ID) oder nicht gesendet werden konnte. */
 // skip: eigene gleichlautende Nachrichten, die beim Absenden schon da waren (Abgleich mit Live-Ereignissen)
@@ -234,7 +234,7 @@ export function Thread({
 
   const other = detail.kind === "direct" ? detail.members.find((m) => m.userId !== me.id) : undefined;
   const handleOf = new Map(detail.members.map((m) => [m.userId, m.handle]));
-  let lastDay = "";
+  const layout = layoutMessages(msgs);
 
   const messageMenu = (m: ChatMessage): MenuEntry[] =>
     m.mine
@@ -395,7 +395,7 @@ export function Thread({
         role="region"
         aria-label="Nachrichtenverlauf"
         tabIndex={0}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-1"
         onScroll={(e) => {
           const el = e.currentTarget;
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -407,31 +407,39 @@ export function Thread({
           </div>
         )}
         {msgs.length === 0 && outbox.length === 0 && <p className="py-8 text-center text-sm text-muted">Noch keine Nachrichten. Schreib die erste!</p>}
-        {msgs.map((m) => {
-          const day = dayFmt.format(new Date(m.createdAt));
-          const showDay = day !== lastDay;
-          lastDay = day;
+        {msgs.map((m, i) => {
+          const { day, first, last } = layout[i];
+          const time = timeFmt.format(new Date(m.createdAt));
           return (
-            <div key={m.id}>
-              {showDay && <p className="my-2 text-center text-xs text-muted">{day}</p>}
+            <div key={m.id} className={clsx(first ? "mt-3" : "mt-0.5")}>
+              {day && (
+                <p className="my-3 text-center">
+                  <span className="inline-block rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted">{day}</span>
+                </p>
+              )}
               <div className={clsx("group flex items-end gap-1", m.mine ? "justify-end" : "justify-start")}>
                 <div
                   className={clsx(
-                    "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
+                    "max-w-[80%] rounded-[1.25rem] px-3.5 py-2 text-[0.9375rem] leading-snug",
+                    // Gruppen: an der Seite der Person laufen die Ecken zusammen
+                    m.mine ? [!first && "rounded-tr-md", !last && "rounded-br-md"] : [!first && "rounded-tl-md", !last && "rounded-bl-md"],
                     // geloeschte Nachricht einheitlich (auch eigene): neutrale Flaeche, gedaempfter Text, ohne Transparenz
-                    m.deleted ? "bg-surface-2 italic text-muted" : m.mine ? "bg-brand text-brand-contrast" : "bg-surface-2",
+                    m.deleted ? "bg-surface-2 italic text-muted" : m.mine ? "bg-brand bg-brand-grad text-brand-contrast shadow-card" : "bg-surface-2",
                   )}
                 >
-                  {detail.kind === "group" && !m.mine && (
-                    <p className="mb-0.5 text-xs font-medium text-brand">
+                  {detail.kind === "group" && !m.mine && first && (
+                    <p className="mb-0.5 text-xs font-semibold text-brand">
                       {/* Handle aus der Mitgliederliste; ehemalige Mitglieder ohne Link */}
                       <UserNameLink handle={handleOf.get(m.senderId)} name={m.senderName} />
                     </p>
                   )}
                   <p className="whitespace-pre-wrap break-words">{m.deleted ? "Nachricht gelöscht" : m.body}</p>
-                  <p className={clsx("mt-0.5 text-right text-[11px]", m.mine && !m.deleted ? "text-brand-contrast/85" : "text-muted")}>
-                    {timeFmt.format(new Date(m.createdAt))}
-                  </p>
+                  {last ? (
+                    <p className={clsx("mt-0.5 text-right text-[11px]", m.mine && !m.deleted ? "text-brand-contrast" : "text-muted")}>{time}</p>
+                  ) : (
+                    // Uhrzeit nur an der letzten Blase einer Gruppe sichtbar, fuer Screenreader an jeder
+                    <span className="sr-only">{time}</span>
+                  )}
                 </div>
                 {!m.deleted && (
                   <DropdownMenu
@@ -454,15 +462,15 @@ export function Thread({
           );
         })}
         {visibleOutbox(outbox, msgs).map((o) => (
-          <div key={o.tempId} className="flex flex-col items-end gap-1">
+          <div key={o.tempId} className="mt-0.5 flex flex-col items-end gap-1 pr-8">
             <div
               className={clsx(
-                "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
-                o.status === "failed" ? "border border-danger/50 bg-surface-2" : "bg-brand text-brand-contrast",
+                "max-w-[80%] rounded-[1.25rem] px-3.5 py-2 text-[0.9375rem] leading-snug",
+                o.status === "failed" ? "border border-danger/50 bg-surface-2" : "bg-brand bg-brand-grad text-brand-contrast shadow-card",
               )}
             >
               <p className="whitespace-pre-wrap break-words">{o.body}</p>
-              <p className={clsx("mt-0.5 flex items-center justify-end gap-1 text-[11px]", o.status === "failed" ? "text-danger" : "text-brand-contrast/85")}>
+              <p className={clsx("mt-0.5 flex items-center justify-end gap-1 text-[11px]", o.status === "failed" ? "text-danger" : "text-brand-contrast")}>
                 {o.status === "failed" ? "Nicht gesendet" : <><Clock size={11} aria-hidden /> wird gesendet …</>}
               </p>
             </div>
@@ -484,7 +492,11 @@ export function Thread({
 
       {error && <div className="px-3 pb-2"><Alert>{error}</Alert></div>}
 
-      <form onSubmit={send} className="flex gap-2 border-t border-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:pb-3">
+      {/* Eingabeleiste: bleibt unten (Spalte mit fester Hoehe), am Handy mit Safe Area */}
+      <form
+        onSubmit={send}
+        className="glass hairline-t flex shrink-0 items-end gap-2 px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:pb-2.5"
+      >
         <label htmlFor="msg" className="sr-only">Nachricht</label>
         <Textarea
           ref={inputRef}
@@ -504,7 +516,7 @@ export function Thread({
           placeholder={detail.blocked ? "Du hast diese Person blockiert." : coarse ? "Nachricht schreiben …" : "Nachricht schreiben … (Enter sendet)"}
           className="max-h-40 min-h-10 flex-1 [field-sizing:content]"
         />
-        <Button type="submit" className="self-end" disabled={!text.trim() || detail.blocked}>Senden</Button>
+        <Button type="submit" disabled={!text.trim() || detail.blocked}>Senden</Button>
       </form>
     </section>
   );

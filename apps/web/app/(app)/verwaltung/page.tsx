@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { ChevronRight } from "lucide-react";
-import { ArrowLink, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
+import { ArrowLink, CardSkeletons, ListGroup, ListRow, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
+import { LargeTitleHeader } from "@/components/ui-client";
 import { useIsDesktopState } from "@/lib/use-media-query";
 import { itemsForRole, useVerwaltung } from "@/lib/verwaltung";
 
@@ -32,7 +31,7 @@ export default function VerwaltungIndexPage() {
   }
   return (
     <>
-      <PageHeader title="Verwaltung" subtitle={detail?.name ?? <Skeleton className="mt-1 h-4 w-40" />} />
+      <LargeTitleHeader title="Verwaltung" subtitle={detail?.name ?? <Skeleton className="mt-1 h-4 w-40" />} />
       {orgs.length > 1 && (
         <div className="mb-4">
           <label htmlFor="org" className="sr-only">Verein</label>
@@ -51,15 +50,11 @@ export default function VerwaltungIndexPage() {
           className="mb-4"
         />
       )}
-      <Card flush className="divide-y divide-border">
-        {items.map(({ id, label, icon: Icon }) => (
-          <Link key={id} href={`/verwaltung/${id}`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-surface-2">
-            <Icon size={18} aria-hidden className="text-muted" />
-            <span className="flex-1">{label}</span>
-            <ChevronRight size={16} aria-hidden className="text-muted" />
-          </Link>
+      <ListGroup footer={detail ? `${detail.members} ${detail.members === 1 ? "Mitglied" : "Mitglieder"} · ${detail.followers} Follower` : undefined}>
+        {items.map(({ id, label, icon }) => (
+          <ListRow key={id} href={`/verwaltung/${id}`} icon={icon} title={label} tone={id === "moderation" ? "danger" : id === "beitraege" || id === "rechnungen" ? "accent" : "brand"} />
         ))}
-      </Card>
+      </ListGroup>
     </>
   );
 }

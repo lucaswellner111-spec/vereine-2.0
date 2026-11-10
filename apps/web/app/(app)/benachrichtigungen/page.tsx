@@ -1,13 +1,15 @@
 "use client";
 
-import { BellOff, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import type { NotificationsResponse } from "@vereine/shared";
 import { NotificationRow } from "@/components/notification-bell";
-import { Button, Card, EmptyState, ErrorState, ListSkeleton, PageHeader } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, ListSkeleton } from "@/components/ui";
+import { LargeTitleHeader, PullIndicator } from "@/components/ui-client";
 import { toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
 import { describeNotification, mergeNotifications } from "@/lib/notifications";
 import { useApi, useBusy } from "@/lib/use-api";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { useInfiniteScroll, useMoreFailed } from "@/lib/use-infinite-scroll";
 
 const PATH = "/notifications?limit=30";
@@ -17,6 +19,7 @@ export default function NotificationsPage() {
   const [moreBusy, runMore] = useBusy();
   const [moreFailed, setMoreFailed] = useMoreFailed();
   const data = list.data;
+  const ptr = usePullToRefresh(list.reload);
 
   const loadMore = () =>
     runMore(async () => {
@@ -65,7 +68,7 @@ export default function NotificationsPage() {
   let content;
   if (list.error && !data) content = <ErrorState message={list.error} onRetry={list.reload} />;
   else if (!data) content = <ListSkeleton rows={5} />;
-  else if (data.items.length === 0) content = <EmptyState icon={BellOff} title="Keine Benachrichtigungen.">Hier erscheinen neue Follower, Kommentare, Termine und Rechnungen.</EmptyState>;
+  else if (data.items.length === 0) content = <EmptyState emoji="🔔" title="Keine Benachrichtigungen.">Hier erscheinen neue Follower, Kommentare, Termine und Rechnungen.</EmptyState>;
   else
     content = (
       <Card flush>
@@ -94,7 +97,8 @@ export default function NotificationsPage() {
 
   return (
     <>
-      <PageHeader
+      <PullIndicator {...ptr} />
+      <LargeTitleHeader
         title="Benachrichtigungen"
         subtitle={data ? (data.unread ? `${data.unread} ungelesen` : "Alles gelesen.") : undefined}
         action={

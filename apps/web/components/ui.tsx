@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, RotateCw, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight, Loader2, RotateCw, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ComponentPropsWithRef, InputHTMLAttributes, ReactNode } from "react";
 
@@ -221,6 +221,91 @@ export function Checkbox({
 /** flush = ohne Innenabstand (Listen mit eigenen Zeilenabstaenden); p-0 per className wirkt nicht, da p-4 spaeter sortiert. */
 export function Card({ className, flush = false, children }: { className?: string; flush?: boolean; children: ReactNode }) {
   return <div className={clsx("rounded-2xl border border-border/70 bg-surface shadow-card", !flush && "p-4", className)}>{children}</div>;
+}
+
+// ---------- Gruppierte Listen (Einstellungs-Stil wie iOS) ----------
+
+/**
+ * Gruppierte Karte mit Zeilen (ListRow als Kinder), Haarlinien zwischen den Zeilen ab dem Text eingerueckt.
+ * title = kleine Ueberschrift (h2) darueber, footer = Fussnote darunter.
+ */
+export function ListGroup({ title, footer, className, children }: { title?: ReactNode; footer?: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <div className={className}>
+      {title && <h2 className="mb-1.5 px-4 text-[0.8125rem] font-semibold uppercase tracking-wide text-muted">{title}</h2>}
+      <ul data-list-group className="overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-card">
+        {children}
+      </ul>
+      {footer && <p className="mt-1.5 px-4 text-[0.8125rem] text-muted">{footer}</p>}
+    </div>
+  );
+}
+
+export type ListRowTone = "brand" | "accent" | "danger" | "neutral";
+
+type ListRowProps = {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  icon?: LucideIcon;
+  /** Farbe der Icon-Kachel */
+  tone?: ListRowTone;
+  /** Rechts: Wert, Badge oder Toggle (Toggle nur in statischen Zeilen, sonst verschachtelte Bedienelemente) */
+  value?: ReactNode;
+  /** Link-Zeile (mit Chevron) */
+  href?: string;
+  /** Button-Zeile */
+  onClick?: () => void;
+  /** Titel in Fehlerfarbe (z. B. Abmelden, Loeschen) */
+  danger?: boolean;
+  /** Markierung der aktuellen Seite bei Link-Zeilen */
+  current?: boolean;
+};
+
+/** Zeile einer ListGroup: als Link (href), Button (onClick) oder statisch; mind. 44 px hoch. */
+export function ListRow({ title, subtitle, icon: Icon, tone = "brand", value, href, onClick, danger = false, current = false }: ListRowProps) {
+  const interactive = !!href || !!onClick;
+  const inner = (
+    <>
+      {Icon && (
+        <span
+          aria-hidden
+          className={clsx(
+            "inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg",
+            tone === "brand" && "bg-brand bg-brand-grad text-brand-contrast",
+            tone === "accent" && "bg-accent text-surface",
+            tone === "danger" && "bg-danger text-on-danger",
+            tone === "neutral" && "bg-surface-2 text-muted",
+          )}
+        >
+          <Icon size={17} />
+        </span>
+      )}
+      <span data-row-body className="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2.5 pr-4">
+        <span className="min-w-0 flex-1">
+          <span className={clsx("block truncate text-[0.9375rem] font-medium", danger ? "text-danger" : "text-text")}>{title}</span>
+          {subtitle && <span className="block truncate text-[0.8125rem] text-muted">{subtitle}</span>}
+        </span>
+        {value !== undefined && value !== null && <span className="flex shrink-0 items-center text-sm text-muted">{value}</span>}
+        {href && <ChevronRight size={18} aria-hidden className="shrink-0 text-muted/70" />}
+      </span>
+    </>
+  );
+  const rowCls = clsx("flex w-full items-center gap-3 pl-4 text-left", interactive && "hover:bg-surface-2 active:bg-surface-2 focus-visible:-outline-offset-2");
+  return (
+    <li>
+      {href ? (
+        <Link href={href} aria-current={current ? "page" : undefined} className={rowCls}>
+          {inner}
+        </Link>
+      ) : onClick ? (
+        <button type="button" onClick={onClick} className={rowCls}>
+          {inner}
+        </button>
+      ) : (
+        <div className={rowCls}>{inner}</div>
+      )}
+    </li>
+  );
 }
 
 /**

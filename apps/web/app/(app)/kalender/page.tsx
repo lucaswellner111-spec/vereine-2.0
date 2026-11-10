@@ -5,8 +5,8 @@ import { Suspense, useMemo, useState } from "react";
 import type { EventItem } from "@vereine/shared";
 import { CalendarMonth } from "@/components/calendar-month";
 import { EventCard } from "@/components/event-card";
-import { ArrowLink, Button, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "@/components/ui";
-import { SearchField, SegmentedControl } from "@/components/ui-client";
+import { ArrowLink, Button, CardSkeletons, EmptyState, ErrorState, Select, Skeleton } from "@/components/ui";
+import { LargeTitleHeader, SearchField, SegmentedControl } from "@/components/ui-client";
 import { toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
 import { currentMonth, gridRange, monthGrid, parseMonth, type MonthKey } from "@/lib/calendar";
@@ -61,7 +61,7 @@ function CalendarView() {
 
   return (
     <>
-      <PageHeader title="Kalender" subtitle="Deine Termine aus allen Vereinen und Teams." />
+      <LargeTitleHeader title="Kalender" subtitle="Deine Termine aus allen Vereinen und Teams." />
       <SegmentedControl aria-label="Ansicht" mode="radio" options={VIEWS} value={view} onChange={(v) => go(v, month)} className="mb-4" />
       {view === "liste" && <ListView />}
       {view === "monat" && <MonthView month={month} onMonthChange={(m) => go("monat", m)} />}

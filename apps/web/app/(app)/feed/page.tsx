@@ -11,8 +11,8 @@ import { PostCard } from "@/components/post-card";
 import { emptyPollDraft, PollComposer, pollDraftToInput, type PollDraft } from "@/components/poll-composer";
 import { MAX_POST_TAGS, tagLabel } from "@vereine/shared";
 import { LazyTagPicker as TagPicker } from "@/components/lazy";
-import { Alert, ArrowLink, Avatar, Button, Card, FileButton, CardSkeletons, EmptyState, ErrorState, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
-import { Dialog, SegmentedControl, tabPanelProps } from "@/components/ui-client";
+import { Alert, ArrowLink, Avatar, Button, Card, FileButton, CardSkeletons, EmptyState, ErrorState, LinkButton, Select, Textarea } from "@/components/ui";
+import { Dialog, LargeTitleHeader, PullIndicator, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { toast } from "@/components/ui-hosts";
 import { api, describeError } from "@/lib/api";
 import { mediaUrl, uploadImage } from "@/lib/media";
@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth";
 import { mergeFeed } from "@/lib/feed";
 import { useMyProfile } from "@/lib/my-profile";
 import { useApi, useBusy } from "@/lib/use-api";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { useInfiniteScroll, useMoreFailed } from "@/lib/use-infinite-scroll";
 import { NEW_POST_EVENT } from "@/lib/shortcuts";
 
@@ -57,6 +58,7 @@ function Feed() {
   pathRef.current = path;
   const [moreBusy, runMore] = useBusy();
   const [moreFailed, setMoreFailed] = useMoreFailed(path);
+  const ptr = usePullToRefresh(feed.reload);
 
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [target, setTarget] = useState(""); // "" = persoenlich, sonst Vereins-Slug
@@ -206,7 +208,8 @@ function Feed() {
 
   return (
     <>
-      <PageHeader
+      <PullIndicator {...ptr} />
+      <LargeTitleHeader
         title="Feed"
         action={
           <div className="flex items-center gap-2">

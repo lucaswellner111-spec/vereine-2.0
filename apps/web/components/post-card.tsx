@@ -1,5 +1,6 @@
 "use client";
 
+import { haptic } from "@/lib/haptics";
 import clsx from "clsx";
 import { EyeOff, Flag, Heart, Image as ImageIcon, Info, MessageCircle, Pencil, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -112,6 +113,7 @@ export function PostCard({
       if (liking.current) return;
       liking.current = true;
       const before = post;
+      if (!post.likedByMe) haptic(12);
       setPost((p) => ({ ...p, likedByMe: !p.likedByMe, likes: p.likes + (p.likedByMe ? -1 : 1) }));
       try {
         const r = await api<{ liked: boolean; likes: number }>(`/posts/${post.id}/like`, { method: "POST", body: {} });
