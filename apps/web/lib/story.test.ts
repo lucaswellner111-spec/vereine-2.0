@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverCrop, eventWhen, fitText, slugPart, storyFileName, truncateText, wrapLines, type Measure } from "./story";
+import { coverCrop, eventWhen, fitText, fitTextInBox, slugPart, storyFileName, truncateText, wrapLines, type Measure } from "./story";
 
 // Einfaches Mass: jedes Zeichen ist fontSize/2 breit
 const measure: Measure = (t, s) => t.length * (s / 2);
@@ -58,5 +58,19 @@ describe("Story-Kachel: Dateiname", () => {
     expect(storyFileName("termin", "Sommerfest", "2026-06-30T23:30:00.000Z")).toBe("klubnest-termin-sommerfest-2026-07-01.png");
     expect(storyFileName("beitrag", "")).toBe("klubnest-beitrag.png");
     expect(slugPart("x".repeat(80))).toHaveLength(40);
+  });
+});
+
+describe("fitTextInBox", () => {
+  it("waehlt die groesste Schrift, die in die Hoehe passt", () => {
+    const r = fitTextInBox("eins zwei drei vier fuenf sechs", 200, 100, [40, 20], 1.2, measure);
+    expect(r.overflow).toBe(false);
+    expect(r.lines.length * r.fontSize * 1.2).toBeLessThanOrEqual(100);
+  });
+  it("kuerzt bei zu wenig Hoehe mit …", () => {
+    const r = fitTextInBox("a ".repeat(200), 100, 30, [20], 1.2, measure);
+    expect(r.overflow).toBe(true);
+    expect(r.lines).toHaveLength(1);
+    expect(r.lines[0].endsWith("…")).toBe(true);
   });
 });

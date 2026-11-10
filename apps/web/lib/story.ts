@@ -66,6 +66,20 @@ export function fitText(text: string, maxWidth: number, sizes: number[], measure
   return { fontSize, lines: wrapLines(text, maxWidth, fontSize, measure, maxLines).lines };
 }
 
+/**
+ * Wie fitText, aber nach verfuegbarer Hoehe: je Schriftgroesse so viele Zeilen, wie in `maxHeight` passen
+ * (Zeilenhoehe = Groesse * lineHeight). So ragt der Text nie in die Fusszeile.
+ */
+export function fitTextInBox(text: string, maxWidth: number, maxHeight: number, sizes: number[], lineHeight: number, measure: Measure): { fontSize: number; lines: string[]; overflow: boolean } {
+  const linesFor = (size: number) => Math.max(1, Math.floor(maxHeight / (size * lineHeight)));
+  for (const fontSize of sizes) {
+    const r = wrapLines(text, maxWidth, fontSize, measure, linesFor(fontSize));
+    if (!r.overflow) return { fontSize, lines: r.lines, overflow: false };
+  }
+  const fontSize = sizes[sizes.length - 1];
+  return { fontSize, ...wrapLines(text, maxWidth, fontSize, measure, linesFor(fontSize)) };
+}
+
 /** Bildausschnitt fuer „object-fit: cover“: welcher Teil der Quelle (sx, sy, sw, sh) fuellt das Ziel ohne Verzerrung. */
 export function coverCrop(srcW: number, srcH: number, dstW: number, dstH: number): { sx: number; sy: number; sw: number; sh: number } {
   if (srcW <= 0 || srcH <= 0) return { sx: 0, sy: 0, sw: 0, sh: 0 };

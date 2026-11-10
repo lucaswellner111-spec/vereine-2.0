@@ -61,11 +61,11 @@ export default async function OrgOpengraphImage({ params }: { params: Promise<{ 
         <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 30 }}>
           {nextLabel ? (
             <>
-              <div style={{ display: "flex", padding: "10px 22px", borderRadius: 999, background: "#c6f36b", color: "#07140d" }}>Nächster Termin</div>
-              <div style={{ display: "flex" }}>{nextLabel}</div>
+              <div style={{ display: "flex", flexShrink: 0, padding: "10px 22px", borderRadius: 999, background: "#c6f36b", color: "#07140d" }}>Nächster Termin</div>
+              <div style={{ display: "flex", maxWidth: 740, lineHeight: 1.25 }}>{nextLabel}</div>
             </>
           ) : (
-            <div style={{ display: "flex", color: "rgba(255,255,255,0.85)" }}>{found?.about ? truncateText(found.about, 90) : "Gehostet in Deutschland · Ohne Tracking"}</div>
+            <div style={{ display: "flex", maxWidth: 1056, lineHeight: 1.25, color: "rgba(255,255,255,0.85)" }}>{found?.about ? truncateText(found.about, 90) : "Gehostet in Deutschland · Ohne Tracking"}</div>
           )}
         </div>
       </div>

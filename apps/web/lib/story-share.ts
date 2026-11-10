@@ -5,6 +5,7 @@ import {
   coverCrop,
   eventWhen,
   fitText,
+  fitTextInBox,
   STORY_H,
   STORY_PAD,
   STORY_SAFE_BOTTOM,
@@ -91,9 +92,13 @@ function pill(ctx: Ctx, family: string, text: string, x: number, y: number) {
   ctx.fillText(text, x + 32, y + 40);
 }
 
+/** Grundlinie des Vereinsnamens in der Fusszeile; Inhalte enden spaetestens bei CONTENT_BOTTOM. */
+const FOOTER_Y = STORY_H - STORY_SAFE_BOTTOM - 40;
+const CONTENT_BOTTOM = FOOTER_Y - 64 - 36 - 40;
+
 /** Vereinsname unten (das Einzige, was auf eine Person/Gruppe verweist) + Fusszeile */
 function footer(ctx: Ctx, family: string, orgName: string) {
-  const y = STORY_H - STORY_SAFE_BOTTOM - 40;
+  const y = FOOTER_Y;
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "rgba(255,255,255,0.75)";
   ctx.font = `600 36px ${family}`;
@@ -142,24 +147,33 @@ export async function renderEventStory(e: Pick<EventItem, "title" | "startsAt" |
   background(ctx);
   brand(ctx, family);
   const w = STORY_W - 2 * STORY_PAD;
-  let y = STORY_SAFE_TOP + 140;
-  ctx.font = `140px ${family}`;
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText("📅", STORY_PAD - 6, y + 120);
-  y += 200;
-  pill(ctx, family, e.canceled ? "ABGESAGT" : "SAVE THE DATE", STORY_PAD, y);
-  y += 150;
-  const measure: Measure = (t, s) => ((ctx.font = `800 ${s}px ${family}`), ctx.measureText(t).width);
-  const title = fitText(truncateText(e.title, 120), w, [124, 108, 96, 84, 72], measure, 4);
-  ctx.font = `800 ${title.fontSize}px ${family}`;
-  ctx.fillStyle = C.white;
-  y = drawLines(ctx, title.lines, STORY_PAD, y + title.fontSize * 0.8, title.fontSize * 1.08) + 40;
-
-  // Karte mit Datum/Uhrzeit/Ort
+  // Karte mit Datum/Uhrzeit/Ort (Hoehe vorab, damit der Titel nicht in Karte/Fusszeile ragt)
   const when = eventWhen(e.startsAt, e.endsAt);
   const rows: [string, string][] = [["🗓️", when.date], ["🕒", when.time], ...(e.location ? [["📍", truncateText(e.location, 60)] as [string, string]] : [])];
   const rowH = 104;
   const cardH = rows.length * rowH + 56;
+  const measure: Measure = (t, s) => ((ctx.font = `800 ${s}px ${family}`), ctx.measureText(t).width);
+  const titleText = truncateText(e.title, 120);
+  const sizes = [124, 108, 96, 84, 72];
+  const titleBox = (top: number) => fitTextInBox(titleText, w, CONTENT_BOTTOM - cardH - 40 - top, sizes, 1.08, measure);
+  // Grosses Emoji nur, wenn der Titel daneben noch ungekuerzt passt
+  const withEmoji = STORY_SAFE_TOP + 140 + 200 + 150;
+  const showEmoji = !titleBox(withEmoji).overflow;
+  let y = STORY_SAFE_TOP + 140;
+  ctx.textBaseline = "alphabetic";
+  if (showEmoji) {
+    ctx.font = `140px ${family}`;
+    ctx.fillStyle = C.white;
+    ctx.fillText("📅", STORY_PAD - 6, y + 120);
+    y += 200;
+  }
+  pill(ctx, family, e.canceled ? "ABGESAGT" : "SAVE THE DATE", STORY_PAD, y);
+  y += 150;
+  const title = titleBox(y);
+  ctx.font = `800 ${title.fontSize}px ${family}`;
+  ctx.fillStyle = C.white;
+  y = drawLines(ctx, title.lines, STORY_PAD, y + title.fontSize * 0.8, title.fontSize * 1.08) + 40;
+
   roundRect(ctx, STORY_PAD, y, w, cardH, 44);
   ctx.fillStyle = "rgba(255,255,255,0.14)";
   ctx.fill();
@@ -171,6 +185,8 @@ export async function renderEventStory(e: Pick<EventItem, "title" | "startsAt" |
     const ry = y + 28 + i * rowH + rowH / 2;
     ctx.textBaseline = "middle";
     ctx.font = `52px ${family}`;
+    // Emoji erben die Deckkraft von fillStyle: deckend zeichnen
+    ctx.fillStyle = C.white;
     ctx.fillText(icon, STORY_PAD + 40, ry);
     const fitted = fitText(text, w - 180, [52, 46, 40], rowMeasure, 1);
     ctx.font = `700 ${fitted.fontSize}px ${family}`;
@@ -193,7 +209,7 @@ export async function renderPostStory(p: Pick<FeedPost, "body" | "media"> & { or
   pill(ctx, family, "📣 NEU IM VEREIN", STORY_PAD, y);
   y += 130;
   if (img) {
-    const h = 760;
+    const h = 680;
     const crop = coverCrop(img.naturalWidth, img.naturalHeight, w, h);
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.35)";
@@ -218,9 +234,8 @@ export async function renderPostStory(p: Pick<FeedPost, "body" | "media"> & { or
   const body = truncateText(p.body, 400);
   if (body) {
     const measure: Measure = (t, s) => ((ctx.font = `800 ${s}px ${family}`), ctx.measureText(t).width);
-    const maxLines = img ? 5 : 9;
     const sizes = img ? [60, 52, 46] : [88, 76, 66, 58, 50];
-    const fitted = fitText(body, w, sizes, measure, maxLines);
+    const fitted = fitTextInBox(body, w, CONTENT_BOTTOM - y, sizes, 1.18, measure);
     ctx.font = `800 ${fitted.fontSize}px ${family}`;
     ctx.fillStyle = C.white;
     drawLines(ctx, fitted.lines, STORY_PAD, y + fitted.fontSize * 0.8, fitted.fontSize * 1.18);
