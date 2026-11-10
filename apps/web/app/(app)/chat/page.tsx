@@ -150,7 +150,7 @@ function ChatView() {
           )}
           {list?.length === 0 && (
             <li className="p-3">
-              <EmptyState icon={MessageSquare} title="Noch keine Unterhaltungen." action={<Button onClick={startCreating}>Neuer Chat</Button>}>
+              <EmptyState emoji="💬" title="Noch keine Unterhaltungen." action={<Button onClick={startCreating}>Neuer Chat</Button>}>
                 Schreib einem Vereinsmitglied oder dem Vorstand.
               </EmptyState>
             </li>

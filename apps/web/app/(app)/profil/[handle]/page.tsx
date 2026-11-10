@@ -117,7 +117,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   } else if (tab === "fotos") {
     content = pageBody(photos, (withMedia) =>
       withMedia.length === 0 ? (
-        <EmptyState title="Noch keine Fotos." />
+        <EmptyState emoji="📸" title="Noch keine Fotos." />
       ) : (
         <ul className="grid grid-cols-3 gap-1 sm:gap-2">
           {withMedia.map((x) => (
@@ -141,7 +141,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   } else if (tab === "beitraege") {
     content = pageBody(posts, (items) =>
       items.length === 0 ? (
-        <EmptyState title="Noch keine Beiträge." />
+        <EmptyState emoji="✍️" title="Noch keine Beiträge." />
       ) : (
         <ul className="space-y-4">
           {items.map((x) => (
@@ -155,7 +155,7 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   } else if (!people.data) {
     content = <ListSkeleton rows={3} />;
   } else if (people.data.length === 0) {
-    content = v.canView ? <EmptyState title="Noch niemand." /> : <EmptyState icon={Lock} title="Die Liste ist nur für Follower sichtbar." />;
+    content = v.canView ? <EmptyState emoji="👋" title="Noch niemand." /> : <EmptyState icon={Lock} title="Die Liste ist nur für Follower sichtbar." />;
   } else {
     content = (
       <Card flush className="divide-y divide-border">
@@ -172,9 +172,20 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
   return (
     <>
       {!v.isMe && <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>}
-      <Card className="mb-4">
+      <Card flush className="mb-4 overflow-hidden">
+        {/* Banner: Marken-Verlauf mit Limetten-Glanz, rein dekorativ */}
+        <div
+          aria-hidden
+          className="h-24 bg-brand bg-brand-grad sm:h-28 dark:brightness-[0.6]"
+          style={{ backgroundImage: "radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--pop) 55%, transparent) 0, transparent 45%), linear-gradient(135deg, var(--brand), var(--brand-2))" }}
+        />
+        <div className="px-4 pb-4 pt-3">
         <DetailHeader
-          media={<Avatar name={p.displayName} size={96} mediaId={p.avatarId} />}
+          media={
+            <span className="-mt-12 inline-flex shrink-0 rounded-full bg-surface p-1 shadow-card">
+              <Avatar name={p.displayName} size={96} mediaId={p.avatarId} />
+            </span>
+          }
           title={p.displayName}
           badges={p.visibility === "private" && <Badge>privat</Badge>}
           subtitle={<>@{p.handle}{p.location && ` · ${p.location}`}</>}
@@ -209,10 +220,10 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
             )
           }
         >
-          <ul className="mt-3 flex gap-5 text-sm">
-            <li><strong>{p.counts.posts}</strong> <span className="text-muted">Beiträge</span></li>
-            <li><button type="button" onClick={() => setTab("follower")} className="hover:underline"><strong>{p.counts.followers}</strong> <span className="text-muted">Follower</span></button></li>
-            <li><button type="button" onClick={() => setTab("folgt")} className="hover:underline"><strong>{p.counts.following}</strong> <span className="text-muted">Folgt</span></button></li>
+          <ul className="mt-3 flex gap-6 text-sm">
+            <li className="flex flex-col"><strong className="text-lg font-extrabold leading-tight">{p.counts.posts}</strong> <span className="text-xs text-muted">Beiträge</span></li>
+            <li><button type="button" onClick={() => setTab("follower")} className="press flex flex-col items-start"><strong className="text-lg font-extrabold leading-tight">{p.counts.followers}</strong> <span className="text-xs text-muted">Follower</span></button></li>
+            <li><button type="button" onClick={() => setTab("folgt")} className="press flex flex-col items-start"><strong className="text-lg font-extrabold leading-tight">{p.counts.following}</strong> <span className="text-xs text-muted">Folgt</span></button></li>
           </ul>
         </DetailHeader>
         {p.bio && <p className="mt-4 whitespace-pre-wrap break-words text-sm">{p.bio}</p>}
@@ -220,11 +231,12 @@ export default function ProfilePage({ params }: { params: Promise<{ handle: stri
           <ul className="mt-3 flex flex-wrap gap-2" aria-label="Vereine">
             {p.clubs.map((c) => (
               <li key={c.slug}>
-                <Link href={`/vereine/${c.slug}`} className="inline-flex items-center rounded-full bg-surface-2 px-3 py-1 text-xs text-muted hover:text-text">{c.name}</Link>
+                <Link href={`/vereine/${c.slug}`} className="press inline-flex items-center rounded-full bg-brand/15 px-3 py-1 text-xs font-semibold text-brand hover:bg-brand/20">{c.name}</Link>
               </li>
             ))}
           </ul>
         )}
+        </div>
       </Card>
 
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}

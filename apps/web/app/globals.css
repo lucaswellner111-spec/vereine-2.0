@@ -22,21 +22,30 @@
  */
 :root {
   color-scheme: light;
-  --bg: #f5f7f5;
+  --bg: #f2f4f1;
   --surface: #ffffff;
-  --surface-2: #edf1ed;
-  --border: #d9e0da;
-  --text: #14201a;
-  --muted: #556258;
+  --surface-2: #ebefea;
+  --border: #dde3dc;
+  --text: #101a14;
+  --muted: #536058;
   --brand: #1b6e45;
   --brand-hover: #145636;
   --brand-contrast: #ffffff;
+  /* Verlaufsende (Smaragd) fuer Hauptknoepfe, Logo, Banner; Text darauf = brand-contrast */
+  --brand-2: #0f7a5a;
+  /* Limette: nur als Flaeche/Glanz, nie als Textfarbe */
+  --pop: #c6f36b;
+  /* Gefaellt mir */
+  --like: #d92d3a;
+  /* Glanz im Lade-Platzhalter */
+  --shimmer: #f7f9f6;
   --accent: #754c00;
   --danger: #b42318;
   --on-danger: #ffffff;
   --ring: #1b6e4566;
-  --shadow: 0 1px 2px rgb(20 32 26 / 0.06);
-  --overlay: 0 8px 24px rgb(20 32 26 / 0.14);
+  --shadow: 0 1px 2px rgb(16 26 20 / 0.04), 0 6px 20px -8px rgb(16 26 20 / 0.12);
+  --overlay: 0 12px 40px -8px rgb(16 26 20 / 0.22);
+  --glow: 0 6px 18px -6px rgb(27 110 69 / 0.55);
   /* Abdunklung hinter Dialogen/Lightbox und Text darauf (z. B. bg-scrim/50, text-on-scrim) */
   --scrim: #0a100c;
   --on-scrim: #ffffff;
@@ -54,12 +63,17 @@
     --brand: #4cc08a;
     --brand-hover: #67d09d;
     --brand-contrast: #07140d;
+    --brand-2: #6fd8a6;
+    --pop: #9be15d;
+    --like: #ff6b74;
+    --shimmer: #283429;
     --accent: #f0b35a;
     --danger: #f08a7c;
     --on-danger: #2a0b06;
     --ring: #4cc08a66;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
-    --overlay: 0 8px 24px rgb(0 0 0 / 0.5);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -10px rgb(0 0 0 / 0.6);
+    --overlay: 0 16px 48px -8px rgb(0 0 0 / 0.7);
+    --glow: 0 6px 20px -6px rgb(76 192 138 / 0.45);
     --scrim: #000000;
     --on-scrim: #ffffff;
   }
@@ -75,6 +89,9 @@
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-brand-contrast: var(--brand-contrast);
+  --color-brand-2: var(--brand-2);
+  --color-pop: var(--pop);
+  --color-like: var(--like);
   --color-accent: var(--accent);
   --color-danger: var(--danger);
   --color-on-danger: var(--on-danger);
@@ -82,7 +99,35 @@
   --color-on-scrim: var(--on-scrim);
   --shadow-card: var(--shadow);
   --shadow-overlay: var(--overlay);
-  --font-sans: var(--font-inter), var(--font-inter-ext), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow-glow: var(--glow);
+  /* Apple-Geraete: Systemschrift (SF), sonst Inter (selbst ausgeliefert) */
+  --font-sans: -apple-system, BlinkMacSystemFont, var(--font-inter), var(--font-inter-ext), ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Radien angelehnt an iOS: 10 / 16 / 22 */
+  --radius-lg: 0.625rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.375rem;
+  --animate-rise: rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-pop: pop 380ms cubic-bezier(0.3, 1.6, 0.5, 1);
+  --animate-sheet: sheet 320ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+  @keyframes sheet {
+    from { opacity: 0; transform: translateY(24px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
 }
 
 body {
@@ -90,6 +135,49 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+/* Marken-Verlauf (Waldgruen -> Smaragd); Text darauf: text-brand-contrast */
+@utility bg-brand-grad {
+  background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+}
+
+/* Gedrueckt-Zustand wie in nativen Apps: kurz kleiner, federt zurueck */
+@utility press {
+  transition-property: transform, background-color, color, box-shadow, filter, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.3, 1.4, 0.5, 1);
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 80ms;
+  }
+}
+
+/* Durchscheinende Leiste mit Blur (Kopf, Tab-Leiste); ohne backdrop-filter deckend */
+@utility glass {
+  background-color: var(--surface);
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    background-color: color-mix(in srgb, var(--surface) 78%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+}
+
+/* Haarlinie (0,5 px auf Retina) */
+@utility hairline-t {
+  box-shadow: inset 0 0.5px 0 var(--border);
+  @media (max-resolution: 1.5dppx) { box-shadow: inset 0 1px 0 var(--border); }
+}
+@utility hairline-b {
+  box-shadow: inset 0 -0.5px 0 var(--border);
+  @media (max-resolution: 1.5dppx) { box-shadow: inset 0 -1px 0 var(--border); }
+}
+
+/* Seitenwechsel per View-Transitions-API (Browser ohne Unterstuetzung wechseln ohne Animation) */
+@view-transition {
+  navigation: auto;
 }
 
 :focus-visible {

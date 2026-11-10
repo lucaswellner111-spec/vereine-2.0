@@ -181,6 +181,7 @@ function Feed() {
   else if (!data.posts.length)
     list = (
       <EmptyState
+        emoji="🌱"
         title="Hier ist noch nichts."
         action={
           <div className="flex flex-wrap justify-center gap-4">
@@ -196,7 +197,7 @@ function Feed() {
     list = (
       <ul className="space-y-4">
         {data.posts.map((p) => (
-          <li key={p.id} data-post-id={p.id} tabIndex={-1} className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+          <li key={p.id} data-post-id={p.id} tabIndex={-1} className="rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
             <PostCard post={p} onDeleted={dropPost} onHidden={hidePost} showReason={effective === "ranked"} />
           </li>
         ))}
@@ -214,7 +215,7 @@ function Feed() {
               aria-label="Wie ist der Feed sortiert?"
               aria-haspopup="dialog"
               onClick={() => setInfoOpen(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+              className="press inline-flex h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-text"
             >
               <Info size={18} aria-hidden />
             </button>
@@ -267,11 +268,13 @@ function Feed() {
           onClick={openComposer}
           aria-controls="composer-card"
           aria-expanded={false}
-          className="mb-4 flex w-full items-center gap-3 rounded-xl border border-border bg-surface p-3 text-left text-sm text-muted shadow-card hover:bg-surface-2 md:hidden"
+          className="press mb-4 flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-surface p-3 text-left text-sm text-muted shadow-card md:hidden"
         >
-          {user && <Avatar name={user.displayName} mediaId={myAvatar} size={32} />}
-          <span className="flex-1">Was gibt es Neues?</span>
-          <Camera size={18} aria-hidden />
+          {user && <Avatar name={user.displayName} mediaId={myAvatar} size={36} />}
+          <span className="flex h-10 flex-1 items-center rounded-full bg-surface-2 px-4">Was gibt es Neues?</span>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand/15 text-brand">
+            <Camera size={18} aria-hidden />
+          </span>
         </button>
       )}
 

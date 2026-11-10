@@ -122,6 +122,7 @@ function ListView() {
         <CardSkeletons count={2} />
       ) : events.length === 0 || filtered.length === 0 ? (
         <EmptyState
+          emoji="📅"
           title={events.length === 0 ? "Keine kommenden Termine." : q.trim() ? "Keine Termine zu deiner Suche." : "Keine Termine in diesem Zeitraum."}
           action={<ArrowLink href="/vereine">Vereine entdecken</ArrowLink>}
         >

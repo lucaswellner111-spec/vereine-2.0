@@ -19,6 +19,10 @@ const csp = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Dev-Knopf unten links verdeckt sonst die Tab-Leiste am Handy (Fehler-Overlay bleibt)
+  devIndicators: false,
+  // Eigener Build-Ordner (z. B. ".next-2"), wenn zwei Next-Server parallel im selben Ordner laufen
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   // Nur fuer lokale Entwicklung: /api -> NestJS. In Produktion routet Caddy /api direkt zur API.
   async rewrites() {

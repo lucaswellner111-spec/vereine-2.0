@@ -15,11 +15,11 @@ type Size = "sm" | "md";
 
 export function buttonClasses({ variant = "primary", size = "md" }: { variant?: Variant; size?: Size } = {}) {
   return clsx(
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+    "press inline-flex items-center justify-center gap-2 rounded-full font-semibold disabled:cursor-not-allowed disabled:opacity-50",
     // sm bei Touch etwas hoeher (40 px), Desktop-Optik unveraendert
     size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs pointer-coarse:h-10",
-    variant === "primary" && "bg-brand text-brand-contrast hover:bg-brand-hover",
-    variant === "secondary" && "border border-border bg-surface text-text hover:bg-surface-2",
+    variant === "primary" && "bg-brand bg-brand-grad text-brand-contrast shadow-glow hover:brightness-110",
+    variant === "secondary" && "border border-border bg-surface text-text shadow-card hover:bg-surface-2",
     variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
     variant === "danger" && "bg-danger text-on-danger hover:opacity-90",
   );
@@ -220,7 +220,7 @@ export function Checkbox({
 
 /** flush = ohne Innenabstand (Listen mit eigenen Zeilenabstaenden); p-0 per className wirkt nicht, da p-4 spaeter sortiert. */
 export function Card({ className, flush = false, children }: { className?: string; flush?: boolean; children: ReactNode }) {
-  return <div className={clsx("rounded-xl border border-border bg-surface shadow-card", !flush && "p-4", className)}>{children}</div>;
+  return <div className={clsx("rounded-2xl border border-border/70 bg-surface shadow-card", !flush && "p-4", className)}>{children}</div>;
 }
 
 /**
@@ -248,7 +248,7 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "bran
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold",
         tone === "neutral" && "bg-surface-2 text-muted",
         tone === "brand" && "bg-brand/15 text-brand",
         tone === "accent" && "bg-accent/20 text-accent",
@@ -301,7 +301,10 @@ export function Avatar({
     <span
       aria-hidden
       style={{ width: size, height: size, fontSize: size * 0.38 }}
-      className="inline-flex shrink-0 items-center justify-center rounded-full bg-brand/15 font-semibold text-brand"
+      className={clsx(
+        "inline-flex shrink-0 items-center justify-center bg-brand/15 bg-linear-to-br from-brand/15 to-pop/35 font-bold tracking-tight text-brand dark:to-brand/10",
+        kind === "org" ? "rounded-xl" : "rounded-full",
+      )}
     >
       {initials}
     </span>
@@ -408,13 +411,13 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "hit-area relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50",
+        "hit-area relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50",
         checked ? "bg-brand" : "bg-border",
       )}
     >
       <span
         className={clsx(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-all",
+          "absolute top-0.5 h-[27px] w-[27px] rounded-full bg-white shadow-md transition-[left] duration-300 ease-[cubic-bezier(0.3,1.5,0.5,1)]",
           checked ? "left-[22px]" : "left-0.5",
         )}
       />
@@ -426,7 +429,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+        <h1 className="text-[1.875rem] font-extrabold leading-tight tracking-[-0.025em] sm:text-3xl">{title}</h1>
         {subtitle && <div className="mt-1 text-sm text-muted">{subtitle}</div>}
       </div>
       {action}
@@ -462,7 +465,7 @@ export function DetailHeader({
         {media}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className={clsx("min-w-0 max-w-full break-words text-2xl font-semibold tracking-tight [overflow-wrap:anywhere]", titleClassName)}>{title}</h1>
+            <h1 className={clsx("min-w-0 max-w-full break-words text-2xl font-extrabold tracking-[-0.02em] [overflow-wrap:anywhere]", titleClassName)}>{title}</h1>
             {badges}
           </div>
           {subtitle && <div className="mt-1 break-words text-sm text-muted">{subtitle}</div>}
@@ -478,8 +481,8 @@ export function DetailHeader({
 /** Abschnittsueberschrift innerhalb einer Seite (h2). */
 export function SectionTitle({ children, className, icon: Icon }: { children: ReactNode; className?: string; icon?: LucideIcon }) {
   return (
-    <h2 className={clsx("flex items-center gap-2 text-base font-semibold", className)}>
-      {Icon && <Icon size={16} aria-hidden className="text-muted" />}
+    <h2 className={clsx("flex items-center gap-2 text-[1.0625rem] font-bold tracking-tight", className)}>
+      {Icon && <Icon size={17} aria-hidden className="text-brand" />}
       {children}
     </h2>
   );
@@ -488,21 +491,31 @@ export function SectionTitle({ children, className, icon: Icon }: { children: Re
 /** Leerer Zustand einer Liste/Seite: Icon, Titel, Erklaerung, optional eine Aktion. */
 export function EmptyState({
   icon: Icon,
+  emoji,
   title,
   children,
   action,
   className,
 }: {
   icon?: LucideIcon;
+  /** Freundliches Emoji statt Icon (nur in leeren Zustaenden, rein dekorativ) */
+  emoji?: string;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={clsx("rounded-xl border border-dashed border-border px-4 py-8 text-center", className)}>
-      {Icon && <Icon size={28} aria-hidden className="mx-auto mb-3 text-muted" />}
-      <p className="font-medium">{title}</p>
+    <div className={clsx("animate-rise rounded-2xl border border-border/70 bg-surface px-5 py-10 text-center shadow-card", className)}>
+      {(emoji || Icon) && (
+        <span
+          aria-hidden
+          className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand/15 bg-linear-to-br from-brand/15 to-pop/40 text-3xl text-brand dark:to-brand/5"
+        >
+          {emoji ?? (Icon && <Icon size={28} />)}
+        </span>
+      )}
+      <p className="text-[1.0625rem] font-bold tracking-tight">{title}</p>
       {children && <div className="mt-1 text-sm text-muted">{children}</div>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
@@ -537,7 +550,15 @@ export function ErrorState({
 
 /** Platzhalter beim Laden: behaelt das Layout stabil und kuendigt sich Screenreadern als "Lade" an. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={clsx("animate-pulse rounded-md bg-surface-2", className)} />;
+  return (
+    <div
+      aria-hidden
+      className={clsx(
+        "animate-shimmer rounded-md bg-surface-2 bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--surface-2)_25%,var(--shimmer)_50%,var(--surface-2)_75%)]",
+        className,
+      )}
+    />
+  );
 }
 
 /** Zeilen-Platzhalter fuer einfache Listen und Tabellen. */
@@ -545,7 +566,7 @@ export function ListSkeleton({ rows = 4, className }: { rows?: number; className
   return (
     <div role="status" aria-label="Lade" className={clsx("space-y-2", className)}>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5">
+        <div key={i} className="flex items-center gap-3 rounded-xl border border-border/70 bg-surface px-3 py-2.5">
           <Skeleton className="h-8 w-8 rounded-full" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3 w-2/5" />
@@ -563,7 +584,7 @@ export function CardSkeletons({ count = 3, media = false }: { count?: number; me
   return (
     <div role="status" aria-label="Lade" className="space-y-4">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="rounded-xl border border-border bg-surface p-4">
+        <div key={i} className="rounded-2xl border border-border/70 bg-surface p-4 shadow-card">
           <div className="flex items-center gap-3">
             <Skeleton className="h-9 w-9 rounded-full" />
             <div className="flex-1 space-y-2">

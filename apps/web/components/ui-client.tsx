@@ -214,8 +214,8 @@ function DialogPanel({
   return (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex justify-center bg-scrim/50 p-4",
-        placement === "sheet" ? "items-end sm:items-center" : "items-center",
+        "fixed inset-0 z-50 flex justify-center bg-scrim/50 p-4 backdrop-blur-[2px]",
+        placement === "sheet" ? "items-end max-sm:px-0 max-sm:pb-0 sm:items-center" : "items-center",
       )}
       onMouseDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) onClose();
@@ -231,7 +231,9 @@ function DialogPanel({
         onKeyDown={onKeyDown}
         style={swipe.offset ? { transform: `translateY(${swipe.offset}px)` } : undefined}
         className={clsx(
-          "relative w-full rounded-xl border border-border bg-surface p-5 shadow-overlay max-h-[90dvh] overflow-y-auto overscroll-contain",
+          "relative w-full animate-sheet rounded-2xl border border-border/70 bg-surface p-5 shadow-overlay max-h-[90dvh] overflow-y-auto overscroll-contain",
+          // Sheet am Handy: unten buendig, runde Oberkanten, Platz fuer die Home-Leiste
+          isSheet && "max-sm:rounded-b-none max-sm:rounded-t-[1.375rem] max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]",
           size === "sm" && "max-w-sm",
           size === "md" && "max-w-lg",
           size === "lg" && "max-w-2xl",
@@ -241,7 +243,7 @@ function DialogPanel({
         {isSheet && (
           // Griffleiste (nur Handy): Ziehen nach unten schliesst; per Tastatur bleibt Escape/Schliessen-Knopf
           <div aria-hidden className="-mx-5 -mt-5 mb-1 flex h-6 touch-none cursor-grab items-center justify-center sm:hidden" {...swipe.handlers}>
-            <span className="h-1 w-10 rounded-full bg-border" />
+            <span className="h-[5px] w-9 rounded-full bg-border" />
           </div>
         )}
         <h2 id={titleId} className={clsx(hideTitle ? "sr-only" : "pr-8 text-base font-semibold")}>
@@ -406,7 +408,7 @@ export function SegmentedControl<T extends string>({
       role={tabs ? "tablist" : "radiogroup"}
       aria-label={ariaLabel}
       className={clsx(
-        variant === "segmented" ? "inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-surface p-1" : "flex flex-wrap gap-2",
+        variant === "segmented" ? "inline-flex h-10 items-center gap-0.5 rounded-xl bg-surface-2 p-1" : "flex flex-wrap gap-2",
         fullWidth && "flex w-full",
         className,
       )}
@@ -431,11 +433,13 @@ export function SegmentedControl<T extends string>({
             onClick={() => select(i)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={clsx(
-              "inline-flex items-center justify-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-              variant === "segmented" ? "h-8 rounded-md px-3" : "h-9 rounded-full px-4",
+              "press inline-flex items-center justify-center gap-1.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50",
+              variant === "segmented" ? "h-8 rounded-[0.5rem] px-3.5" : "h-9 rounded-full px-4",
               fullWidth && "flex-1",
               selected
-                ? "bg-brand text-brand-contrast"
+                ? variant === "segmented"
+                  ? "bg-surface text-text shadow-card"
+                  : "bg-brand bg-brand-grad text-brand-contrast shadow-glow"
                 : clsx("text-muted hover:text-text", variant === "pills" && "border border-border bg-surface"),
             )}
           >
@@ -722,7 +726,7 @@ export function DropdownMenu({ label, items, align = "end", side = "bottom", tri
             tabIndex={-1}
             onKeyDown={onMenuKeyDown}
             style={{ top: pos?.top ?? 0, left: pos?.left ?? 0 }}
-            className="fixed z-[60] min-w-44 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-surface p-1 shadow-overlay focus:outline-none"
+            className="fixed z-[60] min-w-48 max-w-[calc(100vw-1rem)] animate-sheet rounded-xl border border-border/70 bg-surface p-1.5 shadow-overlay focus:outline-none"
           >
             {items.map((e) => {
               if (e.type === "separator") return <div key={e.id} role="separator" className="my-1 h-px bg-border" />;

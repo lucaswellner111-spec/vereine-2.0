@@ -230,39 +230,43 @@ export function PostCard({
     <Card>
       <div className="flex items-start gap-3">
         {post.org ? (
-          <Avatar name={post.org.name} mediaId={post.org.logoId} kind="org" />
+          <Avatar name={post.org.name} mediaId={post.org.logoId} kind="org" size={42} />
         ) : (
-          <UserAvatarLink handle={post.author.handle} name={post.author.name} mediaId={post.author.avatarId} decorative />
+          <UserAvatarLink handle={post.author.handle} name={post.author.name} mediaId={post.author.avatarId} size={42} decorative />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Zeile 1: Name (+ Badge), Zeile 2: @Handle · Zeit · bearbeitet */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {post.org ? (
-              <Link href={`/vereine/${post.org.slug}`} className="font-medium hover:underline">{post.org.name}</Link>
+              <Link href={`/vereine/${post.org.slug}`} className="font-bold tracking-tight hover:underline">{post.org.name}</Link>
             ) : (
-              <UserNameLink handle={post.author.handle} name={post.author.name} className="font-medium" />
-            )}
-            {!post.org && post.author.handle && <span className="text-xs text-muted">@{post.author.handle}</span>}
-            <Link href={postHref(post.id)} className="text-xs text-muted hover:underline">
-              <time dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
-            </Link>
-            {post.editedAt && (
-              <span className="text-xs text-muted" title={`Bearbeitet am ${new Date(post.editedAt).toLocaleString("de-DE")}`}>· bearbeitet</span>
+              <UserNameLink handle={post.author.handle} name={post.author.name} className="font-bold tracking-tight" />
             )}
             {post.kind === "event" && <Badge tone="brand">Termin</Badge>}
             {/* Spenden sind noch nicht gebaut ("Kommt später"): kein Badge "Spendenaktion" anzeigen */}
           </div>
+          <div className="flex flex-wrap items-center gap-x-1 text-xs text-muted">
+            {!post.org && post.author.handle && <span className="truncate">@{post.author.handle} ·</span>}
+            {post.org && <span>Verein ·</span>}
+            <Link href={postHref(post.id)} className="hover:underline">
+              <time dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
+            </Link>
+            {post.editedAt && (
+              <span title={`Bearbeitet am ${new Date(post.editedAt).toLocaleString("de-DE")}`}>· bearbeitet</span>
+            )}
+          </div>
 
-          {post.body && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{post.body}</p>}
+          {post.body && <p className="mt-2.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-relaxed">{post.body}</p>}
 
           {post.media.length > 0 && (
-            <div className={clsx("mt-3 grid gap-1 overflow-hidden rounded-xl", post.media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+            <div className={clsx("mt-3 grid gap-1 overflow-hidden rounded-2xl", post.media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
               {post.media.map((m, i) => (
                 <button
                   key={m.id}
                   type="button"
                   onClick={() => setLightbox(i)}
                   aria-label={`Bild ${i + 1} von ${post.media.length} vergrößern`}
-                  className={clsx("block overflow-hidden bg-surface-2", post.media.length === 1 ? "" : "aspect-square", post.media.length === 3 && i === 0 && "row-span-2 aspect-auto")}
+                  className={clsx("press block overflow-hidden bg-surface-2", post.media.length === 1 ? "" : "aspect-square", post.media.length === 3 && i === 0 && "row-span-2 aspect-auto")}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -282,12 +286,22 @@ export function PostCard({
 
           <TagChips tags={post.tags} to="/tags" className="mt-3" />
 
-          <div className="mt-3 flex items-center gap-1 text-sm text-muted">
-            <Button variant="ghost" size="sm" aria-pressed={post.likedByMe} aria-label={`Gefällt mir, ${post.likes}`} onClick={like}>
-              <Heart size={15} aria-hidden className={clsx(post.likedByMe && "fill-current text-danger")} /> {post.likes}
+          <div className="-ml-2 mt-2 flex items-center gap-0.5 text-sm text-muted">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={post.likedByMe}
+              aria-label={`Gefällt mir, ${post.likes}`}
+              onClick={like}
+            >
+              {/* key: Herz ploppt bei jedem Wechsel neu auf */}
+              <Heart key={String(post.likedByMe)} size={18} aria-hidden className={clsx(post.likedByMe && "animate-pop fill-current text-like")} /> {post.likes}
             </Button>
             <Button variant="ghost" size="sm" aria-expanded={open} aria-label={`Kommentare, ${post.comments}`} onClick={toggleComments}>
-              <MessageCircle size={15} aria-hidden /> {post.comments}
+              <MessageCircle size={18} aria-hidden /> {post.comments}
+            </Button>
+            <Button variant="ghost" size="sm" aria-label="Beitrag teilen" onClick={share}>
+              <Share2 size={17} aria-hidden />
             </Button>
             <span className="ml-auto">
               <DropdownMenu label="Beitragsoptionen" items={menu} />
@@ -295,7 +309,7 @@ export function PostCard({
           </div>
 
           {why && showReason && (
-            <p id={`why-${post.id}`} className="mt-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+            <p id={`why-${post.id}`} className="mt-2 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
               <span className="font-medium">Warum du das siehst: </span>
               {post.reason}
             </p>
@@ -313,7 +327,7 @@ export function PostCard({
                         <div className="min-w-0 flex-1">
                           <UserNameLink handle={c.author.handle} name={c.author.name} className="font-medium" />{" "}
                           <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
-                          <p className="break-words text-muted">{c.body}</p>
+                          <p className="break-words">{c.body}</p>
                         </div>
                         {items.length > 0 && (
                           <DropdownMenu label={`Optionen für Kommentar von ${c.author.name}`} items={items} triggerClassName="h-7 w-7" />

@@ -39,8 +39,8 @@ const mobileNav: NavItem[] = nav.filter((i) => i.href !== "/verwaltung");
 
 const linkClass = (active: boolean) =>
   clsx(
-    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-    active ? "bg-brand/15 text-brand" : "text-muted hover:bg-surface-2 hover:text-text",
+    "press flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium",
+    active ? "bg-brand/15 font-semibold text-brand" : "text-muted hover:bg-surface-2 hover:text-text",
   );
 
 /** Zaehler am Chat-Link: Zahl nur optisch, vorgelesen wird ", n ungelesen" als Teil des Link-Namens. */
@@ -51,7 +51,7 @@ function UnreadBadge({ n, floating }: { n: number; floating?: boolean }) {
         aria-hidden
         className={clsx(
           "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 text-[11px] font-semibold leading-none text-on-danger",
-          floating ? "absolute -right-3 -top-1.5" : "ml-auto",
+          floating ? "absolute -top-1 right-1 ring-2 ring-surface" : "ml-auto",
         )}
       >
         {n > 9 ? "9+" : n}
@@ -131,7 +131,7 @@ function NavGroup({
 
   return (
     <div>
-      <div className={clsx("flex items-center rounded-lg", active && "bg-brand/15")}>
+      <div className={clsx("flex items-center rounded-xl", active && "bg-brand/15")}>
         <Link href={href} aria-current={currentHref === href ? "page" : undefined} className={clsx(linkClass(false), "flex-1", active && "text-brand hover:bg-transparent")}>
           <Icon size={18} aria-hidden />
           {label}
@@ -218,7 +218,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
   return (
     <div className="min-h-dvh">
       <OfflineBanner immersive={immersive} />
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border bg-surface p-4 md:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border/70 bg-surface p-4 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
           <Logo className="text-lg" />
           <NotificationBell align="left" />
@@ -226,7 +226,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
         <button
           type="button"
           onClick={openCommandPalette}
-          className="mb-3 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg px-3 text-sm text-muted hover:text-text"
+          className="press mb-3 flex h-9 items-center gap-2 rounded-xl bg-surface-2 px-3 text-sm text-muted hover:text-text"
         >
           <Search size={15} aria-hidden />
           <span className="flex-1 text-left">Suchen …</span>
@@ -254,7 +254,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           />
         </nav>
         <ThemeToggle compact className="mb-3 self-start" />
-        <div className="rounded-lg border border-border p-2">
+        <div className="rounded-2xl border border-border/70 p-2">
           <Link
             href={profileHref}
             aria-current={pathname === profileHref ? "page" : undefined}
@@ -274,7 +274,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
 
       <header
         className={clsx(
-          "sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-surface pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:hidden",
+          "glass hairline-b sticky top-0 z-10 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center justify-between pt-[env(safe-area-inset-top)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:hidden",
           immersive && "max-md:hidden",
         )}
       >
@@ -301,14 +301,17 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
       >
         <div className="mx-auto max-w-3xl">
           {!immersive && <EmailVerifyBanner user={user} />}
-          {children}
+          {/* Neu einblenden je Seite (sanftes Aufsteigen); bei reduzierter Bewegung aus */}
+          <div key={pathname} className="animate-rise">
+            {children}
+          </div>
         </div>
       </main>
 
       <nav
         aria-label="Hauptnavigation"
         className={clsx(
-          "fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden",
+          "glass hairline-t fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden",
           immersive && "max-md:hidden",
         )}
       >
@@ -319,10 +322,10 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium leading-tight", active ? "text-brand" : "text-muted")}
+              className={clsx("press flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] leading-tight", active ? "font-bold text-brand" : "font-medium text-muted")}
             >
-              <span className="relative">
-                <item.icon size={20} aria-hidden />
+              <span className={clsx("relative inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors", active && "bg-brand/15")}>
+                <item.icon size={21} strokeWidth={active ? 2.4 : 1.9} aria-hidden />
                 {item.href === "/chat" && unread > 0 && <UnreadBadge n={unread} floating />}
               </span>
               {item.label}
@@ -334,9 +337,11 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           aria-haspopup="dialog"
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen(true)}
-          className={clsx("flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium leading-tight", moreActive ? "text-brand" : "text-muted")}
+          className={clsx("press flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] leading-tight", moreActive ? "font-bold text-brand" : "font-medium text-muted")}
         >
-          <Menu size={20} aria-hidden />
+          <span className={clsx("inline-flex h-7 w-12 items-center justify-center rounded-full", moreActive && "bg-brand/15")}>
+            <Menu size={21} strokeWidth={moreActive ? 2.4 : 1.9} aria-hidden />
+          </span>
           Mehr
           {moreActive && <span className="sr-only">, aktueller Bereich</span>}
         </button>

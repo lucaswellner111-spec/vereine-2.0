@@ -4,9 +4,10 @@ import { ThemeToggle } from "./theme-toggle";
 
 export function Logo({ className }: { className?: string }) {
   return (
-    <Link href="/" className={`inline-flex items-center gap-2 font-semibold tracking-tight ${className ?? ""}`}>
-      <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-contrast">
+    <Link href="/" className={`inline-flex items-center gap-2 font-extrabold tracking-[-0.02em] ${className ?? ""}`}>
+      <span aria-hidden className="relative inline-flex h-8 w-8 -rotate-6 items-center justify-center rounded-[0.625rem] bg-brand bg-brand-grad text-[15px] font-black text-brand-contrast shadow-glow">
         K
+        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-pop ring-2 ring-surface" />
       </span>
       <span>Klubnest</span>
     </Link>
@@ -18,7 +19,7 @@ export const SITE_CONTAINER = "mx-auto w-full max-w-6xl px-4";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
+    <header className="glass hairline-b sticky top-0 z-30">
       <div className={`${SITE_CONTAINER} flex h-16 items-center justify-between max-sm:px-3`}>
         <Logo />
         <nav aria-label="Konto" className="flex items-center gap-1 text-sm sm:gap-2">
@@ -27,10 +28,10 @@ export function SiteHeader() {
           <div className="mr-1 hidden sm:block">
             <ThemeToggle compact />
           </div>
-          <Link href="/login" className="inline-flex h-10 items-center rounded-lg px-3 text-muted hover:bg-surface-2 hover:text-text">
+          <Link href="/login" className="press inline-flex h-10 items-center rounded-full px-3 font-medium text-muted hover:bg-surface-2 hover:text-text">
             Anmelden
           </Link>
-          <Link href="/registrieren" className="inline-flex h-10 items-center rounded-lg bg-brand px-3 font-medium text-brand-contrast hover:bg-brand-hover">
+          <Link href="/registrieren" className="press inline-flex h-10 items-center rounded-full bg-brand bg-brand-grad px-4 font-semibold text-brand-contrast shadow-glow hover:brightness-110">
             Registrieren
           </Link>
         </nav>

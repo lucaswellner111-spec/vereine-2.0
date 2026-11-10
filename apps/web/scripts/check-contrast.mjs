@@ -59,6 +59,9 @@ const PAIRS = [
   ["brand", "bg", 4.5, "Link/Marke auf Seite"],
   ["brand-contrast", "brand", 4.5, "Text auf Marken-Button"],
   ["brand-contrast", "brand-hover", 4.5, "Text auf Marken-Button (hover)"],
+  ["brand-contrast", "brand-2", 4.5, "Text auf Marken-Verlauf (Ende)"],
+  ["like", "surface", 4.5, "Gefällt-mir auf Karte"],
+  // pop (Limette) nie hinter Text im Dunkeln: dort dark:to-brand/10 statt to-pop/35 (Avatar-Initialen)
   ["danger", "surface", 4.5, "Fehlertext auf Karte"],
   ["on-danger", "danger", 4.5, "Text auf Fehler-Flaeche"],
   ["accent", "surface", 4.5, "Akzenttext auf Karte"],
