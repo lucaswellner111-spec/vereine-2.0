@@ -866,6 +866,73 @@ export type MemberRecord = Required<SelfMemberProfileInput> & {
 };
 export type MyMembership = { orgSlug: string; orgName: string; memberNo: number; profile: Required<SelfMemberProfileInput>; joinedOn: string; feeClassName: string | null };
 
+// --- Mitglieder-Import (CSV, Vorschau + Bestaetigung) -------------------------------------
+
+export const MEMBER_IMPORT_LIMITS = { maxRows: 500, maxBytes: 1_000_000, inviteValidDays: 30, maxPendingPerOrg: 2000 } as const;
+/** Beginnt eine Tabellenzelle so, kann Excel/LibreOffice sie als Formel ausfuehren (CSV-Injection). */
+export const FORMULA_START = /^[=+\-@\t\r]/;
+const importName = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} fehlt.`)
+    .max(60, `${label} ist zu lang (höchstens 60 Zeichen).`)
+    .refine((v) => !FORMULA_START.test(v), `${label} darf nicht mit = + - oder @ beginnen.`)
+    // eslint-disable-next-line no-control-regex
+    .refine((v) => !/[\u0000-\u001f\u007f]/.test(v), `${label} enthält Steuerzeichen.`);
+
+/** Eine Zeile nach dem Parsen (Datum schon als JJJJ-MM-TT, Zahlen als Zahl). */
+export const memberImportRowSchema = z.object({
+  firstName: importName("Vorname"),
+  lastName: importName("Nachname"),
+  email: z.string().trim().toLowerCase().min(1, "E-Mail fehlt – ohne Adresse kann keine Einladung verschickt werden.").email("E-Mail-Adresse ist ungültig.").max(254, "E-Mail-Adresse ist zu lang."),
+  memberNo: z.number({ error: "Mitgliedsnummer muss eine ganze Zahl sein." }).int("Mitgliedsnummer muss eine ganze Zahl sein.").min(1, "Mitgliedsnummer muss größer als 0 sein.").max(99_999_999, "Mitgliedsnummer ist zu groß.").nullable(),
+  joinedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Eintrittsdatum ist ungültig (TT.MM.JJJJ).").nullable(),
+  feeClassName: z.string().trim().max(60, "Beitragsklasse ist zu lang.").nullable(),
+});
+export type MemberImportRowInput = z.infer<typeof memberImportRowSchema>;
+
+export type MemberImportField = "firstName" | "lastName" | "email" | "memberNo" | "joinedOn" | "feeClass";
+export type MemberImportRow = {
+  /** Zeilennummer in der Datei (Kopfzeile = 1). */
+  line: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  memberNo: number | null;
+  joinedOn: string | null;
+  feeClassName: string | null;
+  status: "ok" | "error" | "duplicate";
+  problems: string[];
+};
+export type MemberImportPreview = {
+  delimiter: ";" | "," | "\t";
+  columns: { field: MemberImportField; header: string }[];
+  /** Spalten, die nicht uebernommen werden (Datenminimierung). */
+  ignoredColumns: string[];
+  total: number;
+  valid: number;
+  errors: number;
+  duplicates: number;
+  rows: MemberImportRow[];
+  /** Einladungen: heute moeglich / folgen an den naechsten Tagen (Kostenbremse). */
+  mail: { today: number; later: number };
+};
+export type MemberImportResult = { imported: number; skipped: number; mailToday: number; mailLater: number };
+export type PendingMemberItem = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  memberNo: number | null;
+  joinedOn: string | null;
+  feeClassName: string | null;
+  status: "queued" | "sent" | "expired";
+  sentAt: string | null;
+  createdAt: string;
+};
+export type PendingMemberPage = { total: number; items: PendingMemberItem[] };
+
 export type OrgDashboard = {
   members: number;
   pendingRequests: number;

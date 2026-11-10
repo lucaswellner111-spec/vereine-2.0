@@ -13,6 +13,8 @@ export type MailTemplates = {
   "email-change-confirm": { name: string; link: string };
   "email-change-notice": { name: string; newEmailMasked: string; link: string };
   invite: { orgName: string; link: string; inviterName?: string; unsubscribeLink?: string };
+  /** Persoenliche Einladung aus dem Mitglieder-Import (Vorname aus der Liste des Vereins). */
+  "member-invite": { orgName: string; firstName: string; link: string; validDays: number; unsubscribeLink?: string };
   "invoice-new": { name: string; orgName: string; number: string; amount: string; dueDate: string; link: string };
   "notification-digest": { name: string; lines: string[]; link: string; unsubscribeLink?: string };
 };
@@ -25,6 +27,7 @@ export const MAIL_TEMPLATES: MailTemplate[] = [
   "email-change-confirm",
   "email-change-notice",
   "invite",
+  "member-invite",
   "invoice-new",
   "notification-digest",
 ];
@@ -42,6 +45,7 @@ export const TEMPLATE_META: Record<MailTemplate, { priority: "critical" | "norma
   "account-exists": { priority: "normal", category: "notice" },
   "registration-complete": { priority: "critical", category: "auth" },
   invite: { priority: "normal", category: "invite" },
+  "member-invite": { priority: "normal", category: "invite" },
   "invoice-new": { priority: "normal", category: "service" },
   "notification-digest": { priority: "normal", category: "digest" },
 };
@@ -188,6 +192,21 @@ export function renderMail<T extends MailTemplate>(template: T, data: MailTempla
         [inviter ? `${inviter} lädt dich zu „${d.orgName}“ bei ${BRAND} ein.` : `Du wurdest zu „${d.orgName}“ bei ${BRAND} eingeladen.`],
         { label: "Einladung ansehen", link: d.link },
         `Du kennst den Verein nicht? Dann ignoriere diese E-Mail einfach.`,
+        { unsubscribe: d.unsubscribeLink },
+      );
+    }
+    case "member-invite": {
+      const d = data as MailTemplates["member-invite"];
+      return compose(
+        `Einladung zu ${d.orgName}`,
+        hello(d.firstName),
+        [
+          `„${d.orgName}“ nutzt ${BRAND} für Neuigkeiten, Termine und die Mitgliederverwaltung und lädt dich als Mitglied ein.`,
+          `Über den Button legst du ein Konto an (oder meldest dich an) und trittst dem Verein bei. Der Link gilt ${d.validDays} Tage und nur für dich.`,
+          `Deine Adresse hat dein Verein aus seiner Mitgliederliste übernommen; verantwortlich dafür ist der Verein.`,
+        ],
+        { label: "Einladung annehmen", link: d.link },
+        `Du möchtest kein Konto? Dann ignoriere diese E-Mail einfach – ohne Annahme wird deine Adresse bei ${BRAND} nach Ablauf gelöscht.`,
         { unsubscribe: d.unsubscribeLink },
       );
     }

@@ -22,6 +22,8 @@ export const RETENTION = {
   /** Sperrliste: harte Bounces/Beschwerden bzw. Abmeldungen von Einladungs-Mails. */
   mailBounce: "12 months",
   mailUnsubscribe: "36 months",
+  /** Vorgemerkte Mitglieder aus dem CSV-Import, deren Einladung nie verschickt wurde (versendete: bei Ablauf der Einladung). */
+  pendingMembersUnsent: "60 days",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */

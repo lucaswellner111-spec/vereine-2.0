@@ -10,6 +10,7 @@ import clsx from "clsx";
 import { Alert, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, Field, Input, LinkButton, Select, SelectField, stackTable, TextareaField, UserNameLink } from "./ui";
 import { Dialog } from "./ui-client";
 import { ask, toast } from "./ui-hosts";
+import { MemberImport } from "./member-import";
 
 const intervalLabel: Record<FeeInterval, string> = { monthly: "monatlich", quarterly: "vierteljährlich", halfyearly: "halbjährlich", yearly: "jährlich" };
 const PAGE = 50;
@@ -222,6 +223,7 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
   const [cls, setCls] = useState("");
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<MemberRecord | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
   if (q.trim()) params.set("q", q.trim());
   if (cls) params.set("feeClassId", cls);
@@ -251,8 +253,18 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
           <option value="">Alle Beitragsklassen</option>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
-        {isAdmin && <LinkButton native size="sm" variant="secondary" href={`/api/orgs/${slug}/member-registry.csv`} className="max-sm:w-full sm:ml-auto">CSV-Export</LinkButton>}
+        {isAdmin && (
+          <div className="flex gap-2 max-sm:w-full sm:ml-auto">
+            <Button size="sm" variant={importOpen ? "primary" : "secondary"} aria-expanded={importOpen} aria-controls="member-import" onClick={() => setImportOpen(!importOpen)} className="max-sm:flex-1">CSV-Import</Button>
+            <LinkButton native size="sm" variant="secondary" href={`/api/orgs/${slug}/member-registry.csv`} className="max-sm:flex-1">CSV-Export</LinkButton>
+          </div>
+        )}
       </div>
+      {isAdmin && importOpen && (
+        <section id="member-import" aria-label="Mitglieder importieren">
+          <MemberImport slug={slug} onImported={load} />
+        </section>
+      )}
       {isAdmin && <p className="text-xs text-muted">Der Export wird protokolliert. Gib Mitgliederdaten nur an Personen weiter, die sie für Vereinszwecke brauchen.</p>}
 
       {registry.error && !page ? (

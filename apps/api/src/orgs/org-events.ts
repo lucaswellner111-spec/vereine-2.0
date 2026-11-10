@@ -4,6 +4,8 @@ import { JobsService } from "../jobs/jobs.service";
 
 type LeaveHandler = (orgId: string, userId: string) => Promise<void>;
 type OrgDeletedHandler = (orgId: string) => Promise<void>;
+/** Beitritt ueber einen Einladungslink (z. B. persoenliche Einladung aus dem Mitglieder-Import). */
+type InviteAcceptedHandler = (orgId: string, userId: string, inviteId: string) => Promise<void>;
 /** Laeuft IN der Loesch-Transaktion (nur `tx` benutzen); optionaler Rueckgabewert laeuft nach dem Commit (z. B. Dateien). */
 type OrgDeletingHandler = (orgId: string, tx: Database) => Promise<(() => Promise<void>) | void>;
 
@@ -19,6 +21,7 @@ export class OrgEvents implements OnModuleInit {
   private readonly leaveHandlers = new Map<string, LeaveHandler>();
   private readonly deletedHandlers = new Map<string, OrgDeletedHandler>();
   private readonly deletingHandlers: OrgDeletingHandler[] = [];
+  private readonly acceptedHandlers = new Map<string, InviteAcceptedHandler>();
 
   constructor(@Inject(JobsService) private readonly jobs: JobsService) {}
 
@@ -31,6 +34,10 @@ export class OrgEvents implements OnModuleInit {
       const h = this.deletedHandlers.get(d.handler);
       if (h) await h(d.orgId);
     });
+    this.jobs.define("orgs.invite-accepted", async (d: { orgId: string; userId: string; inviteId: string; handler: string }) => {
+      const h = this.acceptedHandlers.get(d.handler);
+      if (h) await h(d.orgId, d.userId, d.inviteId);
+    });
   }
 
   onLeave(name: string, handler: LeaveHandler) {
@@ -39,6 +46,22 @@ export class OrgEvents implements OnModuleInit {
 
   onOrgDeleted(name: string, handler: OrgDeletedHandler) {
     this.deletedHandlers.set(name, handler);
+  }
+
+  onInviteAccepted(name: string, handler: InviteAcceptedHandler) {
+    this.acceptedHandlers.set(name, handler);
+  }
+
+  /** Nach dem Commit des Beitritts aufrufen. Wirft nie. */
+  async emitInviteAccepted(orgId: string, userId: string, inviteId: string): Promise<void> {
+    for (const [name, h] of this.acceptedHandlers) {
+      try {
+        await h(orgId, userId, inviteId);
+      } catch {
+        this.log.error(`Beitritts-Handler ${name} fehlgeschlagen (Verein ${orgId}), wird als Job wiederholt.`);
+        await this.retry("orgs.invite-accepted", { orgId, userId, inviteId, handler: name });
+      }
+    }
   }
 
   onOrgDeleting(handler: OrgDeletingHandler) {

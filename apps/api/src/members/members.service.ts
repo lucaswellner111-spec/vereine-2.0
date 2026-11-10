@@ -15,7 +15,7 @@ import type {
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { DB, type Database } from "../db/db.module";
-import { feeClasses, memberCounters, memberProfiles } from "../db/schema";
+import { feeClasses, memberCounters, memberProfiles, pendingMembers } from "../db/schema";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
 import { berlinDate } from "../common/berlin-date";
@@ -362,6 +362,46 @@ export class MembersService implements OnModuleInit {
     return "﻿" + lines.join("\r\n") + "\r\n";
   }
 
+  // --- Mitglieder-Import (Uebernahme beim Beitritt) ------------------------------------------
+
+  /** Belegte Mitgliedsnummern eines Vereins (auch Ausgetretene, die Nummer bleibt Vereinsunterlage). */
+  async usedMemberNos(orgId: string, nos: number[]): Promise<Set<number>> {
+    if (nos.length === 0) return new Set();
+    const rows = await this.db
+      .select({ no: memberProfiles.memberNo })
+      .from(memberProfiles)
+      .where(and(eq(memberProfiles.orgId, orgId), inArray(memberProfiles.memberNo, nos)));
+    return new Set(rows.map((r) => r.no));
+  }
+
+  /** Zaehler mindestens auf `no` setzen, damit automatisch vergebene Nummern nie mit importierten kollidieren. */
+  async reserveMemberNos(orgId: string, maxNo: number, tx: Database = this.db): Promise<void> {
+    await tx
+      .insert(memberCounters)
+      .values({ orgId, lastNo: maxNo })
+      .onConflictDoUpdate({ target: memberCounters.orgId, set: { lastNo: sql`greatest(${memberCounters.lastNo}, excluded.last_no)` } });
+  }
+
+  /**
+   * Beitritt ueber eine persoenliche Import-Einladung: Profil sicherstellen und Nummer, Eintritt und Beitragsklasse aus der
+   * Liste des Vereins uebernehmen. Ist die Nummer inzwischen vergeben, bleibt die automatisch vergebene.
+   */
+  async applyImported(orgId: string, userId: string, data: { memberNo: number | null; joinedOn: string | null; feeClassId: string | null }): Promise<void> {
+    await this.ensureProfiles(orgId);
+    const where = and(eq(memberProfiles.orgId, orgId), eq(memberProfiles.userId, userId), isNull(memberProfiles.leftOn));
+    const set: Partial<ProfileRow> = { updatedAt: new Date() };
+    if (data.joinedOn) set.joinedOn = data.joinedOn;
+    if (data.feeClassId && (await this.feeClassesOf(orgId, [data.feeClassId])).length) set.feeClassId = data.feeClassId;
+    await this.db.update(memberProfiles).set(set).where(where);
+    if (data.memberNo) {
+      try {
+        await this.db.update(memberProfiles).set({ memberNo: data.memberNo }).where(where);
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+      }
+    }
+  }
+
   // --- Datenschutz --------------------------------------------------------------------
 
   /** Austritt/Entfernung: personenbezogene Felder loeschen; Nummer, Daten und Beitragsklasse bleiben (pseudonym). */
@@ -372,10 +412,11 @@ export class MembersService implements OnModuleInit {
       .where(and(eq(memberProfiles.orgId, orgId), eq(memberProfiles.userId, userId), isNull(memberProfiles.leftOn)));
   }
 
-  /** Verein geloescht (Kontoloeschung des einzigen Vorstands): alle Stammdaten, Beitragsklassen und Zaehler entfernen. */
+  /** Verein geloescht (Kontoloeschung des einzigen Vorstands): alle Stammdaten, Vormerkungen, Beitragsklassen und Zaehler entfernen. */
   async eraseOrg(orgId: string): Promise<void> {
     await this.db.transaction(async (tx) => {
       await tx.delete(memberProfiles).where(eq(memberProfiles.orgId, orgId));
+      await tx.delete(pendingMembers).where(eq(pendingMembers.orgId, orgId));
       await tx.delete(feeClasses).where(eq(feeClasses.orgId, orgId));
       await tx.delete(memberCounters).where(eq(memberCounters.orgId, orgId));
     });
@@ -384,6 +425,8 @@ export class MembersService implements OnModuleInit {
   /** Kontoloeschung: alle Stammdaten der Person in allen Vereinen entfernen (Art. 17). */
   async eraseUser(userId: string): Promise<void> {
     await this.db.delete(memberProfiles).where(eq(memberProfiles.userId, userId));
+    // Vorgemerkte Importe bleiben Vereinsunterlage, nur der Verweis auf die importierende Person entfaellt.
+    await this.db.update(pendingMembers).set({ createdBy: null }).where(eq(pendingMembers.createdBy, userId));
   }
 
   /** Auskunft (Art. 15): eigene Stammdaten in allen Vereinen. */

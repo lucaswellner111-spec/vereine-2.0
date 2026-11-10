@@ -66,7 +66,7 @@ describe("Billing-Bereich", () => {
 
 /** Die Mitgliederverwaltung kennt nur eigene Tabellen (plus das Zugriffsprotokoll ueber AuditService, nicht direkt). */
 describe("Mitglieder-Bereich", () => {
-  const MEMBER_TABLES = ["membersArea", "feeClasses", "memberProfiles", "memberCounters"];
+  const MEMBER_TABLES = ["membersArea", "feeClasses", "memberProfiles", "memberCounters", "pendingMembers"];
   it("importiert nur members-Tabellen aus dem Schema", () => {
     for (const file of sources(join(root, "members"))) {
       const src = readFileSync(file, "utf8");

@@ -176,6 +176,13 @@
       "when": 1794335732444,
       "tag": "0024_s3_invites_token_enc_required",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794341348216,
+      "tag": "0025_s5_member_import",
+      "breakpoints": true
     }
   ]
 }

@@ -143,3 +143,11 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **Sammelmail:** läuft stündlich ab 07:00 (Berlin), höchstens einmal am Tag, nur Anzahlen; Likes nie. SKALIERUNG: Abfrage je Nutzer – bei vielen Tausend Abonnenten in Batches/Jobs aufteilen.
 - **Weitere Mails später:** Termin-Erinnerungen, Austritt/Beitragsklasse – bewusst nicht in S2.
 - **Secrets-Trennung (ARCHITEKTUR Punkt 5):** SMTP-Zugang liegt derzeit in `api` **und** `worker`, weil der Treiber beim Start die Konfiguration prüft; versendet wird nur im Worker. Später den Treiber in der API erst beim Versand anlegen und `SMTP_USER`/`SMTP_PASS` nur dem Worker geben.
+
+## Paket S5 (Mitglieder-Import per CSV): offen (Stand 2026-11-10)
+- **Rechtsfragen (DSB):** Einladungsmail an importierte Mitglieder (lit. b des Vereins, hilfsweise lit. f); Informationspflicht des Vereins (Art. 13/14) vor dem Import in AVV-Vorlage/Nutzungsbedingungen aufnehmen; Fristen 30 Tage nach Versand / 60 Tage unversendet bestätigen; **Minderjährige** im Import (Einladung an das Kind, Plattform-Mindestalter 16) – derzeit keine Altersprüfung und kein Geburtsdatum im Import.
+- **Zeilen ohne E-Mail** werden abgelehnt; reine Stammdaten-Erfassung ohne Konto ist nicht möglich (`member_profiles` braucht ein Konto). Falls Vereine das brauchen: eigenes Konzept (Mitglieder ohne Konto).
+- **Weitere Spalten** (Anschrift, Telefon, Geburtsdatum) werden bewusst nicht übernommen – Mitglieder pflegen sie selbst. Ggf. später optional mit Zustimmung bei Annahme.
+- **Erneut senden** einer abgelaufenen Import-Einladung fehlt (Workaround: zurückziehen und neu importieren).
+- **Vereinslimit 100 Einladungen/Tag** gilt für Import und Einzel-Einladungen zusammen; das Kontolimit (20/Tag) gilt beim Import nicht (Massenversand nur über das Vereinslimit). Großer Import (500) dauert 5 Tage – ggf. Limit je Vereinsgröße/Tarif.
+- SKALIERUNG: Die Dublettenprüfung gegen vorhandene Mitglieder lädt die Adressen aller aktiven Mitglieder (UsersDirectory.mailContacts); bei sehr großen Vereinen gezielte Abfrage nach den Adressen der Datei (Hash-Index) nutzen.

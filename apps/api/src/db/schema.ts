@@ -165,6 +165,8 @@ export const orgInvites = social.table(
     tokenEnc: text("token_enc").notNull(),
     maxUses: integer("max_uses").notNull(),
     uses: integer("uses").notNull().default(0),
+    /** link = vom Vorstand geteilter Link (Liste, max. 20 aktiv) | import = persoenliche Einladung aus dem Mitglieder-Import (einmalig, nicht in der Liste). */
+    purpose: text("purpose").notNull().default("link"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     /** Null nach Kontoloeschung der erstellenden Person. */
@@ -814,6 +816,41 @@ export const memberCounters = membersArea.table("member_counters", {
   orgId: uuid("org_id").primaryKey(),
   lastNo: integer("last_no").notNull().default(0),
 });
+
+/**
+ * Vorgemerkte Mitglieder aus dem CSV-Import (noch ohne Konto). Jede Zeile bekommt eine persoenliche Einladung
+ * (social.org_invites, purpose "import", nur als UUID referenziert). Beim Beitritt werden Nummer, Eintritt und Beitragsklasse
+ * in member_profiles uebernommen und die Zeile geloescht. Loeschung spaetestens 30 Tage nach Ablauf der Einladung
+ * bzw. 60 Tage nach dem Import, wenn nie verschickt (purgeExpired), sowie beim Entfernen durch den Vorstand.
+ */
+export const pendingMembers = membersArea.table(
+  "pending_members",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull(),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    /** Kleingeschrieben, je Verein eindeutig (Dubletten). */
+    email: text("email").notNull(),
+    memberNo: integer("member_no"),
+    joinedOn: date("joined_on", { mode: "string" }),
+    feeClassId: uuid("fee_class_id").references(() => feeClasses.id, { onDelete: "set null" }),
+    /** queued = Einladung wartet auf Versand | sent = eingereiht/verschickt. */
+    status: text("status").notNull().default("queued"),
+    inviteId: uuid("invite_id"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    inviteExpiresAt: timestamp("invite_expires_at", { withTimezone: true }),
+    /** Null nach Kontoloeschung der importierenden Person. */
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("pending_members_email_unique").on(t.orgId, t.email),
+    unique("pending_members_no_unique").on(t.orgId, t.memberNo),
+    index("pending_members_status_idx").on(t.orgId, t.status),
+    index("pending_members_invite_idx").on(t.inviteId),
+  ],
+);
 
 // --- Mail (eigener Bereich, nur eigene Tabellen, keine Fremdschluessel) ---------------------------
 

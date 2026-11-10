@@ -116,6 +116,25 @@ export class MailLimits {
     return { day: d, month: m, percent, warning: percent >= MAIL_LIMITS.normalShare * 100 };
   }
 
+  /**
+   * Wie viele nicht wichtige Einladungs-Mails ein Verein heute noch einreihen kann (Vereinslimit und globales 80-%-Kontingent),
+   * ohne zu zaehlen. Fuer Vorschauen (Mitglieder-Import); verbindlich bleibt die Pruefung beim Einreihen/Versand.
+   */
+  async inviteCapacityToday(orgId: string, now = new Date()): Promise<number> {
+    const k = this.keys(now);
+    try {
+      const [org, day, month] = await Promise.all([this.count(`mail:o:d:${orgId}`), this.count(k.day), this.count(k.month)]);
+      const left = Math.min(
+        MAIL_LIMITS.orgInvitesPerDay - org,
+        allowedFor(this.global.daily, "normal") - day,
+        allowedFor(this.global.monthly, "normal") - month,
+      );
+      return Math.max(0, left);
+    } catch {
+      return 0;
+    }
+  }
+
   /** Empfaenger: 5/Stunde, 20/Tag. true = Limit erreicht. */
   async recipientOver(hash: string): Promise<boolean> {
     const hour = await this.over(`mail:r:h:${hash}`, MAIL_LIMITS.recipientPerHour, HOUR);
