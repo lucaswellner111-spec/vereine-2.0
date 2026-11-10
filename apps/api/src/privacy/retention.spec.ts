@@ -67,7 +67,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
 
   it("ist als taeglicher Job registriert und laeuft komplett", async () => {
     const result = await retention.runAll();
-    expect(Object.keys(result).sort()).toEqual(["attendance", "auditLog", "authTokens", "deletedPosts", "invites", "mailSuppressions", "notifications", "pendingAccounts", "pendingMembers"]);
+    expect(Object.keys(result).sort()).toEqual(["attendance", "auditLog", "authTokens", "deletedPosts", "invites", "mailSuppressions", "notifications", "pendingAccounts", "pendingMembers", "waitlist"]);
   });
 
   it("ein fehlschlagender Schritt haelt die anderen nicht auf; Fehler am Ende mit Schrittnamen", async () => {

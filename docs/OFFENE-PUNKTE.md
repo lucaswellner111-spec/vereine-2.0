@@ -156,3 +156,10 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 
 - **Rechtsfrage:** Beitragstexte/-bilder auf Story-Kacheln können Personen zeigen; Weitergabe liegt bei der teilenden Person. In Community-Richtlinien/Nutzungsbedingungen ergänzen (Bildrechte, keine Personen ohne Einwilligung teilen).
 - **Logo im OG-Bild** fehlt bewusst: Medien liegen nur als WebP vor, das der OG-Renderer (next/og) nicht sicher kann; später PNG-Variante für öffentliche Logos erwägen. Ebenso eigene Schrift (Fontsource liefert nur woff2, Satori braucht ttf/woff).
+
+## S7 Warteliste für Vereine: offen (Stand 2026-11-10)
+- **Frist bestätigter Einträge:** bis Widerruf, höchstens 6 Monate nach Launch – Launch-Datum festlegen und dann Löschjob (`WaitlistService.purgeExpired`) um bestätigte Einträge erweitern; mit DSB bestätigen.
+- **Datenschutzerklärung:** Abschnitt Warteliste (Zweck, Einwilligung lit. a, Widerruf, Fristen, Scaleway TEM) ergänzen; Einwilligungstext vom DSB prüfen lassen (Version `WAITLIST_CONSENT_VERSION` in packages/shared).
+- **Start-Mail an die Warteliste** ist nicht gebaut (viele Adressen auf einmal würden das Mail-Kontingent sprengen: in Tranchen über mehrere Tage planen).
+- Bei vollem Mail-Kontingent (ab 80 %) entfallen Bestätigungsmails der Warteliste (Kategorie notice); Nutzer müssen sich dann erneut anmelden.
+- SKALIERUNG: Betreiber-Liste lädt bis zu 10.000 bestätigte Einträge auf einmal; bei mehr seitenweise laden.

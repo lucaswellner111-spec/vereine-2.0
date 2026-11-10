@@ -2,6 +2,7 @@ import { Building2, CalendarDays, Check, FileText, Heart, Link2, Lock, MessageCi
 import Link from "next/link";
 import { SITE_CONTAINER, SiteFooter, SiteHeader } from "@/components/site";
 import { TagChips } from "@/components/tag-chips";
+import { WaitlistForm } from "@/components/waitlist-form";
 
 const features = [
   { icon: Newspaper, title: "Feed und Profile", text: "Neuigkeiten deiner Vereine und Menschen, die du kennst. Die Sortierung ist nachvollziehbar, auf Wunsch rein chronologisch." },
@@ -124,6 +125,21 @@ export default function HomePage() {
                 <li key={p} className="flex gap-2.5"><Building2 size={16} aria-hidden className="mt-0.5 shrink-0 text-muted" />{p}</li>
               ))}
             </ul>
+          </div>
+        </section>
+
+        <section id="warteliste" aria-labelledby="warteliste-titel" className="scroll-mt-20 border-t border-border/70">
+          <div className="mx-auto grid max-w-5xl gap-8 px-4 py-16 md:grid-cols-[1fr_1.4fr] md:items-center">
+            <div>
+              <h2 id="warteliste-titel" className="text-3xl font-black tracking-[-0.03em]">Dein Verein auf die Warteliste 📝</h2>
+              <p className="mt-2 text-muted">Trag deinen Verein ein und wir melden uns, sobald Klubnest für alle startet. Nur eine Mail zum Start, keine Werbung.</p>
+              <ul className="mt-4 space-y-2 text-sm">
+                {["Bestätigung per Link in der Mail (Double-Opt-in)", "Austragen jederzeit mit einem Klick", "Unbestätigte Anmeldungen löschen wir nach 7 Tagen"].map((p) => (
+                  <li key={p} className="flex gap-2.5"><Check size={16} aria-hidden className="mt-0.5 shrink-0 text-brand" />{p}</li>
+                ))}
+              </ul>
+            </div>
+            <WaitlistForm />
           </div>
         </section>
 

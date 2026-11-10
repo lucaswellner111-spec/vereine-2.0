@@ -24,6 +24,8 @@ export const RETENTION = {
   mailUnsubscribe: "36 months",
   /** Vorgemerkte Mitglieder aus dem CSV-Import, deren Einladung nie verschickt wurde (versendete: bei Ablauf der Einladung). */
   pendingMembersUnsent: "60 days",
+  /** Warteliste: Anmeldungen ohne Bestaetigung (Double-Opt-in) nach der letzten Anfrage. */
+  waitlistPending: "7 days",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */

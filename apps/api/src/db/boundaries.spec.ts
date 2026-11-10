@@ -127,3 +127,18 @@ describe("Mail-Bereich", () => {
     }
   });
 });
+
+/** Die Warteliste (Schema `waitlist`) kennt nur ihre eigene Tabelle; Mails ueber MailService, Protokoll ueber AuditService. */
+describe("Warteliste-Bereich", () => {
+  const WAITLIST_TABLES = ["waitlistArea", "waitlistEntries"];
+  it("importiert nur waitlist-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "waitlist"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !WAITLIST_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

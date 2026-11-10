@@ -183,6 +183,13 @@
       "when": 1794341348216,
       "tag": "0025_s5_member_import",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794345927846,
+      "tag": "0026_waitlist",
+      "breakpoints": true
     }
   ]
 }

@@ -991,3 +991,44 @@ export type PublicOrg = PublicOrgSummary & {
   events: PublicEvent[];
   posts: PublicPost[];
 };
+
+// --- Warteliste fuer Vereine (Vorab-Anmeldung ohne Login, Double-Opt-in) -----------------------
+// Eigener Bereich `waitlist`. Antwort auf die Anmeldung ist immer gleich (keine Enumeration).
+
+/** Version des Einwilligungstexts unter dem Formular; bei Textaenderung hochzaehlen (wird je Eintrag gespeichert). */
+export const WAITLIST_CONSENT_VERSION = "2026-11-10";
+export const WAITLIST_CONSENT_TEXT =
+  "Ich bin einverstanden, dass Klubnest meine Angaben speichert, um mich per E-Mail zum Start für meinen Verein zu informieren. Widerruf jederzeit über den Link in jeder Mail.";
+export const WAITLIST_ROLES = ["vorstand", "mitglied", "sonstiges"] as const;
+export type WaitlistRole = (typeof WAITLIST_ROLES)[number];
+export const WAITLIST_ROLE_LABELS: Record<WaitlistRole, string> = { vorstand: "Vorstand", mitglied: "Mitglied", sonstiges: "Sonstiges" };
+/** Einheitliche Antwort (auch bei bekannter Adresse oder Limit). */
+export const WAITLIST_CHECK_INBOX = "Fast geschafft – schau in dein Postfach und bestätige deine Anmeldung.";
+
+// eslint-disable-next-line no-control-regex
+const plainText = (max: number) => z.string().trim().max(max).refine((v) => !/[\u0000-\u001f\u007f]/.test(v), "Bitte keine Steuerzeichen.");
+
+export const waitlistSignupSchema = z.object({
+  email: emailField,
+  orgName: plainText(120).pipe(z.string().min(2, "Bitte gib den Namen deines Vereins an.")),
+  city: plainText(80).optional().default(""),
+  orgType: plainText(60).optional().default(""),
+  role: z.enum(WAITLIST_ROLES).optional(),
+  consent: z.literal(true, { error: "Bitte bestätige die Einwilligung." }),
+  /** Honeypot: fuer Menschen unsichtbar, muss leer bleiben. */
+  website: z.string().max(200).optional(),
+});
+export type WaitlistSignupInput = z.infer<typeof waitlistSignupSchema>;
+export const waitlistTokenSchema = z.object({ token: z.string().trim().min(20).max(300).regex(/^[A-Za-z0-9_.-]+$/) });
+
+export type WaitlistEntry = {
+  id: string;
+  email: string;
+  orgName: string;
+  city: string;
+  orgType: string;
+  role: WaitlistRole | null;
+  confirmedAt: string;
+  consentVersion: string;
+};
+export type WaitlistOverview = { confirmed: number; pending: number; entries: WaitlistEntry[] };

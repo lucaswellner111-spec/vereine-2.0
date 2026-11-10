@@ -19,9 +19,10 @@ import { PlatformModule } from "./platform/platform.module";
 import { PostsModule } from "./posts/posts.module";
 import { PrivacyModule } from "./privacy/privacy.module";
 import { PublicModule } from "./public/public.module";
+import { WaitlistModule } from "./waitlist/waitlist.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule, WaitlistModule],
   controllers: [HealthController, MetricsController],
 })
 export class AppModule {}

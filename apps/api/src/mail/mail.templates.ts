@@ -17,6 +17,10 @@ export type MailTemplates = {
   "member-invite": { orgName: string; firstName: string; link: string; validDays: number; unsubscribeLink?: string };
   "invoice-new": { name: string; orgName: string; number: string; amount: string; dueDate: string; link: string };
   "notification-digest": { name: string; lines: string[]; link: string; unsubscribeLink?: string };
+  /** Warteliste: Double-Opt-in (ohne Konto, daher ohne Namen). Austragelink in jeder Mail. */
+  "waitlist-confirm": { orgName: string; link: string; validHours: number; removeLink: string };
+  /** Warteliste: erneute Anmeldung einer schon bestaetigten Adresse (statt Fehlermeldung, gegen Enumeration). */
+  "waitlist-exists": { link: string; removeLink: string };
 };
 export type MailTemplate = keyof MailTemplates;
 export const MAIL_TEMPLATES: MailTemplate[] = [
@@ -30,6 +34,8 @@ export const MAIL_TEMPLATES: MailTemplate[] = [
   "member-invite",
   "invoice-new",
   "notification-digest",
+  "waitlist-confirm",
+  "waitlist-exists",
 ];
 
 /**
@@ -48,6 +54,8 @@ export const TEMPLATE_META: Record<MailTemplate, { priority: "critical" | "norma
   "member-invite": { priority: "normal", category: "invite" },
   "invoice-new": { priority: "normal", category: "service" },
   "notification-digest": { priority: "normal", category: "digest" },
+  "waitlist-confirm": { priority: "normal", category: "notice" },
+  "waitlist-exists": { priority: "normal", category: "notice" },
 };
 
 export type RenderedMail = { subject: string; text: string; html: string };
@@ -69,7 +77,7 @@ function safeLink(link: string): string {
   return url.toString();
 }
 
-type ComposeOpts = { list?: string[]; unsubscribe?: string };
+type ComposeOpts = { list?: string[]; unsubscribe?: string; unsubscribeText?: string; unsubscribeLabel?: string };
 
 /** Baut Text und HTML aus Absaetzen und einem Aktions-Link (optional Aufzaehlung und Abmeldelink). */
 function compose(subject: string, greeting: string, paragraphs: string[], action: { label: string; link: string }, footer: string, opts: ComposeOpts = {}): RenderedMail {
@@ -84,7 +92,7 @@ function compose(subject: string, greeting: string, paragraphs: string[], action
     `${action.label}: ${link}`,
     "",
     footer,
-    ...(unsubscribe ? ["", `Keine solchen E-Mails mehr? Abmelden: ${unsubscribe}`] : []),
+    ...(unsubscribe ? ["", `${opts.unsubscribeText ?? "Keine solchen E-Mails mehr?"} ${opts.unsubscribeLabel ?? "Abmelden"}: ${unsubscribe}`] : []),
     "",
     `– Dein ${BRAND}-Team`,
   ].join("\n");
@@ -100,7 +108,9 @@ function compose(subject: string, greeting: string, paragraphs: string[], action
     `<p style="margin:24px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f6f50;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px">${escapeHtml(action.label)}</a></p>`,
     small(`Falls der Knopf nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${escapeHtml(link)}`),
     small(escapeHtml(footer)),
-    ...(unsubscribe ? [small(`Keine solchen E-Mails mehr? <a href="${escapeHtml(unsubscribe)}" style="color:#5c5c58">Abmelden</a>`)] : []),
+    ...(unsubscribe
+      ? [small(`${escapeHtml(opts.unsubscribeText ?? "Keine solchen E-Mails mehr?")} <a href="${escapeHtml(unsubscribe)}" style="color:#5c5c58">${escapeHtml(opts.unsubscribeLabel ?? "Abmelden")}</a>`)]
+      : []),
     `<p style="margin:0">– Dein ${BRAND}-Team</p>`,
     `</div></body></html>`,
   ].join("");
@@ -229,6 +239,31 @@ export function renderMail<T extends MailTemplate>(template: T, data: MailTempla
         { label: "Benachrichtigungen ansehen", link: d.link },
         `Du bekommst diese Mail höchstens einmal am Tag, weil du die Sammelmail in den Einstellungen eingeschaltet hast.`,
         { list: d.lines, unsubscribe: d.unsubscribeLink },
+      );
+    }
+    case "waitlist-confirm": {
+      const d = data as MailTemplates["waitlist-confirm"];
+      return compose(
+        `Bitte bestätige deine Anmeldung zur Warteliste`,
+        hello(),
+        [
+          `schön, dass „${d.orgName}“ bei ${BRAND} dabei sein möchte! Bitte bestätige noch kurz deine Anmeldung zur Warteliste. Der Link ist ${d.validHours} Stunden gültig.`,
+          `Danach melden wir uns zum Start bei dir – sonst schicken wir dir nichts.`,
+        ],
+        { label: "Anmeldung bestätigen", link: d.link },
+        `Du hast dich nicht angemeldet? Dann ignoriere diese E-Mail – ohne Bestätigung löschen wir die Angaben nach 7 Tagen.`,
+        { unsubscribe: d.removeLink, unsubscribeText: "Angaben sofort löschen?", unsubscribeLabel: "Von der Warteliste austragen" },
+      );
+    }
+    case "waitlist-exists": {
+      const d = data as MailTemplates["waitlist-exists"];
+      return compose(
+        `Du stehst schon auf der Warteliste`,
+        hello(),
+        [`gerade hat sich jemand – vielleicht du – mit dieser Adresse für die ${BRAND}-Warteliste angemeldet. Du stehst schon drauf, es bleibt alles, wie es ist. Wir melden uns zum Start.`],
+        { label: `${BRAND} ansehen`, link: d.link },
+        `Du warst das nicht? Dann ignoriere diese E-Mail einfach.`,
+        { unsubscribe: d.removeLink, unsubscribeText: "Doch keine Infos mehr?", unsubscribeLabel: "Von der Warteliste austragen" },
       );
     }
   }

@@ -10,12 +10,13 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { ProfileAccessModule } from "../profiles/profile-access.module";
 import { OrgsModule } from "../orgs/orgs.module";
 import { PostsModule } from "../posts/posts.module";
+import { WaitlistModule } from "../waitlist/waitlist.module";
 import { PrivacyController } from "./privacy.controller";
 import { PrivacyService } from "./privacy.service";
 import { RetentionService } from "./retention.service";
 
 @Module({
-  imports: [AuthModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule],
+  imports: [AuthModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule, WaitlistModule],
   controllers: [PrivacyController],
   providers: [PrivacyService, RetentionService],
 })

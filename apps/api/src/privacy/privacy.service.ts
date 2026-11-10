@@ -28,6 +28,7 @@ import { OrgsService } from "../orgs/orgs.service";
 import { DigestService } from "../notifications/digest.service";
 import { SuppressionsService } from "../mail/suppressions.service";
 import { ago, RETENTION } from "../common/retention";
+import { WaitlistService } from "../waitlist/waitlist.service";
 
 /** Nach dieser Zeit schliesst der Job `privacy.erase-pending` abgebrochene Kontoloeschungen ab. */
 const ERASE_GRACE_MS = 15 * 60_000;
@@ -61,6 +62,7 @@ export class PrivacyService implements OnModuleInit {
     @Inject(OrgAdminService) private readonly orgAdmin: OrgAdminService,
     @Inject(DigestService) private readonly digest: DigestService,
     @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
+    @Inject(WaitlistService) private readonly waitlist: WaitlistService,
   ) {}
 
   onModuleInit() {
@@ -137,6 +139,7 @@ export class PrivacyService implements OnModuleInit {
       email: await this.auth.exportEmailInfo(user.id),
       emailSettings: await this.digest.exportFor(user.id),
       mailSuppressions: await this.suppressions.exportFor(user.email),
+      waitlist: await this.waitlist.exportFor(user.email),
       consents: consentHistory.map((c) => ({
         purpose: c.purpose,
         granted: c.granted,
@@ -202,6 +205,7 @@ export class PrivacyService implements OnModuleInit {
   async eraseEverything(userId: string): Promise<void> {
     const [account] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
     if (account) await this.suppressions.eraseFor(account.email); // Bounce-Sperren der Kontoadresse (Abmeldungen bleiben)
+    if (account) await this.waitlist.eraseFor(account.email); // Warteliste-Eintrag mit der Kontoadresse
     await this.chat.eraseUser(userId);
     await this.members.eraseUser(userId); // Mitgliederstammdaten in allen Vereinen
     await this.billing.anonymizeRecipient(userId); // Rechnungen bleiben (GoBD), aber ohne Personenbezug

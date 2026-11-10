@@ -366,6 +366,8 @@ describe("Mail: Vorlagen", () => {
     "member-invite": { orgName: "SV Grün", firstName: "Lena", link: "https://klubnest.de/einladung/2", validDays: 30, unsubscribeLink: "https://klubnest.de/abmelden#t=z" },
     "invoice-new": { name: "Lena", orgName: "SV Grün", number: "2026-0001", amount: "48,00 €", dueDate: "01.12.2026", link: "https://klubnest.de/rechnungen" },
     "notification-digest": { name: "Lena", lines: ["2 neue Kommentare", "1 neue Rechnung"], link: "https://klubnest.de/benachrichtigungen", unsubscribeLink: "https://klubnest.de/abmelden#t=y" },
+    "waitlist-confirm": { orgName: "SV Grün", link: "https://klubnest.de/warteliste/bestaetigen#t=1", validHours: 48, removeLink: "https://klubnest.de/warteliste/austragen#t=r" },
+    "waitlist-exists": { link: "https://klubnest.de/", removeLink: "https://klubnest.de/warteliste/austragen#t=r" },
   };
 
   it.each(MAIL_TEMPLATES)("%s: Text und HTML, Deutsch in Du-Form, ohne externe Ressourcen", (t) => {

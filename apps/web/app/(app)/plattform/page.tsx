@@ -2,8 +2,8 @@
 
 import { ShieldOff } from "lucide-react";
 import { useState } from "react";
-import type { ChatReportItem, MailQuota } from "@vereine/shared";
-import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, PageHeader, UserNameLink } from "@/components/ui";
+import { WAITLIST_ROLE_LABELS, type ChatReportItem, type MailQuota, type WaitlistOverview } from "@vereine/shared";
+import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, LinkButton, PageHeader, stackTable, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
 import { api, describeError } from "@/lib/api";
@@ -12,10 +12,11 @@ import { reportReasonLabel } from "@/lib/labels";
 import { useApi } from "@/lib/use-api";
 import { ask } from "@/components/ui-hosts";
 
-type Tab = "posts" | "chat";
+type Tab = "posts" | "chat" | "waitlist";
 const TABS: { value: Tab; label: string }[] = [
   { value: "posts", label: "Beiträge" },
   { value: "chat", label: "Chat-Meldungen" },
+  { value: "waitlist", label: "Warteliste" },
 ];
 
 export default function PlatformPage() {
@@ -55,8 +56,10 @@ export default function PlatformPage() {
             emptyText="Keine offenen Meldungen zu persönlichen Beiträgen."
             onError={setError}
           />
-        ) : (
+        ) : tab === "chat" ? (
           <ChatReports onError={setError} />
+        ) : (
+          <WaitlistPanel />
         )}
       </div>
     </>
@@ -135,6 +138,56 @@ function ChatReports({ onError }: { onError: (m: string | null) => void }) {
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+/** Warteliste (nur bestaetigte Eintraege mit Adresse). Abruf und CSV-Export werden protokolliert. */
+function WaitlistPanel() {
+  const list = useApi<WaitlistOverview>("/platform/waitlist");
+  if (list.error && !list.data) return <ErrorState message={list.error} onRetry={list.reload} />;
+  if (!list.data) return <CardSkeletons count={1} />;
+  const { confirmed, pending, entries } = list.data;
+  return (
+    <>
+      <Card className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm">
+            <span className="text-2xl font-black tabular-nums">{confirmed}</span> bestätigt
+            <span className="ml-3 text-muted tabular-nums">{pending} unbestätigt</span>
+          </p>
+          <LinkButton native size="sm" variant="secondary" href="/api/platform/waitlist.csv" className="max-sm:w-full">CSV-Export</LinkButton>
+        </div>
+        <p className="mt-1 text-xs text-muted">Unbestätigte Anmeldungen werden nach 7 Tagen gelöscht. Abruf und Export werden protokolliert.</p>
+      </Card>
+      {entries.length === 0 ? (
+        <EmptyState emoji="📝" title="Noch niemand auf der Warteliste.">Bestätigte Anmeldungen von der Startseite erscheinen hier.</EmptyState>
+      ) : (
+        <Card flush>
+          <table className={stackTable.table}>
+            <thead className={stackTable.thead}>
+              <tr>
+                <th className="p-3">Verein</th>
+                <th className="p-3">E-Mail</th>
+                <th className="p-3">Ort / Art</th>
+                <th className="p-3">Rolle</th>
+                <th className="p-3">Bestätigt</th>
+              </tr>
+            </thead>
+            <tbody className={stackTable.tbody}>
+              {entries.map((e) => (
+                <tr key={e.id} className={stackTable.tr}>
+                  <td className={stackTable.tdMain}>{e.orgName}</td>
+                  <td className={`${stackTable.td} break-all`}><CellLabel>E-Mail</CellLabel>{e.email}</td>
+                  <td className={stackTable.td}><CellLabel>Ort / Art</CellLabel>{[e.city, e.orgType].filter(Boolean).join(" · ") || "–"}</td>
+                  <td className={stackTable.td}><CellLabel>Rolle</CellLabel>{e.role ? WAITLIST_ROLE_LABELS[e.role] : "–"}</td>
+                  <td className={`${stackTable.td} tabular-nums`}><CellLabel>Bestätigt</CellLabel>{new Date(e.confirmedAt).toLocaleDateString("de-DE")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </>
   );
 }

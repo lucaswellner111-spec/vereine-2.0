@@ -5,7 +5,7 @@ import { ALLOW_INDEXING, SITE_URL } from "@/lib/site-meta";
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: ALLOW_INDEXING
-      ? { userAgent: "*", allow: ["/", "/datenschutz", "/impressum", "/agb", "/vereine-finden", "/verein/"], disallow: ["/api/", "/feed", "/chat", "/einstellungen", "/verwaltung", "/plattform"] }
+      ? { userAgent: "*", allow: ["/", "/datenschutz", "/impressum", "/agb", "/vereine-finden", "/verein/"], disallow: ["/api/", "/feed", "/chat", "/einstellungen", "/verwaltung", "/plattform", "/warteliste/"] }
       : { userAgent: "*", disallow: "/" },
     sitemap: ALLOW_INDEXING ? `${SITE_URL}/sitemap.xml` : undefined,
   };

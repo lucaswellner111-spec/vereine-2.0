@@ -870,3 +870,39 @@ export const mailSuppressions = mailArea.table(
   },
   (t) => [primaryKey({ columns: [t.addressHash, t.scope] }), index("mail_suppressions_created_idx").on(t.createdAt)],
 );
+
+// --- Warteliste fuer Vereine (eigener Bereich, nur eigene Tabelle, keine Fremdschluessel) ---------
+
+export const waitlistArea = pgSchema("waitlist");
+
+/**
+ * Vorab-Anmeldungen ohne Konto (Double-Opt-in). pending: Bestaetigungslink offen (nur SHA-256-Hash, 48 h), Loeschung
+ * 7 Tage nach der letzten Anfrage (purgeExpired). confirmed: bis Widerruf (Link in jeder Mail) bzw. spaetestens
+ * 6 Monate nach Launch (docs/OFFENE-PUNKTE.md). Einwilligung: Version des Texts, Zeitpunkt der Abgabe und der Bestaetigung.
+ */
+export const waitlistEntries = waitlistArea.table(
+  "entries",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    /** Kleingeschrieben, eindeutig. */
+    email: text("email").notNull(),
+    orgName: text("org_name").notNull(),
+    city: text("city").notNull().default(""),
+    orgType: text("org_type").notNull().default(""),
+    role: text("role"),
+    status: text("status").notNull().default("pending"), // pending | confirmed
+    tokenHash: text("token_hash"),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+    consentVersion: text("consent_version").notNull(),
+    consentAt: timestamp("consent_at", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    /** Letzte Anmeldung mit dieser Adresse (Frist fuer unbestaetigte Eintraege). */
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("waitlist_entries_email_unique").on(t.email),
+    unique("waitlist_entries_token_unique").on(t.tokenHash),
+    index("waitlist_entries_status_idx").on(t.status, t.requestedAt),
+  ],
+);
