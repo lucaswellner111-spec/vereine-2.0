@@ -169,6 +169,13 @@
       "when": 1794259963369,
       "tag": "0023_s2_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794335732444,
+      "tag": "0024_s3_invites_token_enc_required",
+      "breakpoints": true
     }
   ]
 }

@@ -161,8 +161,8 @@ export const orgInvites = social.table(
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
-    /** Token AES-256-GCM-verschluesselt (HKDF aus AUTH_SECRET_KEY, info "invite"), damit der Vorstand den Link erneut sieht. Null bei alten Einladungen. */
-    tokenEnc: text("token_enc"),
+    /** Token AES-256-GCM-verschluesselt (HKDF aus AUTH_SECRET_KEY, info "invite"), damit der Vorstand den Link erneut sieht. Pflicht seit 0024 (alte Einladungen ohne wurden geloescht). */
+    tokenEnc: text("token_enc").notNull(),
     maxUses: integer("max_uses").notNull(),
     uses: integer("uses").notNull().default(0),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

@@ -133,7 +133,7 @@ export const test = base.extend<Fixtures>({
         isMobile: u.isMobile,
         hasTouch: u.hasTouch,
         colorScheme: u.colorScheme,
-        baseURL: u.baseURL ?? "http://localhost:3000",
+        baseURL: u.baseURL ?? process.env.E2E_BASE_URL ?? "http://localhost:3000",
         locale: u.locale ?? "de-DE",
         timezoneId: u.timezoneId ?? "Europe/Berlin",
       });

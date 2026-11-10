@@ -122,10 +122,10 @@ describe("Vereinsstammdaten und Einladungslinks", () => {
     expect(row.tokenHash).toHaveLength(64);
     expect(row.tokenEnc).toBeTruthy();
     expect(row.tokenEnc).not.toContain(token);
-    expect(list[0].linkAvailable).toBe(true);
+    expect(list[0]).not.toHaveProperty("linkAvailable");
   });
 
-  it("Link erneut anzeigen: nur Vorstand, protokolliert, nur aktive, alte ohne token_enc mit Hinweis", async () => {
+  it("Link erneut anzeigen: nur Vorstand, protokolliert, nur aktive; Widerrufene verschwinden aus der Liste", async () => {
     const url = `/orgs/${org}/invites/${inviteId}/link`;
     expect((await req(null, "GET", url)).statusCode).toBe(401);
     expect((await req(kai, "GET", url)).statusCode).toBe(403); // Kassenwart
@@ -150,22 +150,37 @@ describe("Vereinsstammdaten und Einladungslinks", () => {
 
     // widerrufen und abgelaufen: nicht mehr abrufbar
     const r = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
-    await req(vera, "DELETE", `/orgs/${org}/invites/${r.id}`);
+    expect((await req(vera, "DELETE", `/orgs/${org}/invites/${r.id}`)).statusCode).toBe(204);
     expect((await req(vera, "GET", `/orgs/${org}/invites/${r.id}/link`)).statusCode).toBe(404);
+    expect((await req(vera, "GET", `/orgs/${org}/invites`)).json().some((i: { id: string }) => i.id === r.id)).toBe(false);
+    expect((await req(vera, "DELETE", `/orgs/${org}/invites/${r.id}`)).statusCode).toBe(404); // schon widerrufen
     const e = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
     await db.update(schema.orgInvites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.orgInvites.id, e.id));
     expect((await req(vera, "GET", `/orgs/${org}/invites/${e.id}/link`)).statusCode).toBe(404);
 
-    // alte Einladung ohne token_enc
+    // nicht entschluesselbar (z. B. Schluessel gewechselt): Hinweis statt Fehler 500
     const old = (await req(vera, "POST", `/orgs/${org}/invites`, {})).json();
-    await db.update(schema.orgInvites).set({ tokenEnc: null }).where(eq(schema.orgInvites.id, old.id));
+    await db.update(schema.orgInvites).set({ tokenEnc: "kaputt" }).where(eq(schema.orgInvites.id, old.id));
     const oldRes = await req(vera, "GET", `/orgs/${org}/invites/${old.id}/link`);
     expect(oldRes.statusCode).toBe(409);
     expect(oldRes.json().message).toContain("Bitte neu erstellen");
-    const listed = (await req(vera, "GET", `/orgs/${org}/invites`)).json().find((i: { id: string }) => i.id === old.id);
-    expect(listed.linkAvailable).toBe(false);
     // Aufraeumen, damit die Obergrenze im spaeteren Test gleich bleibt
     await req(vera, "DELETE", `/orgs/${org}/invites/${old.id}`);
+  });
+
+  it("Ohne Schluessel in Produktion: 503 und keine stumme Einladung ohne Link", async () => {
+    const env = { node: process.env.NODE_ENV, key: process.env.AUTH_SECRET_KEY };
+    const count = async () => (await db.select().from(schema.orgInvites)).length;
+    const before = await count();
+    process.env.NODE_ENV = "production";
+    delete process.env.AUTH_SECRET_KEY;
+    try {
+      expect((await req(vera, "POST", `/orgs/${org}/invites`, {})).statusCode).toBe(503);
+    } finally {
+      process.env.NODE_ENV = env.node;
+      if (env.key !== undefined) process.env.AUTH_SECRET_KEY = env.key;
+    }
+    expect(await count()).toBe(before);
   });
 
   it("Beitritt per Link: sofort aktives Mitglied und Follower, Mehrfachnutzung zaehlt nicht doppelt", async () => {

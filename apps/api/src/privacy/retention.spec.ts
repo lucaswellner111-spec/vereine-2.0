@@ -186,7 +186,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
   });
 
   it("Einladungen: 30 Tage nach Ablauf oder Widerruf geloescht", async () => {
-    const base = { orgId, maxUses: 5, createdBy: userA };
+    const base = { orgId, maxUses: 5, createdBy: userA, tokenEnc: "x" };
     const rows = await db
       .insert(schema.orgInvites)
       .values([

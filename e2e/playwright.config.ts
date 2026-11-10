@@ -5,14 +5,19 @@ import { defineConfig, devices } from "@playwright/test";
  * Web erreicht die API ueber den Next-Rewrite /api -> http://localhost:4000 (API_INTERNAL_URL).
  * - E2E_SKIP_BUILD=1: vorhandenen Web-Build nutzen (CI baut vorher).
  * - E2E_WEB_DEV=1: next dev statt Build (schneller beim Schreiben von Tests, weniger stabil).
- * Lokal laufende Server auf 3000/4000 werden wiederverwendet (nicht in CI).
+ * - E2E_WEB_PORT/E2E_API_PORT: andere Ports, wenn 3000/4000 belegt sind (z. B. Dev-Server einer anderen Session).
+ * Lokal laufende Server auf diesen Ports werden wiederverwendet (nicht in CI).
  */
 const CI = !!process.env.CI;
+const WEB_PORT = process.env.E2E_WEB_PORT ?? "3000";
+const API_PORT = process.env.E2E_API_PORT ?? "4000";
+const WEB_URL = `http://localhost:${WEB_PORT}`;
+process.env.E2E_BASE_URL = WEB_URL; // fuer Tests und Fixtures
 const webCommand = process.env.E2E_WEB_DEV
-  ? "npm run dev -w @vereine/web"
+  ? `npx next dev -p ${WEB_PORT}`
   : process.env.E2E_SKIP_BUILD
-    ? "npm run start -w @vereine/web"
-    : "npm run build -w @vereine/web && npm run start -w @vereine/web";
+    ? `npx next start -p ${WEB_PORT}`
+    : `npx next build && npx next start -p ${WEB_PORT}`;
 
 export default defineConfig({
   testDir: "./tests",
@@ -24,7 +29,7 @@ export default defineConfig({
   workers: CI ? 2 : 3,
   reporter: CI ? [["list"], ["html", { open: "never" }]] : [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: WEB_URL,
     locale: "de-DE",
     timezoneId: "Europe/Berlin",
     trace: "retain-on-failure",
@@ -39,19 +44,19 @@ export default defineConfig({
       name: "api",
       command: "npm run dev:pglite -w @vereine/api",
       cwd: "..",
-      url: "http://127.0.0.1:4000/health/ready",
+      url: `http://127.0.0.1:${API_PORT}/health/ready`,
       reuseExistingServer: !CI,
       timeout: 120_000,
-      env: { API_PORT: "4000", WEB_ORIGIN: "http://localhost:3000" },
+      env: { API_PORT, WEB_ORIGIN: WEB_URL },
     },
     {
       name: "web",
       command: webCommand,
-      cwd: "..",
-      url: "http://localhost:3000/",
+      cwd: "../apps/web",
+      url: `${WEB_URL}/`,
       reuseExistingServer: !CI,
       timeout: 300_000,
-      env: { API_INTERNAL_URL: "http://localhost:4000", NEXT_TELEMETRY_DISABLED: "1" },
+      env: { API_INTERNAL_URL: `http://localhost:${API_PORT}`, NEXT_TELEMETRY_DISABLED: "1" },
     },
   ],
 });

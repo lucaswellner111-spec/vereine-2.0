@@ -72,7 +72,7 @@ export class OrgAdminService {
         : r.uses >= r.maxUses
           ? "used_up"
           : "active";
-    return { id: r.id, maxUses: r.maxUses, uses: r.uses, expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), status, linkAvailable: !!r.tokenEnc };
+    return { id: r.id, maxUses: r.maxUses, uses: r.uses, expiresAt: r.expiresAt.toISOString(), createdAt: r.createdAt.toISOString(), status };
   }
 
   /** Kontoloeschung: Verweis auf die erstellende Person entfernen (Einladung bleibt fuer den Verein gueltig). */
@@ -92,18 +92,11 @@ export class OrgAdminService {
     });
   }
 
-  /** Ohne konfigurierten Schluessel (Produktion) bleibt die Einladung nutzbar, nur nicht erneut anzeigbar. */
-  private encryptToken(token: string): string | null {
-    try {
-      return encryptGcm(inviteKey(), token);
-    } catch {
-      return null;
-    }
-  }
 
   async listInvites(user: PublicUser, slug: string): Promise<InviteItem[]> {
     const org = await this.requireAdmin(user, slug);
-    const rows = await this.db.select().from(orgInvites).where(eq(orgInvites.orgId, org.id)).orderBy(desc(orgInvites.createdAt)).limit(50);
+    // Widerrufene ausblenden: "Widerrufen" entfernt den Link aus der Liste (Loeschung nach Frist per Job).
+    const rows = await this.db.select().from(orgInvites).where(and(eq(orgInvites.orgId, org.id), isNull(orgInvites.revokedAt))).orderBy(desc(orgInvites.createdAt)).limit(50);
     return rows.map((r) => this.item(r));
   }
 
@@ -115,12 +108,14 @@ export class OrgAdminService {
       .where(and(eq(orgInvites.orgId, org.id), isNull(orgInvites.revokedAt), gt(orgInvites.expiresAt, new Date())));
     if (open.n >= 20) throw new BadRequestException("Es gibt bereits 20 aktive Einladungslinks. Widerrufe zuerst einen.");
     const token = randomBytes(32).toString("base64url");
+    // Ohne Schluessel (Produktion) 503 statt einer Einladung, deren Link spaeter nicht mehr anzeigbar ist.
+    const tokenEnc = encryptGcm(inviteKey(), token);
     const [row] = await this.db
       .insert(orgInvites)
       .values({
         orgId: org.id,
         tokenHash: sha256(token),
-        tokenEnc: this.encryptToken(token),
+        tokenEnc,
         maxUses: input.maxUses,
         expiresAt: new Date(Date.now() + input.expiresInDays * 86400_000),
         createdBy: user.id,
@@ -165,7 +160,6 @@ export class OrgAdminService {
     const [row] = await this.db.select().from(orgInvites).where(and(eq(orgInvites.id, id), eq(orgInvites.orgId, orgId))).limit(1);
     if (!row || this.item(row).status !== "active") throw new NotFoundException("Einladung nicht gefunden oder nicht mehr aktiv.");
     const gone = new ConflictException("Dieser Link kann nicht erneut angezeigt werden. Bitte neu erstellen.");
-    if (!row.tokenEnc) throw gone;
     const key = inviteKey(); // Konfigurationsfehler (Produktion ohne Schluessel) nicht als "neu erstellen" melden
     let token: string;
     try {

@@ -718,9 +718,8 @@ export type InviteItem = {
   uses: number;
   expiresAt: string;
   createdAt: string;
+  /** Widerrufene erscheinen nicht mehr in der Liste. */
   status: "active" | "expired" | "used_up" | "revoked";
-  /** true, wenn der Link (verschluesselt gespeichert) erneut angezeigt werden kann; aeltere Einladungen nicht. */
-  linkAvailable: boolean;
 };
 /** Der Klartext-Token wird bei der Erstellung geliefert und kann danach nur vom Vorstand erneut abgerufen werden (protokolliert). */
 export type CreatedInvite = InviteItem & { token: string };

@@ -224,7 +224,7 @@ describe("Datenschutz P5: vollstaendige Auskunft, Bilder-ZIP, Loeschung", () => 
     const [benOrg] = await db.select().from(schema.organizations).where(eq(schema.organizations.slug, "sv-ben"));
     const [invite] = await db
       .insert(schema.orgInvites)
-      .values({ orgId: benOrg.id, tokenHash: "hash-p5", maxUses: 5, expiresAt: new Date(Date.now() + 86400_000), createdBy: anna.id })
+      .values({ orgId: benOrg.id, tokenHash: "hash-p5", tokenEnc: "x", maxUses: 5, expiresAt: new Date(Date.now() + 86400_000), createdBy: anna.id })
       .returning();
     const [resolved] = await db
       .insert(schema.reports)

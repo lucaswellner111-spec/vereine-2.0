@@ -6,8 +6,22 @@
 
 ## Stand 2026-11-09 (Abend)
 - **Erledigt:** S0 (c72cfec, CI grün), S1 (d3910c0, live, 23 Migrationen), S2 Mail (Commit „S2“, live mit `MAIL_DRIVER=smtp`, Migration 0023; SPF bereinigt, Scaleway grün). Registrierung: immer „Prüfe dein Postfach“, Anmeldung erst nach Bestätigung (gegen Konto-Enumeration; Abweichung vom ursprünglichen „sofort nutzbar“).
-- **Offen:** Testmail an den Nutzer nur nach seinem Ja (Header SPF/DKIM pass prüfen); Budget-Limit im Scaleway-Konto setzen; Bounce-Webhook. **Als Nächstes S3**, dann S4/S5.
-- E2E lokal unter Last wacklig (Klicks vor Hydration) – bei Bedarf Workers auf 2 senken.
+- **Erledigt 2026-11-10:** Testmail angekommen (SPF, DKIM, DMARC grün). Alte Einladungen ohne `token_enc` per Migration 0024 gelöscht, `token_enc` jetzt Pflicht (ohne Schlüssel 503), widerrufene Einladungen verschwinden aus der Liste, „Widerrufen“ auch im Link-Dialog.
+- **Offen – Etappen:** S3 Aktivität wie Instagram (als Nächstes), S4 iOS-Optik, S5 Launch.
+- **Offen – Technik (ohne Nutzer):**
+  - Bounce-Webhook von Scaleway anbinden (`recordBounce` ist vorbereitet).
+  - SMTP-Zugangsdaten nur noch an den `worker` geben, nicht an `api` (laut `docs/ARCHITEKTUR.md`: Secrets je Dienst).
+  - Den einen fehlgeschlagenen Job aus `/api/health/ready` (`jobs.failed: 1`) prüfen.
+  - Anwesenheitsliste ohne Profil-Link: `AttendanceEntry` hat kein Handle.
+  - E2E lokal unter Last wacklig (Klicks vor Hydration) – bei Bedarf Workers auf 2 senken.
+- **Offen – Entscheidung:** Sollen Altkonten (vor S2) vor dem Launch eine E-Mail-Bestätigung erzwingen?
+- **Offen – Nutzer:**
+  - Budget-Limit im Scaleway-Konto setzen.
+  - Hetzner-Firewall (später).
+  - **Schutz vor dem Server (später, vor Launch).** Vorgaben des Nutzers: kein Cloudflare, kein US-Anbieter; nur EU-Anbieter auf EU-Servern, DSGVO-konform ohne Drittlandtransfer; einmal richtig und launchfähig.
+    - Prüfen: Hetzner-eigener DDoS-Schutz (inklusive) + Hetzner-Firewall (SSH nur eigene IP) + Caddy-Rate-Limits.
+    - Für WAF/CDN EU-Anbieter vergleichen: Bunny.net (SI), Myra Security (DE), Gcore (LU).
+    - Technisch nötig bei jedem vorgeschalteten Proxy: Caddy `trusted_proxies` auf die Proxy-Netze setzen und die echte Client-IP aus dessen Header übernehmen, sonst greifen die Rate-Limits je IP falsch.
 
 ## Context
 Stand: P1–P5 live (letzter Commit 5e9c533, 22 Migrationen). **P6 ist zu etwa 90 % gebaut, aber nicht committet** (Nutzungslimit):

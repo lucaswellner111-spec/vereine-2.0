@@ -110,7 +110,6 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
 
   async function show(invite: InviteItem) {
     setShown({ invite, link: null, error: null });
-    if (!invite.linkAvailable) return;
     try {
       const { token } = await api<InviteLink>(`/orgs/${slug}/invites/${invite.id}/link`);
       const url = inviteUrl(token);
@@ -137,10 +136,12 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
   }
 
   async function revoke(id: string) {
-    if (!(await ask("Einladungslink widerrufen? Er funktioniert danach nicht mehr.", { confirmLabel: "Widerrufen" }))) return;
+    if (!(await ask("Einladungslink widerrufen? Er funktioniert danach nicht mehr und verschwindet aus der Liste.", { confirmLabel: "Widerrufen" }))) return;
     onError(null);
     try {
       await api(`/orgs/${slug}/invites/${id}`, { method: "DELETE" });
+      setShown((s) => (s?.invite.id === id ? null : s));
+      if (created?.id === id) setCreated(null);
       load();
     } catch (err) {
       onError(describeError(err));
@@ -211,19 +212,21 @@ export function InvitesAdmin({ slug, onError }: { slug: string; onError: (m: str
         placement="sheet"
         description={shown ? `${shown.invite.uses} von ${shown.invite.maxUses} Beitritten, gültig bis ${new Date(shown.invite.expiresAt).toLocaleDateString("de-DE")}.` : undefined}
       >
-        {shown &&
-          (!shown.invite.linkAvailable ? (
-            <Alert tone="info">Dieser Link wurde vor der Umstellung erstellt und kann nicht erneut angezeigt werden. Bitte neu erstellen und den alten Link widerrufen.</Alert>
-          ) : shown.error ? (
-            <Alert>{shown.error}</Alert>
-          ) : shown.link ? (
-            <div className="space-y-3">
-              <InviteLinkPanel url={shown.link.url} qr={shown.link.qr} />
-              <InviteMailForm slug={slug} inviteId={shown.invite.id} />
-            </div>
-          ) : (
-            <CardSkeletons count={1} />
-          ))}
+        {shown && (
+          <div className="space-y-3">
+            {shown.error ? (
+              <Alert>{shown.error}</Alert>
+            ) : shown.link ? (
+              <>
+                <InviteLinkPanel url={shown.link.url} qr={shown.link.qr} />
+                <InviteMailForm slug={slug} inviteId={shown.invite.id} />
+              </>
+            ) : (
+              <CardSkeletons count={1} />
+            )}
+            <Button variant="ghost" onClick={() => void revoke(shown.invite.id)}>Link widerrufen</Button>
+          </div>
+        )}
       </Dialog>
     </div>
   );

@@ -38,7 +38,7 @@ test("Registrieren, Link aus der Mail, Abmelden und wieder Anmelden", async ({ p
 
   // Link aus der Bestaetigungs-Mail oeffnen: angemeldet und weiter zum Feed
   const mail = await lastMailApi(page.request, email, "verify-email");
-  const link = /(http:\/\/localhost:3000\/email-bestaetigen#t=[A-Za-z0-9_-]+)/.exec(mail.text)![1];
+  const link = /(http:\/\/localhost:\d+\/email-bestaetigen#t=[A-Za-z0-9_-]+)/.exec(mail.text)![1];
   expect(tokenFromMail(link)).not.toBe("");
   await page.goto(link);
   await expect(page).toHaveURL(/\/feed/);
@@ -84,7 +84,7 @@ test("Passwort vergessen: Link aus der Mail, neues Passwort, alte Sitzung beende
   await expect(page.getByRole("heading", { name: "Prüfe dein Postfach" })).toBeVisible();
 
   const mail = await lastMailApi(page.request, user.email, "password-reset");
-  const link = /(http:\/\/localhost:3000\/passwort-neu#t=[A-Za-z0-9_-]+)/.exec(mail.text)![1];
+  const link = /(http:\/\/localhost:\d+\/passwort-neu#t=[A-Za-z0-9_-]+)/.exec(mail.text)![1];
   await page.goto(link);
   await expect(page.getByRole("heading", { name: "Neues Passwort" })).toBeVisible();
   await expectAccessible(page, "Neues Passwort");
