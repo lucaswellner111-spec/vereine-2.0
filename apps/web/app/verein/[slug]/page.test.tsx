@@ -48,12 +48,12 @@ describe("/verein/[slug] (oeffentliche Vereinsseite)", () => {
     expect(cta.getAttribute("href")).toBe(`/login?next=${encodeURIComponent("/vereine/tsv-offen")}`);
   });
 
-  it("Metadaten: noindex ohne ALLOW_INDEXING, Titel und OG-Bild", async () => {
+  it("Metadaten: noindex ohne ALLOW_INDEXING, Titel; OG-Bild kommt aus opengraph-image.tsx", async () => {
     mockFetch(200, org);
     const meta = await generateMetadata(params("tsv-offen"));
     expect(meta.robots).toEqual({ index: false, follow: false });
     expect(meta.title).toBe("TSV Offen (Musterstadt)");
-    expect(JSON.stringify(meta.openGraph)).toContain(`/api/public/media/${org.bannerId}/banner`);
+    expect(JSON.stringify(meta.openGraph)).not.toContain("/banner");
   });
 
   it("404 der API bzw. ungueltige Adresse -> notFound", async () => {

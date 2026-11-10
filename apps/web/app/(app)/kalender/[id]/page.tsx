@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { CalendarPlus, CalendarX2, Clock, ExternalLink, MapPin, Pencil, Share2, Users } from "lucide-react";
+import { CalendarPlus, CalendarX2, Clock, ExternalLink, Image as ImageIcon, MapPin, Pencil, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import type { EventAttendees, EventItem, RsvpItem, RsvpStatus } from "@vereine/shared";
@@ -200,6 +200,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           </LinkButton>
           <Button variant="secondary" onClick={() => shareLink(event.title, `/kalender/${event.id}`)}>
             <Share2 size={16} aria-hidden /> Teilen
+          </Button>
+          <Button variant="secondary" onClick={() => void import("@/lib/story-share").then((m) => m.shareEventStory(event))}>
+            <ImageIcon size={16} aria-hidden /> Als Story teilen
           </Button>
           {event.canManage && !event.canceled && !ended(event) && (
             <Button variant="secondary" onClick={() => setEditing(true)}>

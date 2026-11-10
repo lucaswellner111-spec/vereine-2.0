@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { EyeOff, Flag, Heart, Info, MessageCircle, Pencil, Share2, Trash2 } from "lucide-react";
+import { EyeOff, Flag, Heart, Image as ImageIcon, Info, MessageCircle, Pencil, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MAX_POST_TAGS, type CommentItem, type FeedPost } from "@vereine/shared";
@@ -30,11 +30,13 @@ const timeAgo = (iso: string) => {
 export const postHref = (id: string) => `/beitrag/${id}`;
 
 /** Menue eines Beitrags (exportiert fuer Tests): "Bearbeiten" nur mit canEdit, "Löschen" nur mit canDelete. */
-export function postMenuIds(post: Pick<FeedPost, "canEdit" | "canDelete">, showReason: boolean): string[] {
+export function postMenuIds(post: Pick<FeedPost, "canEdit" | "canDelete"> & { org?: FeedPost["org"] }, showReason: boolean): string[] {
   return [
     ...(showReason ? ["why"] : []),
     ...(post.canEdit ? ["edit"] : []),
     "share",
+    // Story-Kachel nur fuer Vereinsbeitraege (auf der Kachel steht nur der Vereinsname, keine Personen)
+    ...(post.org ? ["story"] : []),
     "less",
     "report",
     ...(post.canDelete ? ["delete"] : []),
@@ -209,6 +211,7 @@ export function PostCard({
     why: { id: "why", label: why ? "Begründung ausblenden" : "Warum sehe ich das?", icon: Info, onSelect: () => setWhy((w) => !w) },
     edit: { id: "edit", label: "Bearbeiten", icon: Pencil, onSelect: () => openPanel("edit") },
     share: { id: "share", label: "Teilen", icon: Share2, onSelect: share },
+    story: { id: "story", label: "Als Story teilen", icon: ImageIcon, onSelect: () => void import("@/lib/story-share").then((m) => m.sharePostStory(post)) },
     less: { id: "less", label: "Weniger davon …", icon: EyeOff, onSelect: () => openPanel("less") },
     report: { id: "report", label: "Melden …", icon: Flag, onSelect: () => openPanel("report") },
     delete: { id: "delete", label: "Löschen", icon: Trash2, danger: true, onSelect: () => void remove() },

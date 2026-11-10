@@ -151,3 +151,8 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **Erneut senden** einer abgelaufenen Import-Einladung fehlt (Workaround: zurückziehen und neu importieren).
 - **Vereinslimit 100 Einladungen/Tag** gilt für Import und Einzel-Einladungen zusammen; das Kontolimit (20/Tag) gilt beim Import nicht (Massenversand nur über das Vereinslimit). Großer Import (500) dauert 5 Tage – ggf. Limit je Vereinsgröße/Tarif.
 - SKALIERUNG: Die Dublettenprüfung gegen vorhandene Mitglieder lädt die Adressen aller aktiven Mitglieder (UsersDirectory.mailContacts); bei sehr großen Vereinen gezielte Abfrage nach den Adressen der Datei (Hash-Index) nutzen.
+
+## S6 Story-Kacheln und OG-Bilder
+
+- **Rechtsfrage:** Beitragstexte/-bilder auf Story-Kacheln können Personen zeigen; Weitergabe liegt bei der teilenden Person. In Community-Richtlinien/Nutzungsbedingungen ergänzen (Bildrechte, keine Personen ohne Einwilligung teilen).
+- **Logo im OG-Bild** fehlt bewusst: Medien liegen nur als WebP vor, das der OG-Renderer (next/og) nicht sicher kann; später PNG-Variante für öffentliche Logos erwägen. Ebenso eigene Schrift (Fontsource liefert nur woff2, Satori braucht ttf/woff).

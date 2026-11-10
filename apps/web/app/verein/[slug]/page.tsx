@@ -40,7 +40,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       url: `${SITE_URL}/verein/${org.slug}`,
       type: "website",
-      ...(org.bannerId ? { images: [{ url: `${SITE_URL}${publicMediaUrl(org.bannerId, "banner")}`, width: 1500, height: 500 }] } : {}),
     },
   };
 }
