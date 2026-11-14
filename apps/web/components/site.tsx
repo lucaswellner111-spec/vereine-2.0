@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 import { ThemeToggle } from "./theme-toggle";
 
 export function Logo({ className }: { className?: string }) {
@@ -40,7 +41,7 @@ export function SiteHeader() {
   );
 }
 
-const footerLink = "-mx-2 flex min-h-11 items-center rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-text sm:min-h-9";
+const footerLink ="-mx-2 flex min-h-11 items-center rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-text sm:min-h-9";
 
 function FooterColumn({ title, links }: { title: string; links: { href: string; label: string }[] }) {
   return (
@@ -72,16 +73,12 @@ export function SiteFooter() {
           links={[
             { href: "/registrieren", label: "Registrieren" },
             { href: "/login", label: "Anmelden" },
+            { href: "/vereine-finden", label: "Vereine finden" },
+            { href: "/hilfe", label: "Hilfe" },
+            { href: "/kontakt", label: "Kontakt" },
           ]}
         />
-        <FooterColumn
-          title="Rechtliches"
-          links={[
-            { href: "/datenschutz", label: "Datenschutz" },
-            { href: "/impressum", label: "Impressum" },
-            { href: "/agb", label: "Nutzungsbedingungen" },
-          ]}
-        />
+        <FooterColumn title="Rechtliches" links={LEGAL_LINKS} />
       </div>
       <div className={`${SITE_CONTAINER} mt-8 flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between`}>
         <div className="flex items-center gap-3">
@@ -100,9 +97,6 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-10">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <div className="mt-2 rounded-lg border border-dashed border-accent/60 bg-accent/10 px-3 py-2 text-xs text-muted">
-          Platzhalter: Dieser Text muss vor dem Start von einer Rechtsberatung bzw. dem Datenschutzbeauftragten erstellt werden.
-        </div>
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-muted">{children}</div>
       </main>
       <SiteFooter />

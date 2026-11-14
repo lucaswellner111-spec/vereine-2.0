@@ -26,7 +26,7 @@ export const consentPurposeSchema = z.enum(CONSENT_PURPOSES);
 export type ConsentPurpose = z.infer<typeof consentPurposeSchema>;
 
 /** Aktuelle Version der Rechtstexte; bei Aenderung muss neu zugestimmt werden. */
-export const LEGAL_VERSION = "2026-10-29";
+export const LEGAL_VERSION = "2026-11-14";
 
 export const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),

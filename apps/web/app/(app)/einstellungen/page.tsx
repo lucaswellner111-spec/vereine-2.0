@@ -1,12 +1,13 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { LifeBuoy, LogOut, Mail, Scale } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, Card, ListGroup, ListRow, ListSkeleton } from "@/components/ui";
 import { LargeTitleHeader } from "@/components/ui-client";
 import { useAuth } from "@/lib/auth";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 import { SETTINGS_ITEMS } from "@/lib/settings-nav";
 import { useIsDesktopState } from "@/lib/use-media-query";
 
@@ -45,6 +46,13 @@ export default function SettingsIndexPage() {
         <p className="text-sm text-muted">Automatisch folgt der Einstellung deines Geräts.</p>
         <ThemeToggle fullWidth />
       </Card>
+      <ListGroup title="Hilfe und Rechtliches" className="mt-6">
+        <ListRow href="/hilfe" icon={LifeBuoy} title="Hilfe" />
+        <ListRow href="/kontakt" icon={Mail} title="Kontakt" />
+        {LEGAL_LINKS.map((l) => (
+          <ListRow key={l.href} href={l.href} icon={Scale} title={l.label} tone="neutral" />
+        ))}
+      </ListGroup>
       <ListGroup className="mt-6">
         <ListRow icon={LogOut} tone="danger" title="Abmelden" danger onClick={() => void logout().then(() => router.replace("/login"))} />
       </ListGroup>

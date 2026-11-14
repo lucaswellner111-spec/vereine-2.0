@@ -183,6 +183,22 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
+      # Firmendaten und Indexierung werden beim Build eingebettet (Werte aus .env.preview bzw. Shell; leer = Platzhalter)
+      args:
+        NEXT_PUBLIC_ALLOW_INDEXING: ${NEXT_PUBLIC_ALLOW_INDEXING:-}
+        NEXT_PUBLIC_LEGAL_COMPANY: ${NEXT_PUBLIC_LEGAL_COMPANY:-}
+        NEXT_PUBLIC_LEGAL_FORM: ${NEXT_PUBLIC_LEGAL_FORM:-}
+        NEXT_PUBLIC_LEGAL_STREET: ${NEXT_PUBLIC_LEGAL_STREET:-}
+        NEXT_PUBLIC_LEGAL_POSTAL_CITY: ${NEXT_PUBLIC_LEGAL_POSTAL_CITY:-}
+        NEXT_PUBLIC_LEGAL_COUNTRY: ${NEXT_PUBLIC_LEGAL_COUNTRY:-}
+        NEXT_PUBLIC_LEGAL_REPRESENTATIVES: ${NEXT_PUBLIC_LEGAL_REPRESENTATIVES:-}
+        NEXT_PUBLIC_LEGAL_REGISTER: ${NEXT_PUBLIC_LEGAL_REGISTER:-}
+        NEXT_PUBLIC_LEGAL_VAT_ID: ${NEXT_PUBLIC_LEGAL_VAT_ID:-}
+        NEXT_PUBLIC_LEGAL_EMAIL: ${NEXT_PUBLIC_LEGAL_EMAIL:-}
+        NEXT_PUBLIC_LEGAL_PHONE: ${NEXT_PUBLIC_LEGAL_PHONE:-}
+        NEXT_PUBLIC_LEGAL_DPO: ${NEXT_PUBLIC_LEGAL_DPO:-}
+        NEXT_PUBLIC_LEGAL_DSA_EMAIL: ${NEXT_PUBLIC_LEGAL_DSA_EMAIL:-}
+        NEXT_PUBLIC_LEGAL_AUTHORITY: ${NEXT_PUBLIC_LEGAL_AUTHORITY:-}
     image: vereine-web:${IMAGE_TAG:-local}
     restart: unless-stopped
     logging: *default-logging
