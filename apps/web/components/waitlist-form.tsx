@@ -107,7 +107,7 @@ export function WaitlistForm({ source }: { source?: WaitlistSource }) {
         <Field id="wl-org" label="Name des Vereins (optional)" autoComplete="organization" maxLength={120} value={values.orgName} onChange={set("orgName")} error={errors.orgName} className="sm:col-span-2" />
       </div>
       {/* Honeypot: fuer Menschen und Screenreader verborgen, Bots fuellen es oft aus */}
-      <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
+      <div aria-hidden inert className="absolute -left-[9999px] h-px w-px overflow-hidden">
         <label htmlFor="wl-website">Website</label>
         <input id="wl-website" name="website" type="text" tabIndex={-1} autoComplete="off" value={values.website} onChange={set("website")} />
       </div>

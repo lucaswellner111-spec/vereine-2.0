@@ -1,6 +1,8 @@
-// Build-Warnung: Soll die Seite indexiert werden (NEXT_PUBLIC_ALLOW_INDEXING=1), duerfen im Impressum keine
-// Platzhalter mehr stehen. Die Liste der Pflichtvariablen wird aus lib/legal-config.ts gelesen (eine Quelle).
-// Die Pruefung warnt nur (Exit 0); mit LEGAL_STRICT=1 bricht sie den Build ab.
+// Build-Pruefung der Betreiberdaten (Impressum, Datenschutz usw.). Die Liste der Pflichtvariablen wird aus
+// lib/legal-config.ts gelesen (eine Quelle).
+//  - Immer: stehen noch Platzhalter, nennt der Build sie als HINWEIS (Exit 0), damit sie vor dem Start nicht untergehen.
+//  - Mit NEXT_PUBLIC_ALLOW_INDEXING=1 (Launch): Platzhalter brechen den Build ab (Exit 1). LEGAL_STRICT=0 hebt das auf,
+//    LEGAL_STRICT=1 erzwingt es auch ohne Indexierung.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -12,10 +14,14 @@ if (required.length === 0) {
   console.error("check-legal: Pflichtvariablen nicht gefunden (lib/legal-config.ts geändert?)");
   process.exit(1);
 }
-if (process.env.NEXT_PUBLIC_ALLOW_INDEXING === "1") {
-  const missing = required.filter((k) => !process.env[k]?.trim());
-  if (missing.length > 0) {
-    console.warn(`\n[WARNUNG] NEXT_PUBLIC_ALLOW_INDEXING=1, aber im Impressum stehen noch Platzhalter.\nFehlende Variablen: ${missing.join(", ")}\n`);
-    if (process.env.LEGAL_STRICT === "1") process.exit(1);
-  }
+const missing = required.filter((k) => !process.env[k]?.trim());
+if (missing.length > 0) {
+  const indexing = process.env.NEXT_PUBLIC_ALLOW_INDEXING === "1";
+  const strict = process.env.LEGAL_STRICT === "1" || (indexing && process.env.LEGAL_STRICT !== "0");
+  const head = indexing
+    ? "NEXT_PUBLIC_ALLOW_INDEXING=1, aber im Impressum stehen noch Platzhalter."
+    : "Im Impressum und in der Datenschutzerklärung stehen noch Platzhalter (vor dem Start mit den Firmendaten füllen).";
+  const log = strict ? console.error : console.warn;
+  log(`\n[${strict ? "FEHLER" : "HINWEIS"}] ${head}\nFehlende Variablen: ${missing.join(", ")}\n`);
+  if (strict) process.exit(1);
 }

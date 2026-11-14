@@ -72,7 +72,7 @@ export default function LoginPage() {
           <Field id="email" label="E-Mail" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Field id="password" label="Passwort" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           <p className="-mt-2 text-right text-sm">
-            <Link href="/passwort-vergessen" className="text-brand hover:underline">Passwort vergessen?</Link>
+            <Link href="/passwort-vergessen" className="touch-link text-brand hover:underline">Passwort vergessen?</Link>
           </p>
         </>
       )}
@@ -86,7 +86,7 @@ export default function LoginPage() {
       )}
       <p className="text-center text-sm text-muted">
         Noch kein Konto?{" "}
-        <Link href={withNext("/registrieren", nextTarget)} className="font-medium text-brand hover:underline">
+        <Link href={withNext("/registrieren", nextTarget)} className="touch-link font-medium text-brand hover:underline">
           Jetzt registrieren
         </Link>
       </p>

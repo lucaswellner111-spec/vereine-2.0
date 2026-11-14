@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ConfirmEmailResult } from "@vereine/shared";
 import { Alert, CardSkeletons } from "@/components/ui";
@@ -15,7 +14,6 @@ import { takeHashToken, takeRememberedNext } from "@/lib/next-url";
  */
 export default function ConfirmEmailPage() {
   const { setUser, user, refresh } = useAuth();
-  const router = useRouter();
   const started = useRef(false);
   const [state, setState] = useState<{ kind: "busy" } | { kind: "error"; message: string } | { kind: "done"; changed: boolean; loggedIn: boolean }>({ kind: "busy" });
 
@@ -32,18 +30,17 @@ export default function ConfirmEmailPage() {
         if (res.loggedIn) {
           setUser(res.user);
           const target = takeRememberedNext("/feed");
-          router.replace(target);
-          // Haengt der Seitenwechsel im Router (z. B. langsamer RSC-Abruf unter Last), nach 4 s hart weiterleiten
-          window.setTimeout(() => {
-            if (window.location.pathname === "/email-bestaetigen") window.location.replace(target);
-          }, 4000);
+          // Harte Navigation statt Router: ein einmaliger Seitenwechsel aus einer Wegwerfseite braucht keinen
+          // Client-Router, und ein haengender RSC-Abruf (unter Last) kann ihn so nicht blockieren. Der Merker
+          // der Anmeldung steht schon (setUser), die neue Seite fragt /auth/me regulaer ab.
+          window.location.replace(target);
           return;
         }
         setState({ kind: "done", changed: res.changed, loggedIn: false });
         void refresh(); // angemeldet: Banner/Adresse aktualisieren
       })
       .catch((e) => setState({ kind: "error", message: describeError(e) }));
-  }, [router, setUser, refresh]);
+  }, [setUser, refresh]);
 
   return (
     <div className="space-y-4">
@@ -55,13 +52,13 @@ export default function ConfirmEmailPage() {
           <p className="text-sm text-muted">
             Links aus unseren Mails gelten nur kurz und nur einmal. Registriere dich einfach erneut oder fordere in den Einstellungen einen neuen Link an.
           </p>
-          <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline">Zur Anmeldung</Link>
+          <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Anmeldung</Link>
         </>
       )}
       {state.kind === "done" && (
         <>
           <Alert tone="success">{state.changed ? "Deine neue E-Mail-Adresse ist bestätigt und gilt ab sofort." : "Deine E-Mail-Adresse ist bestätigt."}</Alert>
-          <Link href={user ? "/feed" : "/login"} className="block text-center text-sm font-medium text-brand hover:underline">
+          <Link href={user ? "/feed" : "/login"} className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">
             {user ? "Weiter zu Klubnest" : "Zur Anmeldung"}
           </Link>
         </>

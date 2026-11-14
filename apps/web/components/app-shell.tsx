@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { Building2, CalendarDays, ChevronDown, Flag, Search, LayoutDashboard, LogOut, Menu, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PublicUser } from "@vereine/shared";
 import { useAuth } from "@/lib/auth";
 import { ChatProvider, useChat } from "@/lib/chat";
@@ -108,7 +108,7 @@ type SubItem = { href: string; label: string; icon: LucideIcon };
  * ist das Register immer offen; sonst klappt es per Knopf auf (Zustand bleibt beim Navigieren erhalten).
  * Ohne Unterpunkte gibt es keinen Aufklapp-Knopf.
  */
-function NavGroup({
+export function NavGroup({
   id,
   href,
   label,
@@ -128,15 +128,29 @@ function NavGroup({
   items: SubItem[];
   header?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const expanded = active || open;
+  // Ausdrueckliche Wahl der Person (null = automatisch: offen, solange man im Bereich ist). Frueher galt
+  // "active || open": im Bereich konnte der Pfeil nie zuklappen. Beim Betreten/Verlassen des Bereichs gilt wieder automatisch.
+  const [choice, setChoice] = useState<boolean | null>(null);
+  useEffect(() => setChoice(null), [active]);
+  const expanded = choice ?? active;
   const pathname = usePathname();
   const hasItems = items.length > 0;
 
   return (
     <div>
       <div className={clsx("flex items-center rounded-xl", active && "bg-brand/15")}>
-        <Link href={href} aria-current={currentHref === href ? "page" : undefined} className={clsx(linkClass(false), "flex-1", active && "text-brand hover:bg-transparent")}>
+        <Link
+          href={href}
+          aria-current={currentHref === href ? "page" : undefined}
+          onClick={(e) => {
+            // Ganze Zeile klappt zu, wenn der Bereich schon offen und die Seite schon aktuell ist; sonst normal navigieren
+            if (hasItems && expanded && currentHref === href) {
+              e.preventDefault();
+              setChoice(false);
+            } else if (hasItems && !expanded) setChoice(true);
+          }}
+          className={clsx(linkClass(false), "flex-1", active && "text-brand hover:bg-transparent")}
+        >
           <Icon size={18} aria-hidden />
           {label}
         </Link>
@@ -146,7 +160,7 @@ function NavGroup({
             aria-expanded={expanded}
             aria-controls={`${id}-register`}
             aria-label={expanded ? `${label} einklappen` : `${label} aufklappen`}
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => setChoice(!expanded)}
             className={clsx("mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-text", active && "text-brand")}
           >
             <ChevronDown size={16} aria-hidden className={clsx("transition-transform", expanded && "rotate-180")} />
@@ -214,9 +228,16 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const moreActive = MORE_PREFIXES.some(isActive);
+  // Lange Untermenues (Verwaltung): den aktiven Eintrag in der scrollbaren Leiste sichtbar halten
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+  }, [pathname]);
   const doLogout = () => {
     setMoreOpen(false);
-    void logout().then(() => router.replace("/login"));
+    // Weiterleitung macht allein der Wachposten oben (AppShell-Effekt bei user === null): eine zweite, gleichzeitige
+    // router.replace("/login") liess unter Last die Navigation haengen (E2E auth.spec)
+    void logout();
   };
 
   return (
@@ -236,7 +257,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           <span className="flex-1 text-left">Suchen …</span>
           <kbd className="rounded border border-border px-1.5 text-[11px]">Strg K</kbd>
         </button>
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Hauptnavigation">
+        <nav ref={navRef} className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Hauptnavigation">
           {items.map((item) =>
             item.href === "/verwaltung" ? (
               <VerwaltungNav key={item.href} item={item} active={isActive(item.href)} pathname={pathname} />
@@ -257,8 +278,8 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             items={SETTINGS_ITEMS}
           />
         </nav>
-        <ThemeToggle compact className="mb-3 self-start" />
-        <div className="rounded-2xl border border-border/70 p-2">
+        <ThemeToggle compact className="mb-3 mt-1 shrink-0 self-start" />
+        <div className="shrink-0 rounded-2xl border border-border/70 p-2">
           <Link
             href={profileHref}
             aria-current={pathname === profileHref ? "page" : undefined}
@@ -288,7 +309,9 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             <Search size={20} aria-hidden />
           </button>
           <NotificationBell />
-          <Link href={profileHref} aria-label="Mein Profil" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+          <Link href={profileHref} className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+            {/* Name ohne aria-label: sonst Verstoss gegen "Label in Name" (WCAG 2.5.3), weil die Initialen sichtbar sind */}
+            <span className="sr-only">Mein Profil</span>
             <Avatar name={user.displayName} size={30} mediaId={avatarId} />
           </Link>
         </div>

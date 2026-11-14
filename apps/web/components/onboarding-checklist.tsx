@@ -66,7 +66,7 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Erste Schritte</h2>
-          <p className="mt-0.5 text-sm text-muted">{doneCount} von {steps.length} erledigt. Als Nächstes: <Link href={next.href} className="font-medium text-brand hover:underline">{next.label}</Link></p>
+          <p className="mt-0.5 text-sm text-muted">{doneCount} von {steps.length} erledigt. Als Nächstes: <Link href={next.href} className="hit-area relative font-medium text-brand hover:underline">{next.label}</Link></p>
         </div>
         <button
           type="button"
@@ -79,7 +79,7 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
               /* nur fuer diese Sitzung */
             }
           }}
-          className="rounded-md p-1 text-muted hover:bg-surface-2 hover:text-text"
+          className="hit-area relative rounded-md p-1 text-muted hover:bg-surface-2 hover:text-text"
         >
           <X size={16} aria-hidden />
         </button>
@@ -90,7 +90,7 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
       <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
         {steps.map((s) => (
           <li key={s.id}>
-            <Link href={s.href} className="flex items-start gap-2.5 rounded-md py-1 text-sm hover:text-brand">
+            <Link href={s.href} className="flex items-start gap-2.5 rounded-md py-1 text-sm hover:text-brand pointer-coarse:min-h-11 pointer-coarse:items-center">
               {s.done ? <Check size={16} aria-hidden className="mt-0.5 shrink-0 text-brand" /> : <Circle size={16} aria-hidden className="mt-0.5 shrink-0 text-muted" />}
               <span>
                 <span className={s.done ? "text-muted line-through" : "font-medium"}>{s.label}</span>

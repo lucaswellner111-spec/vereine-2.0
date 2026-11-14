@@ -4,7 +4,7 @@ import { AVV_DOCUMENT, type AvvStatus } from "@vereine/shared";
 import { AvvAdmin, AvvBanner } from "./avv-admin";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const current = { version: AVV_DOCUMENT.version, textHash: "a".repeat(64), status: "draft" as const, title: AVV_DOCUMENT.title, publishedAt: AVV_DOCUMENT.publishedAt };
+const current = { version: AVV_DOCUMENT.version, textHash: "a".repeat(64), status: "published" as const, title: AVV_DOCUMENT.title, publishedAt: AVV_DOCUMENT.publishedAt };
 const open: AvvStatus = { required: true, current, accepted: null, upToDate: false, blocked: true, graceUntil: null, canAccept: true };
 const done: AvvStatus = {
   ...open,
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("AvvAdmin", () => {
-  it("zeigt Entwurfshinweis und Text, Zustimmen erst nach Haken, danach Nachweis mit Person und Datum", async () => {
+  it("zeigt Fassungsdatum (ohne Entwurfshinweis) und Text, Zustimmen erst nach Haken, danach Nachweis mit Person und Datum", async () => {
     let state = open;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/avv/accept") && init?.method === "POST") {
@@ -32,7 +32,8 @@ describe("AvvAdmin", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<AvvAdmin slug="sv" />);
 
-    await screen.findByText(/Anwaltsprüfung ausstehend/);
+    await screen.findByText(/Fassung vom 14\.11\.2026/);
+    expect(screen.queryByText(/Anwaltsprüfung|ENTWURF/)).toBeNull();
     expect(screen.getByRole("region", { name: /Text des Vertrags/ }).textContent).toContain("Hetzner");
     expect(screen.getByRole("region", { name: /Text des Vertrags/ }).textContent).toContain("Scaleway");
     expect(screen.getByText("Noch nicht zugestimmt")).toBeTruthy();

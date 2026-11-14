@@ -21,6 +21,30 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/*
+ * Merker "hier war schon eine Anmeldung" (nur im Browser, kein Inhalt). Auf oeffentlichen Seiten ohne Merker wird
+ * /auth/me gar nicht erst gefragt: ein anonymer Besuch erzeugt so keinen 401 (Konsolenfehler, Monitoring-Rauschen,
+ * unnoetige Last). Auf App-Seiten wird immer gefragt, der Merker ist also nie die Quelle der Wahrheit.
+ */
+const SESSION_HINT_KEY = "kn-session";
+const PUBLIC_PATHS = ["/", "/login", "/registrieren", "/passwort-vergessen", "/warteliste", "/vereine-finden", "/hilfe", "/kontakt", "/agb", "/datenschutz", "/impressum", "/barrierefreiheit", "/community-richtlinien", "/meldeverfahren"];
+const isPublicPath = (path: string) => PUBLIC_PATHS.includes(path) || path.startsWith("/verein/") || path.startsWith("/warteliste/");
+function hasSessionHint(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function setSessionHint(on: boolean) {
+  try {
+    if (on) localStorage.setItem(SESSION_HINT_KEY, "1");
+    else localStorage.removeItem(SESSION_HINT_KEY);
+  } catch {
+    /* Speicher gesperrt: ohne Merker wird auf oeffentlichen Seiten einfach nicht gefragt */
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,18 +53,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const generation = useRef(0);
   const setUser = useCallback((next: PublicUser | null) => {
     generation.current += 1;
+    setSessionHint(next !== null);
     setUserState(next);
   }, []);
 
   useEffect(() => {
     const started = generation.current;
+    if (!hasSessionHint() && isPublicPath(window.location.pathname)) {
+      setLoading(false);
+      return;
+    }
     api<PublicUser>("/auth/me")
       .then((u) => {
-        if (generation.current === started) setUserState(u);
+        if (generation.current === started) {
+          setSessionHint(true);
+          setUserState(u);
+        }
       })
       .catch((err) => {
         if (!(err instanceof ApiError) || err.status !== 401) console.error(err);
-        if (generation.current === started) setUserState(null);
+        if (generation.current === started) {
+          setSessionHint(false);
+          setUserState(null);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -57,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setUser]);
 
   const register = useCallback(async (input: RegisterInput) => {
-    await api("/auth/register", { method: "POST", body: input });
+    await api("/auth/register", { method: "POST", body: input, captcha: true });
   }, []);
 
   const refresh = useCallback(async () => {

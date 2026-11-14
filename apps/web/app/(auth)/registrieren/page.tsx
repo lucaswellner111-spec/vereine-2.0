@@ -53,7 +53,7 @@ export default function RegisterPage() {
           Wir haben eine E-Mail an <span className="font-medium text-text">{sentTo}</span> geschickt. Klicke auf den Link darin, um dein Konto zu bestätigen – danach bist du direkt angemeldet. Der Link ist 24 Stunden gültig.
         </p>
         <p className="text-sm text-muted">Keine Mail da? Schau im Spam-Ordner nach oder registriere dich in ein paar Minuten noch einmal.</p>
-        <Link href={withNext("/login", nextTarget)} className="block text-center text-sm font-medium text-brand hover:underline">Zur Anmeldung</Link>
+        <Link href={withNext("/login", nextTarget)} className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Anmeldung</Link>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export default function RegisterPage() {
       </Button>
       <p className="text-center text-sm text-muted">
         Schon registriert?{" "}
-        <Link href={withNext("/login", nextTarget)} className="font-medium text-brand hover:underline">Anmelden</Link>
+        <Link href={withNext("/login", nextTarget)} className="touch-link font-medium text-brand hover:underline">Anmelden</Link>
       </p>
     </form>
   );

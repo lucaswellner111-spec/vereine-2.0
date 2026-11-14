@@ -5,7 +5,7 @@ export const SETTINGS_ITEMS: { href: string; label: string; icon: LucideIcon }[]
   { href: "/einstellungen/profil", label: "Profil", icon: User },
   { href: "/einstellungen/datenschutz", label: "Datenschutz", icon: ShieldCheck },
   { href: "/einstellungen/sicherheit", label: "Sicherheit", icon: Lock },
-  { href: "/einstellungen/vereinsdaten", label: "Meine Mitgliedsdaten", icon: IdCard },
+  { href: "/einstellungen/mitgliedsdaten", label: "Meine Mitgliedsdaten", icon: IdCard },
   { href: "/einstellungen/mitteilungen", label: "Mitteilungen", icon: Bell },
   { href: "/einstellungen/kalender", label: "Kalender", icon: CalendarDays },
   { href: "/rechnungen", label: "Rechnungen", icon: Receipt },

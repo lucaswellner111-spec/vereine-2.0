@@ -51,15 +51,20 @@ describe("legal-config", () => {
     const run = (env: Record<string, string>) =>
       spawnSync(process.execPath, [script], { env: { ...process.env, NEXT_PUBLIC_ALLOW_INDEXING: "", LEGAL_STRICT: "", ...Object.fromEntries(REQUIRED_LEGAL_ENV.map((k) => [k, ""])), ...env }, encoding: "utf8" });
 
-    const quiet = run({});
-    expect(quiet.status).toBe(0);
-    expect(quiet.stderr).toBe("");
+    // D1: offene Platzhalter werden bei jedem Build genannt (Hinweis, kein Abbruch)
+    const hint = run({});
+    expect(hint.status).toBe(0);
+    expect(hint.stderr).toMatch(/HINWEIS.*Platzhalter/s);
+    for (const k of REQUIRED_LEGAL_ENV) expect(hint.stderr, k).toContain(k);
 
-    const warned = run({ NEXT_PUBLIC_ALLOW_INDEXING: "1" });
-    expect(warned.status).toBe(0);
-    for (const k of REQUIRED_LEGAL_ENV) expect(warned.stderr, k).toContain(k);
+    // Launch (Indexierung an): Platzhalter brechen den Build ab, LEGAL_STRICT=0 hebt das bewusst auf
+    const launch = run({ NEXT_PUBLIC_ALLOW_INDEXING: "1" });
+    expect(launch.status).toBe(1);
+    for (const k of REQUIRED_LEGAL_ENV) expect(launch.stderr, k).toContain(k);
+    expect(run({ NEXT_PUBLIC_ALLOW_INDEXING: "1", LEGAL_STRICT: "0" }).status).toBe(0);
+    expect(run({ ...FULL_ENV, NEXT_PUBLIC_ALLOW_INDEXING: "1" }).stderr).toBe("");
 
     expect(run({ NEXT_PUBLIC_ALLOW_INDEXING: "1", LEGAL_STRICT: "1" }).status).toBe(1);
     expect(run({ ...FULL_ENV, NEXT_PUBLIC_ALLOW_INDEXING: "1", LEGAL_STRICT: "1" }).status).toBe(0);
-  }, 60_000); // fuenf Node-Starts, auf einer ausgelasteten Maschine langsam
+  }, 60_000); // mehrere Node-Starts, auf einer ausgelasteten Maschine langsam
 });
