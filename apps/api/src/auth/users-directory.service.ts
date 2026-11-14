@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, notLike } from "drizzle-orm";
 import type { ConsentPurpose } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { consents, users } from "../db/schema";
@@ -34,7 +34,7 @@ export class UsersDirectory {
     const rows = await this.db
       .select({ id: users.id, email: users.email, name: users.displayName })
       .from(users)
-      .where(and(inArray(users.id, unique), isNull(users.deletedAt), isNotNull(users.emailVerifiedAt)));
+      .where(and(inArray(users.id, unique), isNull(users.deletedAt), isNotNull(users.emailVerifiedAt), eq(users.accountType, "adult"), notLike(users.email, "%.invalid")));
     return new Map(rows.map((r) => [r.id, { email: r.email, name: r.name }]));
   }
 
@@ -48,12 +48,12 @@ export class UsersDirectory {
     return row?.id ?? null;
   }
 
-  /** Nutzersuche nach Anzeigename (Teiltreffer, ohne geloeschte Konten). */
+  /** Nutzersuche nach Anzeigename (Teiltreffer, ohne geloeschte Konten; Jugendkonten sind nie auffindbar). */
   async search(term: string, limit = 20): Promise<string[]> {
     const rows = await this.db
       .select({ id: users.id })
       .from(users)
-      .where(and(ilike(users.displayName, `%${term.replace(/[%_]/g, "")}%`), isNull(users.deletedAt)))
+      .where(and(ilike(users.displayName, `%${term.replace(/[%_]/g, "")}%`), isNull(users.deletedAt), eq(users.accountType, "adult")))
       .limit(limit);
     return rows.map((r) => r.id);
   }

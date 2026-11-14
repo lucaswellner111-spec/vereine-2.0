@@ -28,6 +28,8 @@ const LABELS: Record<string, [string, string]> = {
   invoice_new: ["neue Rechnung", "neue Rechnungen"],
   invoice_overdue: ["überfällige Rechnung", "überfällige Rechnungen"],
   fee_run_done: ["abgeschlossener Beitragslauf", "abgeschlossene Beitragsläufe"],
+  child_rsvp: ["Zu-/Absage für dein Kind", "Zu-/Absagen für dein Kind"],
+  child_graduation: ["Hinweis zum 16. Geburtstag deines Kindes", "Hinweise zum 16. Geburtstag deines Kindes"],
 };
 
 /** Zeilen der Sammelmail aus Anzahlen je Typ ("3 neue Kommentare"). Unbekannte Typen (z. B. Likes) fallen weg. */

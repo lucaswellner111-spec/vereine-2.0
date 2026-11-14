@@ -45,6 +45,10 @@ export function pushMessage(type: Type, d: Record<string, string>): PushPayload 
       return { title: `Neue Rechnung von ${d.orgName ?? ""}`, body: d.amount ?? "", url: "/rechnungen" };
     case "invoice_overdue":
       return { title: "Rechnung überfällig", body: d.orgName ?? "", url: "/rechnungen" };
+    case "child_rsvp":
+      return { title: "Zu-/Absage für dein Kind", body: d.title ?? "", url: d.eventId ? `/kalender/${d.eventId}` : "/kinder" };
+    case "child_graduation":
+      return { title: "Dein Kind wird bald 16", body: "Es braucht dann ein eigenes Konto.", url: "/kinder" };
     case "like":
     case "comment_like":
       return { title: "Gefällt mir", body: "Jemand mag deinen Beitrag.", url: d.postId ? `/beitrag/${d.postId}` : "/feed" };

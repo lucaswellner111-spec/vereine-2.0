@@ -12,6 +12,7 @@ import type {
   PublicUser,
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { AvvService } from "../avv/avv.service";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { decryptGcm, derivedKey, encryptGcm } from "../common/secret-key";
@@ -42,6 +43,7 @@ export class OrgAdminService {
     @Inject(MailService) private readonly mail: MailService,
     @Inject(OrgEvents) private readonly events: OrgEvents,
     @Inject(AvvService) private readonly avv: AvvService,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   // --- Stammdaten ---------------------------------------------------------------
@@ -235,7 +237,9 @@ export class OrgAdminService {
   }
 
   /** Tritt dem Verein bei (aktives Mitglied, ohne weitere Freigabe) und folgt ihm. */
-  async accept(user: PublicUser, token: string): Promise<InviteInfo> {
+  async accept(user: PublicUser, token: string, opts: { viaGuardian?: boolean } = {}): Promise<InviteInfo> {
+    // Kinder (Jugendkonten) nehmen nie selbst an: das macht ein Elternteil ueber den GuardianService
+    if (!opts.viaGuardian && (await this.youth.isYouth(user.id))) throw new ForbiddenException("Das macht dein Elternteil für dich.");
     const row = await this.findUsable(token);
     const [org] = await this.db.select().from(organizations).where(eq(organizations.id, row.orgId)).limit(1);
     if (await this.orgs.activeRole(row.orgId, user.id)) return { orgName: org.name, orgSlug: org.slug, alreadyMember: true };

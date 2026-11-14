@@ -178,7 +178,7 @@ export class EmailFlowsService {
     await this.limits.enforceAuthIp(ip);
     const allowed = await this.limits.authAddressAllowed(email);
     const [user] = await this.db.select().from(users).where(and(eq(users.email, email), isNull(users.deletedAt))).limit(1);
-    if (!user || !allowed) return;
+    if (!user || !allowed || user.accountType !== "adult") return; // Jugendkonten: kein Zuruecksetzen ueber eine Platzhalteradresse
     const token = await this.issue(user.id, "reset", RESET_TTL_MS);
     await this.mail.send(user.email, "password-reset", { name: user.displayName, link: appLink(`/passwort-neu#t=${token}`), validMinutes: RESET_TTL_MS / 60_000 });
   }
@@ -191,7 +191,7 @@ export class EmailFlowsService {
     const updated = await this.db
       .update(users)
       .set({ passwordHash, emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, now())`, pendingVerification: false })
-      .where(and(eq(users.id, row.userId), isNull(users.deletedAt)))
+      .where(and(eq(users.id, row.userId), isNull(users.deletedAt), eq(users.accountType, "adult")))
       .returning({ id: users.id });
     if (!updated.length) throw new BadRequestException(INVALID_LINK);
     await this.auth.endAllSessions(row.userId);

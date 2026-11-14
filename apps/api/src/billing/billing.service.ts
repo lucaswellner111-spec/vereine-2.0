@@ -11,6 +11,7 @@ import type {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { AvvService } from "../avv/avv.service";
 import { DB, type Database } from "../db/db.module";
 import { invoiceCounters, invoiceItems, invoices } from "../db/schema";
@@ -53,6 +54,7 @@ export class BillingService implements OnModuleInit {
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(MailService) private readonly mail: MailService,
     @Inject(AvvService) private readonly avv: AvvService,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   onModuleInit() {
@@ -180,8 +182,19 @@ export class BillingService implements OnModuleInit {
     if (!(await this.orgs.activeRole(org.id, input.recipientUserId))) {
       throw new BadRequestException("Der Empfaenger ist kein aktives Mitglied des Vereins.");
     }
-    const names = await this.directory.names([input.recipientUserId]);
-    const recipientName = names.get(input.recipientUserId);
+    // Kind (Jugendkonto): die Rechnung geht an den Rechnungsempfaenger (Elternteil), nie an das Kind
+    let recipientId = input.recipientUserId;
+    let subjectUserId: string | null = null;
+    let subjectName: string | null = null;
+    if (await this.youth.isYouth(input.recipientUserId)) {
+      const guardian = (await this.youth.billingContacts([input.recipientUserId])).get(input.recipientUserId);
+      if (!guardian) throw new BadRequestException("Für dieses Kind ist kein Rechnungsempfänger (Elternteil) hinterlegt. Die Eltern müssen das in „Meine Kinder“ ergänzen.");
+      recipientId = guardian;
+      subjectUserId = input.recipientUserId;
+      subjectName = (await this.youth.fullNames([subjectUserId])).get(subjectUserId) ?? null;
+    }
+    const names = await this.directory.names([recipientId]);
+    const recipientName = names.get(recipientId);
     if (!recipientName) throw new BadRequestException("Empfaenger nicht gefunden.");
 
     const totals = this.totals(input.items);
@@ -191,9 +204,11 @@ export class BillingService implements OnModuleInit {
         .insert(invoices)
         .values({
           orgId: org.id,
-          recipientUserId: input.recipientUserId,
+          recipientUserId: recipientId,
           recipientName,
           recipientAddress: input.recipientAddress,
+          subjectUserId,
+          subjectName,
           issuerName: org.name,
           issuerCity: org.city,
           issuerAddress: org.address,
@@ -351,8 +366,10 @@ export class BillingService implements OnModuleInit {
   async anonymizeRecipient(userId: string): Promise<void> {
     await this.db
       .update(invoices)
-      .set({ recipientUserId: null, recipientName: DELETED_NAME, recipientAddress: "" })
+      .set({ recipientUserId: null, recipientName: DELETED_NAME, recipientAddress: "", subjectUserId: null, subjectName: null })
       .where(eq(invoices.recipientUserId, userId));
+    // Kind geloescht: Verweis entfaellt, die Namenskopie bleibt als Rechnungsunterlage (Aufbewahrungspflicht)
+    await this.db.update(invoices).set({ subjectUserId: null }).where(eq(invoices.subjectUserId, userId));
   }
 
   /** Auskunft (Art. 15): Rechnungen, die der Nutzer als Empfaenger erhalten hat. */
@@ -368,7 +385,16 @@ export class BillingService implements OnModuleInit {
         totalCents: r.totalCents,
         status: r.status,
         recipientAddress: r.recipientAddress,
+        forChild: r.subjectName ?? null,
       }));
+  }
+
+  /** Auskunft fuer das Kind (ueber einen Elternteil): Rechnungen, die sich auf das Kind beziehen (ohne Anschrift der Eltern). */
+  async exportForSubject(childId: string) {
+    const rows = await this.db.select().from(invoices).where(eq(invoices.subjectUserId, childId)).limit(1000);
+    return rows
+      .filter((r) => r.status !== "draft")
+      .map((r) => ({ number: r.number, issuer: r.issuerName, issueDate: r.issueDate, dueDate: r.dueDate, totalCents: r.totalCents, status: r.status }));
   }
 
   // --- Job ----------------------------------------------------------------------
@@ -417,6 +443,7 @@ export class BillingService implements OnModuleInit {
       displayStatus: status === "open" && r.dueDate < today() ? "overdue" : status,
       recipientName: r.recipientName,
       recipientUserId: r.recipientUserId,
+      subjectName: r.subjectName,
       issueDate: r.issueDate,
       dueDate: r.dueDate,
       totalCents: r.totalCents,

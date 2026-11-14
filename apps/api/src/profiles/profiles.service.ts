@@ -144,7 +144,8 @@ export class ProfilesService {
     if (term.length < 2) return [];
     const byHandle = await this.db.select({ id: profiles.userId }).from(profiles).where(ilike(profiles.handle, `${term}%`)).limit(20);
     const byName = await this.directory.search(term, 20);
-    const ids = [...new Set([...byHandle.map((r) => r.id), ...byName])].filter((id) => id !== viewer.id).slice(0, 20);
+    const found = [...new Set([...byHandle.map((r) => r.id), ...byName])].filter((id) => id !== viewer.id);
+    const ids = (await this.access.excludeYouth(found)).slice(0, 20); // Jugendkonten nie auffindbar
     return this.people(viewer.id, ids);
   }
 

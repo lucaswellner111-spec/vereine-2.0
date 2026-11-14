@@ -4,6 +4,7 @@ import { AvvModule } from "../avv/avv.module";
 import { BillingModule } from "../billing/billing.module";
 import { ChatModule } from "../chat/chat.module";
 import { EventsModule } from "../events/events.module";
+import { GuardianModule } from "../guardian/guardian.module";
 import { MailModule } from "../mail/mail.module";
 import { MediaModule } from "../media/media.module";
 import { MembersModule } from "../members/members.module";
@@ -12,13 +13,14 @@ import { ProfileAccessModule } from "../profiles/profile-access.module";
 import { OrgsModule } from "../orgs/orgs.module";
 import { PostsModule } from "../posts/posts.module";
 import { WaitlistModule } from "../waitlist/waitlist.module";
+import { GuardianPrivacyController } from "./guardian-privacy.controller";
 import { PrivacyController } from "./privacy.controller";
 import { PrivacyService } from "./privacy.service";
 import { RetentionService } from "./retention.service";
 
 @Module({
-  imports: [AuthModule, AvvModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule, WaitlistModule],
-  controllers: [PrivacyController],
+  imports: [AuthModule, AvvModule, BillingModule, ChatModule, EventsModule, GuardianModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule, WaitlistModule],
+  controllers: [PrivacyController, GuardianPrivacyController],
   providers: [PrivacyService, RetentionService],
 })
 export class PrivacyModule {}

@@ -7,12 +7,13 @@ import { MailModule } from "../mail/mail.module";
 import { TwoFactorPolicyService } from "./two-factor-policy.service";
 import { TwoFactorService } from "./two-factor.service";
 import { UsersDirectory } from "./users-directory.service";
+import { YouthDirectory } from "./youth-directory.service";
 import { CaptchaModule } from "../captcha/captcha.module";
 
 @Module({
   imports: [CaptchaModule, MailModule],
   controllers: [AuthController],
-  providers: [AuthService, EmailFlowsService, TwoFactorService, TwoFactorPolicyService, UsersDirectory, AuditService],
-  exports: [AuthService, UsersDirectory, AuditService, TwoFactorService, TwoFactorPolicyService],
+  providers: [AuthService, EmailFlowsService, TwoFactorService, TwoFactorPolicyService, UsersDirectory, YouthDirectory, AuditService],
+  exports: [AuthService, UsersDirectory, YouthDirectory, AuditService, TwoFactorService, TwoFactorPolicyService],
 })
 export class AuthModule {}

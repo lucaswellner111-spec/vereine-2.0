@@ -25,6 +25,7 @@ import {
 } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { isUniqueViolation } from "../common/pg-errors";
 import { invalidatePublicOrg } from "../common/public-cache";
@@ -61,6 +62,7 @@ export class OrgsService {
     @Inject(OrgEvents) private readonly events: OrgEvents,
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   /**
@@ -243,7 +245,9 @@ export class OrgsService {
   }
 
   /** Mitgliedschaftsantrag; die Freigabe durch den Vorstand folgt im Modul "Verwaltung". */
-  async requestMembership(slug: string, userId: string): Promise<OrgDetail> {
+  async requestMembership(slug: string, userId: string, opts: { viaGuardian?: boolean } = {}): Promise<OrgDetail> {
+    // Kinder (Jugendkonten) werden nur ueber ihre Eltern Mitglied (GuardianService), nie selbst
+    if (!opts.viaGuardian && (await this.youth.isYouth(userId))) throw new ForbiddenException("Das macht dein Elternteil für dich.");
     const org = await this.requireBySlug(slug);
     // Schutz vor Antrags-Spam: abgelehnte Antraege werden geloescht und koennten sonst endlos wiederholt werden.
     const [existing] = await this.db.select({ status: orgMembers.status }).from(orgMembers).where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, userId))).limit(1);
@@ -300,7 +304,8 @@ export class OrgsService {
       .orderBy(orgMembers.createdAt)
       .limit(500);
     const ids = rows.map((r) => r.userId);
-    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
+    // Vorstand sieht bei Jugendkonten den vollen Namen (Vereinsdaten), alle anderen nur Vorname + Initiale
+    const [names, handles] = await Promise.all([this.youth.fullNames(ids), this.access.handles(ids)]);
     return rows.map((r) => ({
       ...r,
       name: names.get(r.userId) ?? "Gelöschter Nutzer",
@@ -319,10 +324,13 @@ export class OrgsService {
     if (!m) throw new NotFoundException("Kein offener Antrag gefunden.");
     if (decision === "approve") await this.db.update(orgMembers).set({ status: "active" }).where(key);
     else await this.db.delete(orgMembers).where(key);
-    await this.notifications.notify([targetId], "membership_decision", {
+    // Kinder (Jugendkonten) haben keinen eigenen Zugang: die Entscheidung geht an die Eltern
+    const child = await this.youth.isYouth(targetId);
+    await this.notifications.notify(child ? await this.youth.guardiansOf(targetId) : [targetId], "membership_decision", {
       orgSlug: org.slug,
       orgName: org.name,
       decision,
+      ...(child ? { child: "1" } : {}),
     });
   }
 
@@ -333,6 +341,7 @@ export class OrgsService {
 
   async setRole(slug: string, actor: PublicUser, targetId: string, role: OrgRole): Promise<void> {
     const org = await this.requireBySlug(slug);
+    if (role !== "member" && (await this.youth.isYouth(targetId))) throw new BadRequestException("Jugendkonten können nur einfaches Mitglied sein.");
     await this.db.transaction(async (tx) => {
       await this.lockOrg(tx, org.id);
       await this.requireAdmin(org.id, actor.id, tx);
@@ -389,7 +398,7 @@ export class OrgsService {
     const role = await this.activeRole(org.id, actor.id);
     if (role !== "admin" && role !== "moderator") throw new ForbiddenException("Nur Vorstand und Moderation sehen die Mitgliederliste.");
     const ids = await this.allActiveMemberIds(org.id);
-    const names = await this.directory.names(ids);
+    const names = await this.youth.fullNames(ids); // Vorstand/Moderation sehen den vollen Namen der Kinder
     return ids
       .filter((id) => names.has(id))
       .map((id) => ({ userId: id, name: names.get(id)! }))
@@ -463,6 +472,8 @@ export class OrgsService {
    * Verhindert unerwuenschte Nachrichten von Fremden.
    */
   async canContact(userId: string, otherId: string): Promise<boolean> {
+    // Jugendkonten sind nie direkt anschreibbar und schreiben nie selbst (auch nicht Trainer/Vorstand; die wenden sich an die Eltern)
+    if ((await this.youth.youthIds([userId, otherId])).size > 0) return false;
     const [mine, theirs] = await Promise.all([
       this.db.select({ orgId: orgMembers.orgId }).from(orgMembers).where(and(eq(orgMembers.userId, userId), eq(orgMembers.status, "active"))),
       this.db.select({ orgId: orgMembers.orgId, role: orgMembers.role }).from(orgMembers).where(and(eq(orgMembers.userId, otherId), eq(orgMembers.status, "active"))),
@@ -500,7 +511,20 @@ export class OrgsService {
         .limit(200);
       rows.filter((r) => r.userId !== userId && !out.has(r.userId)).forEach((r) => out.set(r.userId, `${r.org} (Vorstand)`));
     }
-    return [...out].map(([id, context]) => ({ userId: id, context }));
+    const youth = await this.youth.youthIds([...out.keys()]);
+    return [...out].filter(([id]) => !youth.has(id)).map(([id, context]) => ({ userId: id, context }));
+  }
+
+  /** Mitgliedschaften und offene Antraege einer Person (fuer die Elternuebersicht der Kinder). */
+  async membershipsOf(userId: string): Promise<{ orgId: string; slug: string; name: string; status: "active" | "pending" }[]> {
+    const rows = await this.db
+      .select({ orgId: organizations.id, slug: organizations.slug, name: organizations.name, status: orgMembers.status })
+      .from(orgMembers)
+      .innerJoin(organizations, eq(organizations.id, orgMembers.orgId))
+      .where(eq(orgMembers.userId, userId))
+      .orderBy(organizations.name)
+      .limit(50);
+    return rows.map((r) => ({ ...r, status: r.status === "active" ? "active" : "pending" }));
   }
 
   /** Aus den uebergebenen IDs nur die aktiven Mitglieder des Vereins. */
@@ -511,6 +535,13 @@ export class OrgsService {
       .from(orgMembers)
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active"), inArray(orgMembers.userId, ids)));
     return rows.map((r) => r.userId);
+  }
+
+  /** Wie `activeMemberIds`, aber ohne Jugendkonten (Chat: Chat fuer Jugendkonten ist zunaechst aus). */
+  async chatEligibleMemberIds(orgId: string, ids: string[]): Promise<string[]> {
+    const active = await this.activeMemberIds(orgId, ids);
+    const youth = await this.youth.youthIds(active);
+    return active.filter((id) => !youth.has(id));
   }
 
   async slugOf(orgId: string): Promise<string | null> {

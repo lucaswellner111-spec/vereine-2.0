@@ -30,6 +30,7 @@ import { SuppressionsService } from "../mail/suppressions.service";
 import { ago, RETENTION } from "../common/retention";
 import { WaitlistService } from "../waitlist/waitlist.service";
 import { AvvService } from "../avv/avv.service";
+import { GuardianService } from "../guardian/guardian.service";
 
 /** Nach dieser Zeit schliesst der Job `privacy.erase-pending` abgebrochene Kontoloeschungen ab. */
 const ERASE_GRACE_MS = 15 * 60_000;
@@ -65,6 +66,7 @@ export class PrivacyService implements OnModuleInit {
     @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
     @Inject(WaitlistService) private readonly waitlist: WaitlistService,
     @Inject(AvvService) private readonly avv: AvvService,
+    @Inject(GuardianService) private readonly guardians: GuardianService,
   ) {}
 
   onModuleInit() {
@@ -143,6 +145,7 @@ export class PrivacyService implements OnModuleInit {
       mailSuppressions: await this.suppressions.exportFor(user.email),
       waitlist: await this.waitlist.exportFor(user.email),
       avvAcceptances: await this.avv.exportFor(user.id), // Zustimmungen zum AVV, die diese Person fuer Vereine abgegeben hat
+      guardianship: await this.guardians.exportFor(user.id), // Kinder (Jugendkonten) und erteilte Freigaben dieser Person als Elternteil
       consents: consentHistory.map((c) => ({
         purpose: c.purpose,
         granted: c.granted,
@@ -205,6 +208,46 @@ export class PrivacyService implements OnModuleInit {
   }
 
   /**
+   * Auskunft zum Jugendkonto (Art. 15/20) durch einen Elternteil: dieselben Bereiche wie beim Erwachsenenkonto, aber ohne
+   * die interne Platzhalter-Adresse, dazu Stammdaten und Freigaben des Kindes.
+   */
+  async exportChild(guardian: PublicUser, childId: string) {
+    const child = await this.guardians.childForPrivacy(guardian.id, childId);
+    const data = await this.exportData(child);
+    const youth = await this.guardians.exportChild(guardian.id, childId);
+    await this.guardians.auditExported(guardian.id, childId);
+    return {
+      ...data,
+      profile: { id: youth.account.id, displayName: youth.account.displayName, createdAt: youth.account.createdAt },
+      youth,
+      invoicesForChild: await this.billing.exportForSubject(childId),
+    };
+  }
+
+  /** Loeschung eines Jugendkontos durch einen Elternteil (Passwort des Elternteils); danach wie bei der Kontoloeschung. */
+  async deleteChild(guardian: PublicUser, childId: string, password: string): Promise<void> {
+    if (!(await this.auth.verifyPassword(guardian.id, password))) throw new ForbiddenException("Passwort ist falsch.");
+    const child = await this.guardians.childForPrivacy(guardian.id, childId);
+    await this.guardians.auditDeleted(guardian.id, childId);
+    await this.auth.beginAccountDeletion(child.id);
+    try {
+      await this.eraseEverything(child.id);
+    } catch {
+      this.log.error("Loeschung eines Jugendkontos unvollstaendig, wird vom Job privacy.erase-pending abgeschlossen.");
+    }
+  }
+
+  /** Loeschfrist: Jugendkonten ohne Elternteil seit 30 Tagen (Job privacy.retention). */
+  async eraseOrphanedYouth(): Promise<number> {
+    const ids = await this.guardians.orphanedForDeletion();
+    for (const id of ids) {
+      await this.auth.beginAccountDeletion(id);
+      await this.eraseEverything(id);
+    }
+    return ids.length;
+  }
+
+  /**
    * Alle Daten des (bereits gesperrten) Kontos loeschen. Idempotent, darf mehrfach laufen. Vereine, deren einziges
    * aktives Mitglied die Person ist, werden mitgeloescht (Variante A; finalisierte Rechnungen bleiben erhalten).
    */
@@ -212,6 +255,7 @@ export class PrivacyService implements OnModuleInit {
     const [account] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
     if (account) await this.suppressions.eraseFor(account.email); // Bounce-Sperren der Kontoadresse (Abmeldungen bleiben)
     if (account) await this.waitlist.eraseFor(account.email); // Warteliste-Eintrag mit der Kontoadresse
+    await this.guardians.eraseUser(userId); // Elternschaft/Freigaben entkoppeln, Nachweise des Kindes pseudonym aufbewahren
     await this.chat.eraseUser(userId);
     await this.members.eraseUser(userId); // Mitgliederstammdaten in allen Vereinen
     await this.billing.anonymizeRecipient(userId); // Rechnungen bleiben (GoBD), aber ohne Personenbezug
