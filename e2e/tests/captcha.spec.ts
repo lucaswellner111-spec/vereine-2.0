@@ -71,7 +71,7 @@ test("Mitgliedsantrag gelingt unsichtbar", async ({ page, newContext }, info) =>
   // Vorbedingung: Verein anlegen (Konto per API, mit geloester Aufgabe)
   const owner = await newContext();
   const signup = async (request: APIRequestContext, name: string) => {
-    const email = `${unique(name.toLowerCase(), info)}@example.de`;
+    const email = `${unique(name.toLowerCase().replace(/\s/g, ""), info)}@example.de`;
     const reg = await request.post("/api/auth/register", {
       headers: { "x-captcha": await solveHeader(request) },
       data: { email, password: PASSWORD, displayName: name, confirmAge16: true, acceptTerms: true, acceptPrivacy: true },

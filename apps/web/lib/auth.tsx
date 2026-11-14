@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setUser]);
 
   const register = useCallback(async (input: RegisterInput) => {
-    await api("/auth/register", { method: "POST", body: input });
+    await api("/auth/register", { method: "POST", body: input, captcha: true });
   }, []);
 
   const refresh = useCallback(async () => {
