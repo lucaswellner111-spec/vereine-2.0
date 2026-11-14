@@ -55,7 +55,7 @@ export default function UnsubscribePage() {
           <Button onClick={confirm} busy={busy} disabled={!token} className="w-full">Abbestellen</Button>
         </>
       )}
-      <Link href="/" className="block text-center text-sm font-medium text-brand hover:underline">Zur Startseite</Link>
+      <Link href="/" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Startseite</Link>
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function WaitlistRemovePage() {
           <Button variant="danger" onClick={remove} busy={busy} disabled={!token} className="w-full">Austragen und löschen</Button>
         </>
       )}
-      <Link href="/" className="block text-center text-sm font-medium text-brand hover:underline">Zur Startseite</Link>
+      <Link href="/" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Startseite</Link>
     </div>
   );
 }

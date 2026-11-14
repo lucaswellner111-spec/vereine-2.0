@@ -34,7 +34,7 @@ export default function ForgotPasswordPage() {
         <p className="text-sm text-muted">
           Wenn es ein Konto mit <span className="font-medium text-text">{email.trim()}</span> gibt, bekommst du gleich eine E-Mail mit einem Link. Er ist eine Stunde gültig und funktioniert nur einmal.
         </p>
-        <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline">Zur Anmeldung</Link>
+        <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Anmeldung</Link>
       </div>
     );
   }
@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
       <CaptchaNote />
       <Button type="submit" busy={busy} className="w-full">Link anfordern</Button>
       <p className="text-center text-sm text-muted">
-        <Link href="/login" className="font-medium text-brand hover:underline">Zurück zur Anmeldung</Link>
+        <Link href="/login" className="touch-link font-medium text-brand hover:underline">Zurück zur Anmeldung</Link>
       </p>
     </form>
   );

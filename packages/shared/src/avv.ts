@@ -3,9 +3,9 @@ import { z } from "zod";
 /**
  * Vertrag zur Auftragsverarbeitung (AVV, Art. 28 DSGVO) zwischen Verein (Verantwortlicher) und Betreiber (Auftragsverarbeiter).
  *
- * ENTWURF: Die aktuelle Fassung (A1) ist ein vollstaendiger Vertragstext, aber noch nicht anwaltlich geprueft
- * (status "draft"). Die Freigabe durch Anwalt/Datenschutzbeauftragte:n setzt "final" und erhoeht die Version
- * (docs/DATENSCHUTZ-LAUNCH.md, docs/OFFENE-PUNKTE.md). Gebaut ist die Mechanik: Version, Hash, Akzeptanz, Durchsetzung.
+ * Der Text ist ein vollstaendiger Vertragstext, aber NICHT als rechtlich geprueft zu bezeichnen (die Pruefung steht aus,
+ * docs/DATENSCHUTZ-LAUNCH.md, docs/OFFENE-PUNKTE.md). Die aktuelle Fassung (status "published") traegt keinen Entwurfshinweis.
+ * Gebaut ist die Mechanik: Version, Hash, Akzeptanz, Durchsetzung.
  *
  * REGEL: Jede inhaltliche Aenderung am Text erhoeht `version`. Der Test `avv/avv-document.spec.ts` haelt je Version den
  * SHA-256-Hash des gerenderten Textes fest und schlaegt fehl, wenn sich Text und Version nicht entsprechen.
@@ -14,8 +14,11 @@ import { z } from "zod";
 export type AvvSection = { heading: string; paragraphs: string[] };
 export type AvvDocument = {
   version: string;
-  /** "draft" = Platzhalter ohne Anwaltspruefung; "final" erst nach Freigabe durch Anwalt/DSB. */
-  status: "draft" | "final";
+  /**
+   * "draft" = als Entwurf gekennzeichnet (Fassungen 1 und 2, der Hinweis steckt im Hash); "published" = ohne
+   * Entwurfshinweis veroeffentlicht (sagt nichts ueber eine Pruefung); "final" bleibt einer spaeteren ausdruecklichen Freigabe vorbehalten.
+   */
+  status: "draft" | "published" | "final";
   title: string;
   /** Veroeffentlichungstag (Berliner Datum); Beginn der Uebergangsfrist fuer Vereine mit aelterer Version. */
   publishedAt: string;
@@ -106,7 +109,7 @@ export const AVV_DOCUMENT_V1: AvvDocument = {
  * Unterauftragsverarbeiter. Status bleibt "draft", bis Anwalt/DSB den Text freigegeben haben.
  * Inhaltliche Quelle: docs/DATENSCHUTZ-LAUNCH.md, docs/TOM.md, docs/VVT.md.
  */
-export const AVV_DOCUMENT: AvvDocument = {
+export const AVV_DOCUMENT_V2: AvvDocument = {
   version: "2026-11-14-entwurf-2",
   status: "draft",
   title: "Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO)",
@@ -253,12 +256,32 @@ export const AVV_DOCUMENT: AvvDocument = {
   ],
 };
 
+/**
+ * Dritte Fassung (D1): derselbe Vertragstext wie Fassung 2, aber ohne Entwurfshinweis im Kopf des Dokuments
+ * (neutral "Fassung vom <Datum>"). Die Abschnitte sind bewusst dieselben Objekte wie in Fassung 2; neue Version, weil sich
+ * der gerenderte Text (und damit der Hash) aendert. Fassungen 1 und 2 bleiben unveraendert abrufbar.
+ * NICHT als rechtlich geprueft bezeichnen: die Pruefung steht aus.
+ */
+export const AVV_DOCUMENT: AvvDocument = {
+  ...AVV_DOCUMENT_V2,
+  version: "2026-11-14-fassung-3",
+  status: "published",
+};
+
 /** Alle bekannten Fassungen (neueste zuletzt). Aeltere Fassungen bleiben erhalten, damit akzeptierte Texte abrufbar sind. */
-export const AVV_VERSIONS: AvvDocument[] = [AVV_DOCUMENT_V1, AVV_DOCUMENT];
+export const AVV_VERSIONS: AvvDocument[] = [AVV_DOCUMENT_V1, AVV_DOCUMENT_V2, AVV_DOCUMENT];
+
+/** "2026-11-14" -> "14.11.2026" */
+export function avvDateDe(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}.${m}.${y}` : iso;
+}
 
 /** Kanonischer Text (Markdown) einer Fassung; Grundlage fuer Hash und Download. Aenderungen hier aendern alle Hashes! */
 export function avvToMarkdown(doc: AvvDocument): string {
-  const lines: string[] = [`# ${doc.title}`, "", `Fassung: ${doc.version} (${doc.status === "draft" ? "ENTWURF" : "final"}), Stand ${doc.publishedAt}`];
+  const lines: string[] = [`# ${doc.title}`, ""];
+  if (doc.status === "published") lines.push(`Fassung vom ${avvDateDe(doc.publishedAt)} (Version ${doc.version})`);
+  else lines.push(`Fassung: ${doc.version} (${doc.status === "draft" ? "ENTWURF" : "final"}), Stand ${doc.publishedAt}`);
   if (doc.status === "draft") lines.push("", `> ${AVV_DRAFT_NOTICE}`);
   for (const s of doc.sections) {
     lines.push("", `## ${s.heading}`);
@@ -280,7 +303,7 @@ export type AvvAcceptanceInfo = {
 export type AvvStatus = {
   /** Wird die Zustimmung serverseitig erzwungen (AVV_REQUIRED)? */
   required: boolean;
-  current: { version: string; textHash: string; status: "draft" | "final"; title: string; publishedAt: string };
+  current: { version: string; textHash: string; status: "draft" | "published" | "final"; title: string; publishedAt: string };
   /** Neueste Zustimmung des Vereins (auch fuer aeltere Fassungen). */
   accepted: AvvAcceptanceInfo | null;
   /** Aktuelle Fassung zugestimmt? */

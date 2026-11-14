@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { Building2, CalendarDays, ChevronDown, Flag, Search, LayoutDashboard, LogOut, Menu, MessageSquare, Newspaper, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PublicUser } from "@vereine/shared";
 import { useAuth } from "@/lib/auth";
 import { ChatProvider, useChat } from "@/lib/chat";
@@ -214,6 +214,11 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const moreActive = MORE_PREFIXES.some(isActive);
+  // Lange Untermenues (Verwaltung): den aktiven Eintrag in der scrollbaren Leiste sichtbar halten
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest" });
+  }, [pathname]);
   const doLogout = () => {
     setMoreOpen(false);
     void logout().then(() => router.replace("/login"));
@@ -236,7 +241,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
           <span className="flex-1 text-left">Suchen …</span>
           <kbd className="rounded border border-border px-1.5 text-[11px]">Strg K</kbd>
         </button>
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Hauptnavigation">
+        <nav ref={navRef} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pb-2" aria-label="Hauptnavigation">
           {items.map((item) =>
             item.href === "/verwaltung" ? (
               <VerwaltungNav key={item.href} item={item} active={isActive(item.href)} pathname={pathname} />
@@ -257,8 +262,8 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             items={SETTINGS_ITEMS}
           />
         </nav>
-        <ThemeToggle compact className="mb-3 self-start" />
-        <div className="rounded-2xl border border-border/70 p-2">
+        <ThemeToggle compact className="mb-3 mt-1 shrink-0 self-start" />
+        <div className="shrink-0 rounded-2xl border border-border/70 p-2">
           <Link
             href={profileHref}
             aria-current={pathname === profileHref ? "page" : undefined}
@@ -288,7 +293,9 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             <Search size={20} aria-hidden />
           </button>
           <NotificationBell />
-          <Link href={profileHref} aria-label="Mein Profil" className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+          <Link href={profileHref} className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-surface-2">
+            {/* Name ohne aria-label: sonst Verstoss gegen "Label in Name" (WCAG 2.5.3), weil die Initialen sichtbar sind */}
+            <span className="sr-only">Mein Profil</span>
             <Avatar name={user.displayName} size={30} mediaId={avatarId} />
           </Link>
         </div>

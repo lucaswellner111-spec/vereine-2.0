@@ -15,9 +15,9 @@ type Size = "sm" | "md";
 
 export function buttonClasses({ variant = "primary", size = "md" }: { variant?: Variant; size?: Size } = {}) {
   return clsx(
-    "press inline-flex items-center justify-center gap-2 rounded-full font-semibold disabled:cursor-not-allowed disabled:opacity-50",
-    // sm bei Touch etwas hoeher (40 px), Desktop-Optik unveraendert
-    size === "md" ? "h-10 px-4 text-sm" : "h-9 px-3 text-xs pointer-coarse:h-10",
+    "press inline-flex items-center justify-center gap-2 rounded-full font-semibold disabled:cursor-not-allowed disabled:opacity-60",
+    // bei Touch immer 44 px (WCAG 2.5.8 / Apple HIG), Desktop-Optik unveraendert
+    size === "md" ? "h-10 px-4 text-sm pointer-coarse:h-11" : "h-9 px-3 text-xs pointer-coarse:h-11",
     variant === "primary" && "bg-brand bg-brand-grad text-brand-contrast shadow-glow hover:brightness-110",
     variant === "secondary" && "border border-border bg-surface text-text shadow-card hover:bg-surface-2",
     variant === "ghost" && "text-muted hover:bg-surface-2 hover:text-text",
@@ -77,7 +77,7 @@ export function BackLink({ href, children, className }: { href: string; children
 
 export function ArrowLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
-    <Link href={href} className={clsx("inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline", className)}>
+    <Link href={href} className={clsx("inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline pointer-coarse:min-h-11", className)}>
       {children}
       <ArrowRight size={14} aria-hidden />
     </Link>
@@ -96,7 +96,7 @@ export function Input({ size = "md", invalid, className, ...props }: Omit<Compon
     <input
       aria-invalid={invalid ? "true" : undefined}
       {...props}
-      className={clsx(controlBase, size === "md" ? "h-10" : "h-9 pointer-coarse:h-10", className)}
+      className={clsx(controlBase, size === "md" ? "h-10 pointer-coarse:h-11" : "h-9 pointer-coarse:h-11", className)}
     />
   );
 }
@@ -106,7 +106,7 @@ export function Select({ size = "md", invalid, className, ...props }: Omit<Compo
     <select
       aria-invalid={invalid ? "true" : undefined}
       {...props}
-      className={clsx(controlBase, size === "md" ? "h-10" : "h-9 pointer-coarse:h-10", className)}
+      className={clsx(controlBase, size === "md" ? "h-10 pointer-coarse:h-11" : "h-9 pointer-coarse:h-11", className)}
     />
   );
 }

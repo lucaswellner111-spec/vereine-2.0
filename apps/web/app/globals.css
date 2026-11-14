@@ -205,6 +205,15 @@ body {
 }
 
 /* Trefferflaeche mind. 44x44 px bei Touch, ohne Optik zu aendern. Element braucht position. */
+/* Alleinstehender Textlink: am Handy mindestens 44 px hoch (WCAG 2.5.8), Desktop-Optik unveraendert */
+@utility touch-link {
+  @media (pointer: coarse) {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
 @utility hit-area {
   @media (pointer: coarse) {
     &::after {

@@ -27,7 +27,7 @@ const vibes = ["⚽ Fußball", "🎶 Chor", "🚒 Feuerwehr", "🤸 Turnen", "�
 const cta =
   "press inline-flex h-12 items-center rounded-full bg-brand bg-brand-grad px-7 text-[0.9375rem] font-bold text-brand-contrast shadow-glow hover:brightness-110";
 
-const planned = ["Spenden mit Zuwendungsbestätigung", "E-Mail-Benachrichtigungen", "Beitragseinzug per Lastschrift"];
+const planned = ["Spenden mit Zuwendungsbestätigung", "Sofort-Mails zu einzelnen Ereignissen (die tägliche Sammelmail gibt es schon)", "Beitragseinzug per Lastschrift"];
 
 export default function HomePage() {
   return (

@@ -408,7 +408,7 @@ export function SegmentedControl<T extends string>({
       role={tabs ? "tablist" : "radiogroup"}
       aria-label={ariaLabel}
       className={clsx(
-        variant === "segmented" ? "inline-flex h-10 items-center gap-0.5 rounded-xl bg-surface-2 p-1" : "flex flex-wrap gap-2",
+        variant === "segmented" ? "inline-flex h-10 items-center gap-0.5 rounded-xl bg-surface-2 p-1 pointer-coarse:h-[3.25rem]" : "flex flex-wrap gap-2",
         fullWidth && "flex w-full",
         className,
       )}
@@ -434,7 +434,7 @@ export function SegmentedControl<T extends string>({
             onKeyDown={(e) => onKeyDown(e, i)}
             className={clsx(
               "press inline-flex items-center justify-center gap-1.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50",
-              variant === "segmented" ? "h-8 rounded-[0.5rem] px-3.5" : "h-9 rounded-full px-4",
+              variant === "segmented" ? "h-8 rounded-[0.5rem] px-3.5 pointer-coarse:h-11" : "h-9 rounded-full px-4 pointer-coarse:h-11",
               fullWidth && "flex-1",
               selected
                 ? variant === "segmented"

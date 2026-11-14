@@ -10,6 +10,8 @@ import { avvGraceUntil, avvHash } from "./avv.service";
 const PINNED: Record<string, string> = {
   "2026-11-13-entwurf-1": "92ab91f5fa2330ed34f591a04db2e6801ae6488072124cbfcca9bfd2f7dd8e19",
   "2026-11-14-entwurf-2": "27a0a3d694c1764f1f48ed621f58baf7fc3d3e02c2399ae1d506ed094a2118d8",
+  // D1: derselbe Text ohne Entwurfshinweis im Kopf ("Fassung vom 14.11.2026"); Fassungen 1 und 2 bleiben unveraendert
+  "2026-11-14-fassung-3": "722b98c79a73990bca5d5b24c3cbeea73638689c425a2c658df19731605ad639",
 };
 
 describe("AVV-Dokument", () => {
@@ -17,11 +19,14 @@ describe("AVV-Dokument", () => {
     for (const doc of AVV_VERSIONS) expect(avvHash(doc), `Hash der Fassung ${doc.version}`).toBe(PINNED[doc.version]);
   });
 
-  it("aktuelle Fassung ist die letzte Version, hat eindeutige Versionsnummern und ist als Entwurf gekennzeichnet", () => {
+  it("aktuelle Fassung ist die letzte Version, hat eindeutige Versionsnummern und traegt keinen Entwurfshinweis", () => {
     expect(AVV_VERSIONS.at(-1)).toBe(AVV_DOCUMENT);
     expect(new Set(AVV_VERSIONS.map((d) => d.version)).size).toBe(AVV_VERSIONS.length);
     const md = avvToMarkdown(AVV_DOCUMENT);
-    if (AVV_DOCUMENT.status === "draft") expect(md).toMatch(/Platzhalter, Anwaltsprüfung ausstehend/);
+    expect(md).not.toMatch(/ENTWURF|Platzhalter|Anwaltsprüfung/);
+    expect(md).toContain("Fassung vom 14.11.2026");
+    // alte Fassungen behalten ihren Hinweis (ihr Hash haengt daran)
+    expect(avvToMarkdown(AVV_VERSIONS[1])).toMatch(/Platzhalter, Anwaltsprüfung ausstehend/);
   });
 
   it("enthaelt die geforderten Abschnitte inkl. Unterauftragsverarbeitern", () => {
@@ -32,12 +37,12 @@ describe("AVV-Dokument", () => {
   });
 
   it("alte Fassung bleibt abrufbar und die neue hat TOM-Anhang und Unterauftragsverarbeiter-Liste", () => {
-    expect(AVV_VERSIONS.map((d) => d.version)).toEqual(["2026-11-13-entwurf-1", "2026-11-14-entwurf-2"]);
+    expect(AVV_VERSIONS.map((d) => d.version)).toEqual(["2026-11-13-entwurf-1", "2026-11-14-entwurf-2", "2026-11-14-fassung-3"]);
     const md = avvToMarkdown(AVV_DOCUMENT);
     for (const part of ["Anhang 1: Technische und organisatorische Maßnahmen", "Anhang 2: Unterauftragsverarbeiter", "Hetzner Online GmbH", "Scaleway SAS", "Art. 28", "Meldung von Datenschutzverletzungen"]) {
       expect(md, part).toContain(part);
     }
-    expect(AVV_DOCUMENT.status).toBe("draft");
+    expect(AVV_DOCUMENT.status).toBe("published");
   });
 
   it("Uebergangsfrist beginnt nach der Veroeffentlichung", () => {

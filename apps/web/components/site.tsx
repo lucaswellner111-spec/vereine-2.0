@@ -5,7 +5,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 export function Logo({ className }: { className?: string }) {
   return (
-    <Link href="/" className={`inline-flex items-center gap-2 font-extrabold tracking-[-0.02em] ${className ?? ""}`}>
+    <Link href="/" className={`inline-flex min-h-11 items-center gap-2 font-extrabold tracking-[-0.02em] ${className ?? ""}`}>
       <span aria-hidden className="relative inline-flex h-8 w-8 -rotate-6 items-center justify-center rounded-[0.625rem] bg-brand bg-brand-grad text-[15px] font-black text-brand-contrast shadow-glow">
         K
         <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-pop ring-2 ring-surface" />
@@ -29,10 +29,10 @@ export function SiteHeader() {
           <div className="mr-1 hidden sm:block">
             <ThemeToggle compact />
           </div>
-          <Link href="/login" className="press inline-flex h-10 items-center rounded-full px-3 font-medium text-muted hover:bg-surface-2 hover:text-text">
+          <Link href="/login" className="press inline-flex h-10 items-center pointer-coarse:h-11 rounded-full px-3 font-medium text-muted hover:bg-surface-2 hover:text-text">
             Anmelden
           </Link>
-          <Link href="/registrieren" className="press inline-flex h-10 items-center rounded-full bg-brand bg-brand-grad px-4 font-semibold text-brand-contrast shadow-glow hover:brightness-110">
+          <Link href="/registrieren" className="press inline-flex h-10 items-center pointer-coarse:h-11 rounded-full bg-brand bg-brand-grad px-4 font-semibold text-brand-contrast shadow-glow hover:brightness-110">
             Registrieren
           </Link>
         </nav>

@@ -13,13 +13,73 @@ export class ApiError extends Error {
 /** captcha: vor dem Senden die Sicherheitspruefung (Proof-of-Work) loesen und als Header mitschicken, sofern der Server sie verlangt. */
 type Options = { method?: string; body?: unknown; signal?: AbortSignal; captcha?: boolean };
 
+/*
+ * Gleichzeitige identische GET-Anfragen teilen sich eine Antwort: mehrere Bausteine einer Seite (Glocke, Hub,
+ * Checkliste, Seitenkopf ...) fragen oft dieselbe Ressource im selben Augenblick ab. Der Eintrag lebt nur, solange die
+ * Anfrage laeuft (kein Cache, keine veralteten Daten). Der Abbruch (signal) gilt je Aufrufer: er beendet nur dessen
+ * Warten, die gemeinsame Anfrage laeuft weiter.
+ */
+type Shared = { response: Promise<Response>; controller: AbortController; refs: number };
+const inflight = new Map<string, Shared>();
+
+function abortError() {
+  return new DOMException("Aborted", "AbortError");
+}
+
+function sharedGet(url: string, signal?: AbortSignal): Promise<Response> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  let entry = inflight.get(url);
+  if (!entry) {
+    const controller = new AbortController();
+    const created: Shared = { response: fetch(url, { method: "GET", credentials: "same-origin", signal: controller.signal }), controller, refs: 0 };
+    entry = created;
+    inflight.set(url, created);
+    const clear = () => {
+      if (inflight.get(url) === created) inflight.delete(url);
+    };
+    created.response.then(clear, clear);
+  }
+  const current = entry;
+  current.refs += 1;
+  return new Promise<Response>((resolve, reject) => {
+    let finished = false;
+    const onAbort = () => {
+      if (finished) return;
+      finished = true;
+      // Erst wenn kein Aufrufer mehr wartet, wird die gemeinsame Anfrage wirklich abgebrochen
+      current.refs -= 1;
+      if (current.refs <= 0) {
+        if (inflight.get(url) === current) inflight.delete(url);
+        current.controller.abort();
+      }
+      reject(abortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    current.response.then(
+      // Jeder Aufrufer bekommt eine eigene Kopie, damit der Koerper mehrfach gelesen werden kann
+      (r) => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener("abort", onAbort);
+        resolve(r.clone());
+      },
+      (e) => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** Duenner Fetch-Wrapper. Alle Aufrufe gehen same-origin an /api (Caddy bzw. Next-Rewrite -> NestJS). */
 export async function api<T = void>(path: string, { method = "GET", body, signal, captcha }: Options = {}): Promise<T> {
   const token = captcha ? await captchaToken(signal) : null;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["content-type"] = "application/json";
   if (token) headers[CAPTCHA_HEADER] = token;
-  const res = await fetch(`/api${path}`, {
+  const res = method === "GET" && !token ? await sharedGet(`/api${path}`, signal) : await fetch(`/api${path}`, {
     method,
     signal,
     credentials: "same-origin",

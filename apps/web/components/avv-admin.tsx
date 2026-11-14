@@ -63,7 +63,7 @@ export function AvvAdmin({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-4">
-      {draft && <Alert tone="info"><strong>{AVV_DRAFT_NOTICE}</strong> Bis der geprüfte Text vorliegt, gilt deine Zustimmung nur für diese Fassung; bei einer neuen Fassung wirst du erneut gefragt.</Alert>}
+      {draft && <Alert tone="info"><strong>{AVV_DRAFT_NOTICE}</strong> Deine Zustimmung gilt nur für diese Fassung; bei einer neuen Fassung wirst du erneut gefragt.</Alert>}
 
       <Card>
         <div className="flex flex-wrap items-center gap-2">
@@ -90,7 +90,7 @@ export function AvvAdmin({ slug }: { slug: string }) {
 
       <Card>
         <h2 className="font-semibold">{AVV_DOCUMENT.title}</h2>
-        <p className="mt-0.5 text-xs text-muted">Fassung {AVV_DOCUMENT.version} · Stand {dayDe(AVV_DOCUMENT.publishedAt)}</p>
+        <p className="mt-0.5 text-xs text-muted">Fassung vom {dayDe(AVV_DOCUMENT.publishedAt)}</p>
         {/* Scrollbarer Bereich ist per Tastatur erreichbar (tabIndex) und benannt */}
         <div tabIndex={0} role="region" aria-label="Text des Vertrags zur Auftragsverarbeitung" className="mt-3 max-h-[28rem] space-y-4 overflow-y-auto rounded-lg border border-border/70 p-3 text-sm focus-visible:outline-2">
           {AVV_DOCUMENT.sections.map((sec) => (

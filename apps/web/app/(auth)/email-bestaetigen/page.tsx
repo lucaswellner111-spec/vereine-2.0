@@ -55,13 +55,13 @@ export default function ConfirmEmailPage() {
           <p className="text-sm text-muted">
             Links aus unseren Mails gelten nur kurz und nur einmal. Registriere dich einfach erneut oder fordere in den Einstellungen einen neuen Link an.
           </p>
-          <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline">Zur Anmeldung</Link>
+          <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Zur Anmeldung</Link>
         </>
       )}
       {state.kind === "done" && (
         <>
           <Alert tone="success">{state.changed ? "Deine neue E-Mail-Adresse ist bestätigt und gilt ab sofort." : "Deine E-Mail-Adresse ist bestätigt."}</Alert>
-          <Link href={user ? "/feed" : "/login"} className="block text-center text-sm font-medium text-brand hover:underline">
+          <Link href={user ? "/feed" : "/login"} className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">
             {user ? "Weiter zu Klubnest" : "Zur Anmeldung"}
           </Link>
         </>

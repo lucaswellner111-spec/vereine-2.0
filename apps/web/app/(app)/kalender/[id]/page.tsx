@@ -121,29 +121,29 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         />
 
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="flex gap-3">
-            <Clock size={18} aria-hidden className="mt-0.5 shrink-0 text-muted" />
-            <div>
-              <dt className="sr-only">Wann</dt>
-              <dd>
+          <div>
+            <dt className="sr-only">Wann</dt>
+            <dd className="flex gap-3">
+              <Clock size={18} aria-hidden className="mt-0.5 shrink-0 text-muted" />
+              <div>
                 <span className="block font-medium capitalize">{dateFmt.format(start)}</span>
                 <span className="text-muted">{timeFmt.format(start)}{end && ` – ${timeFmt.format(end)}`} Uhr</span>
-              </dd>
-            </div>
+              </div>
+            </dd>
           </div>
           {event.location && (
-            <div className="flex gap-3">
-              <MapPin size={18} aria-hidden className="mt-0.5 shrink-0 text-muted" />
-              <div>
-                <dt className="sr-only">Wo</dt>
-                <dd>
+            <div>
+              <dt className="sr-only">Wo</dt>
+              <dd className="flex gap-3">
+                <MapPin size={18} aria-hidden className="mt-0.5 shrink-0 text-muted" />
+                <div>
                   <span className="block font-medium">{event.location}</span>
-                  <a href={mapUrl(event.location)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center gap-1 text-brand hover:underline">
+                  <a href={mapUrl(event.location)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 text-brand hover:underline">
                     Auf Karte öffnen <ExternalLink size={12} aria-hidden />
                     <span className="sr-only">(OpenStreetMap, neues Fenster)</span>
                   </a>
-                </dd>
-              </div>
+                </div>
+              </dd>
             </div>
           )}
         </dl>
