@@ -365,6 +365,7 @@ export function PostCard({
                     src={mediaUrl(m.id, post.media.length === 1 ? "medium" : "thumb")}
                     alt={`Bild ${i + 1} des Beitrags`}
                     loading="lazy"
+                    decoding="async"
                     width={m.width}
                     height={m.height}
                     className={clsx("h-full w-full object-cover", post.media.length === 1 && "max-h-[32rem]")}

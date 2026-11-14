@@ -111,8 +111,19 @@
   --animate-sheet: sheet 320ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
   --animate-banner: banner 340ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
   --animate-heart: heart 700ms cubic-bezier(0.2, 0.9, 0.25, 1) forwards;
+  --animate-fade: fade 200ms ease-out backwards;
+  /* Lade-Platzhalter erst nach 150 ms einblenden: kurze Ladezeiten flackern nicht */
+  --animate-skel: skel 200ms ease-out 150ms backwards;
   --animate-shimmer: shimmer 1.4s ease-in-out infinite;
 
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes skel {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
   @keyframes rise {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: none; }
@@ -149,7 +160,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
+  /* Kein seitliches Mitziehen/Gummiband in Safari */
+  overscroll-behavior-x: none;
 }
+
+html {
+  /* iOS: Schrift beim Drehen nicht aufblasen */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Kein 300-ms-/Doppeltipp-Zoom auf Bedienelementen */
+a, button, summary, label, select, input, textarea, [role="button"], [role="tab"] {
+  touch-action: manipulation;
+}
+
+/* Umbrueche: Ueberschriften ausgewogen, Fliesstext ohne Einzelwort-Zeilen */
+h1, h2, h3 { text-wrap: balance; }
+p, li { text-wrap: pretty; }
 
 /* Marken-Verlauf (Waldgruen -> Smaragd); Text darauf: text-brand-contrast */
 @utility bg-brand-grad {
@@ -198,6 +226,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   * {
     animation: none !important;
     transition: none !important;

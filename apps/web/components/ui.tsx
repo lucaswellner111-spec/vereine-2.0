@@ -87,7 +87,7 @@ export function ArrowLink({ href, children, className }: { href: string; childre
 // ---------- Formular-Steuerelemente (ohne Standardbreite) ----------
 
 const controlBase =
-  "rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
+  "rounded-lg border border-border bg-surface px-3 text-sm pointer-coarse:text-base text-text placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
 
 type ControlExtra = { size?: Size; invalid?: boolean };
 
@@ -377,6 +377,7 @@ export function Avatar({
         width={size}
         height={size}
         loading="lazy"
+        decoding="async"
         className={clsx("shrink-0 bg-surface-2 object-cover", kind === "org" ? "rounded-xl" : "rounded-full")}
         style={{ width: size, height: size }}
       />
@@ -649,7 +650,7 @@ export function Skeleton({ className }: { className?: string }) {
 /** Zeilen-Platzhalter fuer einfache Listen und Tabellen. */
 export function ListSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
   return (
-    <div role="status" aria-label="Lade" className={clsx("space-y-2", className)}>
+    <div role="status" aria-label="Lade" className={clsx("animate-skel space-y-2", className)}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="flex items-center gap-3 rounded-xl border border-border/70 bg-surface px-3 py-2.5">
           <Skeleton className="h-8 w-8 rounded-full" />
@@ -667,7 +668,7 @@ export function ListSkeleton({ rows = 4, className }: { rows?: number; className
 /** Liste von Karten-Platzhaltern (Feed, Vereine, Termine). */
 export function CardSkeletons({ count = 3, media = false }: { count?: number; media?: boolean }) {
   return (
-    <div role="status" aria-label="Lade" className="space-y-4">
+    <div role="status" aria-label="Lade" className="animate-skel space-y-4">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="rounded-2xl border border-border/70 bg-surface p-4 shadow-card">
           <div className="flex items-center gap-3">

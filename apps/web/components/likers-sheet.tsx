@@ -43,7 +43,7 @@ export function LikersSheet({ postId, open, onClose }: { postId: string; open: b
       {items === null && !error && <p role="status" className="py-6 text-center text-sm text-muted">Lade …</p>}
       {items?.length === 0 && !cursor && <p className="py-6 text-center text-sm text-muted">Noch keine Likes, deren Profil du sehen darfst.</p>}
       {items && items.length > 0 && (
-        <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto overscroll-contain">
+        <ul className="max-h-[60dvh] divide-y divide-border overflow-y-auto overscroll-contain">
           {items.map((p) => (
             <li key={p.id} className="flex items-center gap-3 py-2.5">
               <UserAvatarLink handle={p.handle} name={p.name} mediaId={p.avatarId} size={40} />

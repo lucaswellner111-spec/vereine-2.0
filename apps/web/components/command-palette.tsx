@@ -132,7 +132,7 @@ export function CommandPalette() {
             aria-controls="palette-list"
             aria-activedescendant={entries[index] ? `pal-${entries[index].id}` : undefined}
             placeholder="Seite, Verein oder Person suchen …"
-            className="h-12 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none placeholder:text-muted"
+            className="h-12 flex-1 bg-transparent text-base outline-none md:text-sm focus-visible:outline-none placeholder:text-muted"
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") (e.preventDefault(), setIndex((i) => Math.min(entries.length - 1, i + 1)));
               else if (e.key === "ArrowUp") (e.preventDefault(), setIndex((i) => Math.max(0, i - 1)));
