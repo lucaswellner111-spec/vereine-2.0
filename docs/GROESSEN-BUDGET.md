@@ -31,6 +31,15 @@ Die **Daten** sind nicht das Problem, sondern **Build-Reste und große Images**.
 6. **Alarm:** Platte > 80 % und Backup-Alter alarmieren bereits (Modul `ops`, Plattform-Karte). Zusätzlich Docker-Speicher (`docker system df`) in die Uptime-/Ops-Prüfung aufnehmen.
 7. **Code-Hygiene:** ungenutzte Abhängigkeiten und tote Dateien regelmäßig suchen (z. B. `npx depcheck`, `npx knip`), Duplikate in Komponenten zusammenführen.
 
-## Stand der Umsetzung
-- Erledigt: Build-Cache geleert (2026-11-14), Zahlen erfasst.
-- Offen: Punkte 1–4 und 6–7 (Paket E1 „Schlank“, noch nicht gestartet).
+## Stand der Umsetzung (Paket E1 „Schlank“, 2026-11-14)
+- Erledigt: Build-Cache geleert, Zahlen erfasst.
+- **Deploy-Aufräumen** (`infra/ops/deploy.sh`): nach erfolgreichem Smoke-Test `docker builder prune -f`, `docker image prune -f`, nur das neue und das vorige `vereine-api/web`-Tag bleiben (`KEEP_IMAGES`). Doku: `docs/BETRIEB.md`, Deploy-Ablauf Schritt 7.
+- **Alarm:** `uptime-check.sh` meldet, wenn `docker system df` über `UPTIME_DOCKER_MAX_GB` (15) liegt. Nicht auf dem Server ausgeführt.
+- **Bundle-Budget:** `apps/web/scripts/check-bundle.mjs` (`npm run check:bundle -w @vereine/web`, CI-Job `build`): Warnung > 170 KB gzip je Route oder `.next/static` > 3,5 MB, Fehler erst > 320 KB bzw. > 5 MB (`BUNDLE_STRICT=1` macht jede Überschreitung zum Fehler).
+- **Web-Image:** `output: "standalone"` (`next.config.ts`) plus Multi-Stage-Endimage. Lokal gemessen: `.next/standalone` 69 MB statt des vollen Wurzel-`node_modules` (590 MB) samt Quellen; Server startet mit `node apps/web/server.js`, liefert Seiten, CSP-Nonce-Header, `/_next/static`, `public/`, `sw.js`. Erwartet: Web-Image ca. 300 MB (Basis `node:22-slim` + 69 MB).
+- **API-/Worker-/Chat-Image:** eigene `deps`-Stufe mit `npm ci --omit=dev` (125 MB statt Voll-Installation inkl. vitest, pglite, drizzle-kit, tsx, swc); erwartet ca. 330–360 MB, Ziel < 350 MB knapp. Weitere Hebel falls nötig: `pdf-lib` (22 MB, mehrere Bundle-Varianten), Basis `node:22-slim` gegen `node:22-alpine` (sharp/argon2-Prebuilds für musl prüfen).
+- **.dockerignore:** schließt `.claude` (Worktrees), `e2e`, `docs`, `.github`, Build-Reste aus.
+- **Gemessen (lokaler Produktionsbuild, gzip, erstes Laden JS):** gemeinsamer Anteil 103 KB; öffentliche Seiten (Impressum, Hilfe, Vereinsseite, Finder, Warteliste) ca. 108 KB (im Budget); eingeloggte App-Routen 236–253 KB (alle 45 über 170 KB, Spitze Feed 253 KB, Verwaltung > Beiträge 251 KB); `.next/static` 2,28 MB (Budget 3,5 MB). Lighthouse nicht gelaufen (kein Chrome-Lauf eingerichtet), stattdessen diese Bundle-Zahlen.
+- **Ursache der App-Routen-Größe:** der Chunk `4897` (ca. 100 KB gzip) ist `@vereine/shared` samt Zod als CommonJS-Ausgabe: nicht tree-shakebar, deshalb landet das komplette Schema-Paket im Browser. Größter Einzelhebel (ca. −60 bis −90 KB je App-Route): `packages/shared` zusätzlich als ESM mit `sideEffects: false` bauen und im Web darauf zeigen (Folgeaufgabe, berührt API-Build, deshalb nicht in E1). QR (`qrcode`), Story-Teilen, Befehlspalette, Lightbox, Tag-Auswahl und Neuer Chat werden bereits dynamisch geladen.
+- **Code-Hygiene:** `depcheck` für web, api, shared: keine toten Abhängigkeiten (Funde `@tailwindcss/postcss`, `postcss`, `tailwindcss`, `@fontsource-variable/inter` sind Fehlalarme: CSS/Config/Schriftpfad; `@swc/core` ist Peer von `unplugin-swc`). Nichts entfernt.
+- **Auf dem Server zu prüfen:** `docker build` aller drei Dateien (api, web), Image-Größen (`docker image ls`), Start der Container samt `smoke.sh`, Migration beim API-Start, Chat-Gateway und Worker (gleiches Image), Bild-Upload (`sharp` unter Linux), PDF-Rechnung.
