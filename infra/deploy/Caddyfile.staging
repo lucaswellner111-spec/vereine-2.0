@@ -1,0 +1,70 @@
+# Staging: wie Produktion (Caddyfile.tls), aber nur fuer erlaubte IPs, nicht indexierbar, Testdaten.
+# Aktivieren: in .env.staging CADDY_FILE=Caddyfile.staging, DOMAIN=staging.<deine-domain>, STAGING_ALLOW_CIDR="<deine-IP>/32 ...",
+# COOKIE_SECURE=true, WEB_ORIGIN=https://staging.<deine-domain>, MAIL_DRIVER=log (nie echte Mails aus Staging).
+# Alle anderen IPs bekommen 403 (ausser /api/health/*, damit der Uptime-Check von aussen geht).
+# Lasttests (infra/loadtest) laufen NUR gegen diese Umgebung: die IP des Lastgenerators in STAGING_ALLOW_CIDR aufnehmen.
+# Die Besucher-IP ist hier die echte Socket-IP (kein Proxy davor, wie in Caddyfile.tls).
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 60s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+		-X-Powered-By
+	}
+}
+
+{$DOMAIN} {
+	import security
+	encode zstd gzip
+
+	request_body {
+		max_size 10MB
+	}
+
+	@health path /api/health /api/health/*
+	@denied not remote_ip {$STAGING_ALLOW_CIDR}
+	handle @health {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+	handle @denied {
+		respond "Staging: Zugriff nur fuer freigegebene Adressen." 403
+	}
+
+	handle /ws {
+		reverse_proxy chat-gateway:4100
+	}
+
+	@internal path /api/metrics /api/metrics/* /api/__dev /api/__dev/*
+	handle @internal {
+		respond 404
+	}
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Real-IP {client_ip}
+		}
+	}
+}

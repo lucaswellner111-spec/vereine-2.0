@@ -1,6 +1,14 @@
 # Vorschau auf EINEM Server, ohne Domain, per HTTP ueber die IP.
 # Nur zum Anschauen des Fortschritts - nicht fuer echte Nutzerdaten (kein TLS!).
 # Start: cd ~/vereine && docker compose -f infra/deploy/docker-compose.preview.yml --env-file .env.preview up -d --build
+# Image-Tags: IMAGE_TAG (Standard "local") wird von infra/ops/deploy.sh gesetzt; so ist ein Rollback ein anderes Tag.
+# Logs: Docker behaelt je Container hoechstens ~30 MB (3 x 10 MB), damit die Platte nicht vollaeuft (keine Personendaten in Logs).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -43,7 +51,9 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/api.Dockerfile
+    image: vereine-api:${IMAGE_TAG:-local}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
       API_PORT: "4000"
@@ -78,8 +88,13 @@ services:
       MAIL_MONTHLY_LIMIT: ${MAIL_MONTHLY_LIMIT:-}
       # Links in Mails (Bestaetigung, Passwort, Einladung) zeigen auf die Web-Adresse
       APP_URL: ${WEB_ORIGIN:-}
+      # Betriebsalarme (docs/BETRIEB.md): Mail an den Betreiber, Statusdatei der Sicherung (von backup.sh geschrieben)
+      OPERATOR_ALERT_EMAIL: ${OPERATOR_ALERT_EMAIL:-}
+      BACKUP_STATUS_FILE: /backup-status/status.json
+      OPS_DISK_PATH: /data/media
     volumes:
       - mediadata:/data/media
+      - ${BACKUP_STATUS_DIR:-/var/lib/vereine/status}:/backup-status:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -97,10 +112,9 @@ services:
   # Hintergrund-Worker (BullMQ): Erinnerungen, Aufraeumen, Massen-Benachrichtigungen.
   # Gleiches Image wie die API, anderer Startbefehl. Kann spaeter auf einen eigenen Server ziehen.
   worker:
-    build:
-      context: ../..
-      dockerfile: infra/docker/api.Dockerfile
+    image: vereine-api:${IMAGE_TAG:-local} # gleiches Image wie die API (wird mit dem Service api gebaut)
     restart: unless-stopped
+    logging: *default-logging
     command: ["node", "apps/api/dist/worker.js"]
     environment:
       DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
@@ -131,8 +145,13 @@ services:
       MAIL_MONTHLY_LIMIT: ${MAIL_MONTHLY_LIMIT:-}
       # Links in Mails (Bestaetigung, Passwort, Einladung) zeigen auf die Web-Adresse
       APP_URL: ${WEB_ORIGIN:-}
+      # Betriebsalarme (docs/BETRIEB.md): Mail an den Betreiber, Statusdatei der Sicherung (von backup.sh geschrieben)
+      OPERATOR_ALERT_EMAIL: ${OPERATOR_ALERT_EMAIL:-}
+      BACKUP_STATUS_FILE: /backup-status/status.json
+      OPS_DISK_PATH: /data/media
     volumes:
       - mediadata:/data/media
+      - ${BACKUP_STATUS_DIR:-/var/lib/vereine/status}:/backup-status:ro
     depends_on:
       api:
         condition: service_healthy # Migrationen laufen im API-Start
@@ -140,10 +159,9 @@ services:
   # WebSocket-Zustellung fuer den Chat. Eigener Container, kennt KEINE Chat-Schluessel und keine Inhalte
   # (liest nur Ereignis-IDs von Redis). Kann spaeter auf einen eigenen Server ziehen und mehrfach laufen.
   chat-gateway:
-    build:
-      context: ../..
-      dockerfile: infra/docker/api.Dockerfile
+    image: vereine-api:${IMAGE_TAG:-local}
     restart: unless-stopped
+    logging: *default-logging
     command: ["node", "apps/api/dist/chat-gateway.js"]
     environment:
       DATABASE_URL: postgresql://vereine:${POSTGRES_PASSWORD}@postgres:5432/vereine
@@ -165,23 +183,28 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
+    image: vereine-web:${IMAGE_TAG:-local}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # Server-Komponenten (oeffentliche Vereinsseite, Vereinsfinder) holen Daten direkt im Docker-Netz
       API_INTERNAL_URL: http://api:4000
 
   caddy:
-    image: caddy:2
+    image: ${CADDY_IMAGE:-caddy:2}
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:-localhost}
       ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+      STAGING_ALLOW_CIDR: ${STAGING_ALLOW_CIDR:-127.0.0.1/32}
     volumes:
       - ./${CADDY_FILE:-Caddyfile.preview}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
+      - caddy_logs:/var/log/caddy
     depends_on:
       - web
       - api
@@ -192,3 +215,4 @@ volumes:
   mediadata:
   queuedata:
   caddy_data:
+  caddy_logs:

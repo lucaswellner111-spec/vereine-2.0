@@ -1,17 +1,91 @@
+# Variante mit mehreren App-Servern hinter einem Hetzner Load Balancer (docker-compose.app.yml, Ausbaustufe).
+#
+# trusted_proxies: BEWUSST ENTFERNT (vorher `static private_ranges`). Ein Hetzner-Load-Balancer im TCP-Passthrough ist
+# kein HTTP-Proxy und setzt keinen X-Forwarded-For. private_ranges haette jedem Client mit privater Bridge-IP (Docker-Userland-
+# Proxy, z. B. IPv6) erlaubt, seine IP per X-Forwarded-For zu waehlen und das Rate-Limit je IP zu umgehen.
+# Fuer die ECHTE Besucher-IP hinter dem Load Balancer: im Load Balancer "Proxy Protocol" je Dienst (80/443) einschalten und hier
+# den Block unten aktivieren. Ohne Proxy Protocol sieht Caddy nur die LB-IP (Rate-Limit je IP dann fuer alle gleich, also
+# erst ab dem zweiten App-Server relevant). Nicht lokal validiert: `infra/ops/validate-caddy.sh` vor dem Einsatz laufen lassen.
+#
+#	servers {
+#		listener_wrappers {
+#			proxy_protocol {
+#				timeout 5s
+#				allow 10.10.0.0/16
+#			}
+#			tls
+#		}
+#	}
+
 {
 	email {$ACME_EMAIL}
-	# trusted_proxies NIE allgemein setzen (z. B. 0.0.0.0/0 oder oeffentliche Netze): Caddy uebernimmt dann
-	# {client_ip} aus dem X-Forwarded-For des Clients, jeder koennte seine IP faelschen und das Rate-Limit je IP
-	# (Login, oeffentliche Seiten) umgehen. Nur Netze eintragen, in denen ein eigener Load-Balancer davor steht.
-	# Achtung: Erreicht ein Client Caddy ueber den Docker-Userland-Proxy (z. B. IPv6), kommt er mit einer privaten
-	# Bridge-IP an und wuerde hier als vertrauenswuerdig gelten.
 	servers {
-		trusted_proxies static private_ranges
+		timeouts {
+			read_header 10s
+			read_body 60s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
+(accesslog) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20MiB
+			roll_keep 14
+			roll_keep_for 336h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 56
+				}
+				request>client_ip ip_mask {
+					ipv4 24
+					ipv6 56
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Forwarded-For delete
+				resp_headers>Set-Cookie delete
+				request>uri regexp "(/api/calendar/)[^/?]+" "${1}GESCHWAERZT"
+			}
+		}
 	}
 }
 
 {$DOMAIN} {
+	import security
+	import accesslog
 	encode zstd gzip
+
+	request_body {
+		max_size 10MB
+	}
+
+	handle /ws {
+		reverse_proxy chat-gateway:4100
+	}
+
+	@internal path /api/metrics /api/metrics/* /api/__dev /api/__dev/*
+	handle @internal {
+		respond 404
+	}
 
 	handle /api/* {
 		uri strip_prefix /api
@@ -24,10 +98,5 @@
 		reverse_proxy web:3000 {
 			header_up X-Real-IP {client_ip}
 		}
-	}
-
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		-Server
 	}
 }

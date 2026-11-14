@@ -1,0 +1,24 @@
+# OPTIONAL (nur mit infra/docker/caddy.Dockerfile): Rate-Limit je Besucher-IP auf Caddy-Ebene, zusaetzlich zu den
+# Grenzen der API. Als Snippet in die Caddyfile uebernehmen und im Site-Block `import ratelimit` setzen.
+# Nicht lokal validiert (Modul fehlt im Standard-Caddy): nach dem Bau `caddy validate` laufen lassen.
+# Zahlen sind Startwerte, an Staging-Lasttests (infra/loadtest) anpassen.
+
+(ratelimit) {
+	# Anmeldung und Registrierung: scharf (zusaetzlich zur API, die je IP 10/Minute zaehlt)
+	rate_limit {
+		zone auth {
+			match {
+				path /api/auth/login /api/auth/login/2fa /api/auth/register /api/auth/password/forgot /api/auth/email/resend /api/waitlist*
+			}
+			key {client_ip}
+			events 20
+			window 1m
+		}
+		# Alles andere: grosszuegig, nur gegen Dauerfeuer
+		zone general {
+			key {client_ip}
+			events 600
+			window 1m
+		}
+	}
+}

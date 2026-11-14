@@ -78,3 +78,18 @@ jobs:
             e2e/playwright-report/
             e2e/test-results/
           retention-days: 7
+
+  # Betriebsskripte und Konfiguration (docs/BETRIEB.md): Selbsttest, shellcheck, Caddyfiles, Compose-Dateien.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash infra/ops/selftest.sh
+      - run: shellcheck -x --severity=error infra/ops/*.sh infra/deploy/*.sh infra/demo/cleanup-demo.sh
+      - run: bash infra/ops/validate-caddy.sh
+      - name: Compose-Dateien pruefen (Platzhalterwerte, nichts wird gestartet)
+        run: |
+          printf 'POSTGRES_PASSWORD=ci\nCHAT_MASTER_KEYS=1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\nSTAGING_ALLOW_CIDR=127.0.0.1/32\n' > /tmp/ci.env
+          docker compose -f infra/deploy/docker-compose.preview.yml --env-file /tmp/ci.env config -q
+          docker compose -f infra/deploy/docker-compose.preview.yml -f infra/deploy/docker-compose.staging.yml --env-file /tmp/ci.env config -q
+          docker compose -f infra/monitoring/docker-compose.monitoring.yml config -q
