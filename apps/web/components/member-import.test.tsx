@@ -17,10 +17,11 @@ const preview: MemberImportPreview = {
   errors: 1,
   duplicates: 1,
   mail: { today: 1, later: 0 },
+  youthRows: 0,
   rows: [
-    { line: 2, firstName: "Lena", lastName: "Müller", email: "lena@example.de", memberNo: null, joinedOn: null, feeClassName: null, status: "ok", problems: [] },
-    { line: 3, firstName: "=HYPERLINK(1)", lastName: "Böse", email: "böse", memberNo: null, joinedOn: null, feeClassName: null, status: "error", problems: ["Vorname darf nicht mit = + - oder @ beginnen."] },
-    { line: 4, firstName: "Ina", lastName: "Doppelt", email: "lena@example.de", memberNo: null, joinedOn: null, feeClassName: null, status: "duplicate", problems: ["E-Mail steht schon in Zeile 2."] },
+    { line: 2, firstName: "Lena", lastName: "Müller", email: "lena@example.de", memberNo: null, joinedOn: null, feeClassName: null, youth: false, birthDate: null, status: "ok", problems: [] },
+    { line: 3, firstName: "=HYPERLINK(1)", lastName: "Böse", email: "böse", memberNo: null, joinedOn: null, feeClassName: null, youth: false, birthDate: null, status: "error", problems: ["Vorname darf nicht mit = + - oder @ beginnen."] },
+    { line: 4, firstName: "Ina", lastName: "Doppelt", email: "lena@example.de", memberNo: null, joinedOn: null, feeClassName: null, youth: false, birthDate: null, status: "duplicate", problems: ["E-Mail steht schon in Zeile 2."] },
   ],
 };
 const result: MemberImportResult = { imported: 1, skipped: 2, mailToday: 1, mailLater: 0 };
@@ -116,5 +117,24 @@ describe("MemberImport", () => {
     pickFile();
     await waitFor(() => expect(screen.getByText(/Limit für Import-Prüfungen/)).toBeTruthy());
     expect(screen.queryByText("Vorschau")).toBeNull();
+  });
+  it("kennzeichnet Kinder in der Vorschau und weist auf die Einladung an die Eltern hin", async () => {
+    const withChild: MemberImportPreview = {
+      ...preview,
+      total: 1,
+      valid: 1,
+      errors: 0,
+      duplicates: 0,
+      youthRows: 1,
+      rows: [{ line: 2, firstName: "Mia", lastName: "Klein", email: "eltern@example.de", memberNo: null, joinedOn: null, feeClassName: null, youth: true, birthDate: "2016-04-02", status: "ok", problems: [] }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (url.endsWith("/preview") ? json(withChild) : json(empty))));
+    render(<MemberImport slug="sv" />);
+    pickFile();
+    await screen.findByText("Vorschau");
+    expect(screen.getByText("Kind")).toBeTruthy();
+    expect(screen.getByText(/Die Einladung geht an die angegebene Adresse der Eltern/)).toBeTruthy();
+    expect(screen.getByText(/eltern@example.de \(Eltern\)/)).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /die Eltern wissen Bescheid/ })).toBeTruthy();
   });
 });

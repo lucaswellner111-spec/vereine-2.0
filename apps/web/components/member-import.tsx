@@ -102,11 +102,16 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
             Kopfzeile mit <strong className="font-medium text-text">Vorname, Nachname, E-Mail</strong> – optional Mitgliedsnummer, Eintrittsdatum (TT.MM.JJJJ) und Beitragsklasse.
             Trennzeichen Semikolon oder Komma, höchstens {MEMBER_IMPORT_LIMITS.maxRows} Zeilen und 1 MB.
           </p>
+          <p className="mt-2 text-sm text-muted">
+            <strong className="font-medium text-text">Kinder unter 16:</strong> Mit den Spalten <strong className="font-medium text-text">Geburtsdatum</strong> und <strong className="font-medium text-text">E-Mail der Eltern</strong> geht
+            die Einladung an die Eltern, nicht an das Kind. Die Eltern melden das Kind mit einem Jugendkonto an und verwalten es. Kinder gibt es ab 6 Jahren. Ohne Geburtsdatum behandeln wir die
+            Person als Erwachsene und laden sie an ihre eigene Adresse ein.
+          </p>
         </div>
         <Alert tone="info">
           Dein Verein ist verantwortlich und prüft, dass er die Personen einladen darf. Lade nur Personen hoch, die mit einer Einladung rechnen. Übernommen werden nur Name, E-Mail,
-          Nummer, Eintritt und Beitragsklasse, andere Spalten werden verworfen. Es entsteht kein Konto: Jede Person bekommt eine persönliche Einladung ({MEMBER_IMPORT_LIMITS.inviteValidDays} Tage
-          gültig) und wird erst mit der Annahme Mitglied bei Klubnest. Ohne Annahme löschen wir die Angaben danach.
+          Nummer, Eintritt und Beitragsklasse, andere Spalten werden verworfen. Es entsteht kein Konto: Jede Person (bei Kindern: die Eltern) bekommt eine persönliche Einladung ({MEMBER_IMPORT_LIMITS.inviteValidDays} Tage
+          gültig) und wird erst mit der Annahme Mitglied bei Klubnest. Das Geburtsdatum übernehmen wir nur bei Kindern, zur Altersprüfung. Ohne Annahme löschen wir die Angaben danach.
         </Alert>
         <div className="flex flex-wrap items-center gap-2">
           <FileButton accept=".csv,text/csv,text/plain" onChange={choose} disabled={checking || importing} aria-label="CSV-Datei auswählen" className="max-sm:w-full">
@@ -154,6 +159,12 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
                 : `Alle ${plural(preview.valid, "Einladung", "Einladungen")} werden heute verschickt.`}
             </Alert>
           )}
+          {preview.youthRows > 0 && (
+            <Alert tone="info">
+              {plural(preview.youthRows, "Zeile ist ein Kind", "Zeilen sind Kinder")} unter 16 (Kennzeichnung „Kind“). Die Einladung geht an die angegebene Adresse der Eltern. Das Kind wird erst Mitglied, wenn ein Elternteil
+              es mit einem Jugendkonto anmeldet.
+            </Alert>
+          )}
           {preview.errors + preview.duplicates > 0 && (
             <p className="text-sm text-muted">Zeilen mit Fehlern oder Dubletten werden übersprungen. Korrigiere sie in der Datei und lade sie erneut hoch – bereits Eingeladene erkennt der Import.</p>
           )}
@@ -169,7 +180,7 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
                 <tr>
                   <th className="p-3 font-medium">Zeile</th>
                   <th className="p-3 font-medium">Name</th>
-                  <th className="p-3 font-medium">E-Mail</th>
+                  <th className="p-3 font-medium">E-Mail (Eltern bei Kindern)</th>
                   <th className="p-3 font-medium">Nr.</th>
                   <th className="p-3 font-medium">Eintritt</th>
                   <th className="p-3 font-medium">Beitragsklasse</th>
@@ -180,8 +191,16 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
                 {rows.map((r) => (
                   <tr key={r.line} className={clsx(stackTable.tr, r.status !== "ok" && "bg-surface-2/60")}>
                     <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Zeile</CellLabel><span className="tabular-nums">{r.line}</span></td>
-                    <td className={stackTable.tdMain}>{[r.firstName, r.lastName].filter(Boolean).join(" ") || "–"}</td>
-                    <td className={clsx(stackTable.td, "break-all")}><CellLabel>E-Mail</CellLabel>{r.email || "–"}</td>
+                    <td className={stackTable.tdMain}>
+                      {[r.firstName, r.lastName].filter(Boolean).join(" ") || "–"}
+                      {r.youth && (
+                        <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+                          <Badge tone="brand">Kind</Badge>
+                          {r.birthDate && <span className="text-xs font-normal text-muted">geb. {dateDe(r.birthDate)}</span>}
+                        </span>
+                      )}
+                    </td>
+                    <td className={clsx(stackTable.td, "break-all")}><CellLabel>E-Mail</CellLabel>{r.email || "–"}{r.youth && r.email ? " (Eltern)" : ""}</td>
                     <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Nr.</CellLabel><span className="tabular-nums">{r.memberNo ?? "–"}</span></td>
                     <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Eintritt</CellLabel>{dateDe(r.joinedOn)}</td>
                     <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Beitragsklasse</CellLabel>{r.feeClassName ?? "–"}</td>
@@ -200,7 +219,10 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
           {preview.valid > 0 && (
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" checked={informed} onChange={(e) => setInformed(e.target.checked)} className="mt-1 size-4" />
-              <span>Ich habe die Personen informiert bzw. weiß, dass sie mit einer Einladung rechnen.</span>
+              <span>
+                Ich habe die Personen informiert bzw. weiß, dass sie mit einer Einladung rechnen
+                {preview.youthRows > 0 ? " – bei Kindern: die Eltern wissen Bescheid und haben der Weitergabe der Angaben an Klubnest zugestimmt" : ""}.
+              </span>
             </label>
           )}
           <div className="flex flex-wrap gap-2">
@@ -244,8 +266,8 @@ function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMem
         {page.items.map((p) => (
           <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
             <div className="min-w-0 flex-1">
-              <p className="font-medium">{p.firstName} {p.lastName}{p.memberNo !== null && <span className="font-normal text-muted"> · Nr. {p.memberNo}</span>}</p>
-              <p className="break-all text-xs text-muted">{p.email}{p.sentAt && ` · verschickt am ${dateDe(p.sentAt.slice(0, 10))}`}</p>
+              <p className="font-medium">{p.firstName} {p.lastName}{p.youth && <> <Badge tone="brand">Kind</Badge></>}{p.memberNo !== null && <span className="font-normal text-muted"> · Nr. {p.memberNo}</span>}</p>
+              <p className="break-all text-xs text-muted">{p.email}{p.youth && " (Eltern)"}{p.sentAt && ` · verschickt am ${dateDe(p.sentAt.slice(0, 10))}`}</p>
             </div>
             {label(p)}
             <Button size="sm" variant="ghost" onClick={() => remove(p)} aria-label={`Einladung für ${p.firstName} ${p.lastName} zurückziehen`}>Zurückziehen</Button>
