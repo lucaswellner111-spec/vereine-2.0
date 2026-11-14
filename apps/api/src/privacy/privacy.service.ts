@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   CONSENT_PURPOSES,
   LEGAL_VERSION,
@@ -193,6 +193,8 @@ export class PrivacyService implements OnModuleInit {
       const names = blocking.map((o) => `„${o.name}“`).join(", ");
       throw new ConflictException(`Du bist einziger Vorstand von ${names}. Übertrage die Vorstandsrolle (Verwaltung → Mitglieder), bevor du dein Konto löschst.`);
     }
+    // Verein faellt mit dem einzigen Vorstand weg: offene Einladungen sofort widerrufen (niemand soll noch beitreten)
+    for (const org of await this.orgs.soleAdminOrgs(user.id)) await this.orgAdmin.revokeOpenInvites(org.id);
     await this.auth.beginAccountDeletion(user.id);
     try {
       await this.eraseEverything(user.id);
@@ -226,7 +228,7 @@ export class PrivacyService implements OnModuleInit {
       await tx
         .update(auditLog)
         .set({ meta: sql`${auditLog.meta} - 'memberId'` })
-        .where(and(eq(auditLog.action, "member.profile.updated"), sql`${auditLog.meta}->>'memberId' = ${userId}`));
+        .where(and(inArray(auditLog.action, ["member.profile.updated", "platform.org.admin.set"]), sql`${auditLog.meta}->>'memberId' = ${userId}`));
       await tx.insert(auditLog).values({ userId: null, action: "user.deleted" });
       await tx.delete(users).where(eq(users.id, userId));
     });

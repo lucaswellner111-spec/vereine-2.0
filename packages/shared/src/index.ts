@@ -269,6 +269,8 @@ export type ProfileMediaPage = { posts: FeedPost[]; nextCursor: string | null; l
 
 export const decisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
 export const setRoleSchema = z.object({ role: z.enum(ORG_ROLES) });
+/** Plattform-Werkzeug: Vorstand fuer einen Verein ohne Vorstand setzen (per E-Mail-Adresse eines vorhandenen Kontos). */
+export const platformSetOrgAdminSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
 
 export type MemberItem = {
   userId: string;
@@ -432,7 +434,7 @@ export const saveAttendanceSchema = z.object({
     .refine((list) => new Set(list.map((e) => e.userId)).size === list.length, { message: "Jede Person nur einmal." }),
 });
 export type SaveAttendanceInput = z.infer<typeof saveAttendanceSchema>;
-export type AttendanceEntry = { userId: string; name: string; status: AttendanceStatus | null; rsvp: RsvpState | null };
+export type AttendanceEntry = { userId: string; name: string; handle: string | null; status: AttendanceStatus | null; rsvp: RsvpState | null };
 export type AttendanceList = { entries: AttendanceEntry[] };
 /**
  * Zusagen fuer alle, die den Termin sehen: bei internen/Team-Terminen sehen Vereinsmitglieder Anzeigename

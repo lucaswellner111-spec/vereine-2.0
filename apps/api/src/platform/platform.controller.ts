@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Header, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Query, UseGuards } from "@nestjs/common";
 import {
+  platformSetOrgAdminSchema,
   resolveChatReportSchema,
   resolveReportSchema,
   type ChatReportItem,
@@ -10,9 +11,11 @@ import {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { CurrentUser, PlatformAdminGuard } from "../auth/session.guard";
+import { UsersDirectory } from "../auth/users-directory.service";
 import { ChatService } from "../chat/chat.service";
 import { parse } from "../common/parse";
 import { MailService } from "../mail/mail.service";
+import { OrgsService } from "../orgs/orgs.service";
 import { ModerationService } from "../posts/moderation.service";
 import { WaitlistService } from "../waitlist/waitlist.service";
 
@@ -28,6 +31,8 @@ export class PlatformController {
     @Inject(MailService) private readonly mail: MailService,
     @Inject(WaitlistService) private readonly waitlist: WaitlistService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(OrgsService) private readonly orgs: OrgsService,
+    @Inject(UsersDirectory) private readonly directory: UsersDirectory,
   ) {}
 
   /** Warteliste: Zaehler und bestaetigte Eintraege (Adressen!), jeder Abruf wird protokolliert. */
@@ -47,6 +52,20 @@ export class PlatformController {
     const { csv, count } = await this.waitlist.exportCsv();
     await this.audit.record(admin.id, "platform.waitlist.exported", { count });
     return csv;
+  }
+
+  /**
+   * Vorstand setzen fuer einen Verein OHNE aktiven Vorstand (z. B. wenn nach der Vorpruefung der Kontoloeschung noch jemand
+   * beitrat). Nur mit der Adresse eines vorhandenen Kontos; jeder Aufruf wird protokolliert.
+   */
+  @Post("orgs/:slug/admin")
+  @HttpCode(204)
+  async setOrgAdmin(@CurrentUser() admin: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<void> {
+    const { email } = parse(platformSetOrgAdminSchema, body);
+    const userId = await this.directory.idByEmail(email);
+    if (!userId) throw new NotFoundException("Kein Konto mit dieser Adresse.");
+    const { orgId } = await this.orgs.assignAdminIfOrphaned(slug.toLowerCase(), userId);
+    await this.audit.record(admin.id, "platform.org.admin.set", { orgId, memberId: userId });
   }
 
   /** Mail-Kontingent fuer die Plattform-Seite ("Mail-Kontingent 82 %"). */

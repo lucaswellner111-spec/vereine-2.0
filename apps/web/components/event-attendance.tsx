@@ -7,7 +7,7 @@ import type { AttendanceList, AttendanceStatus, EventItem } from "@vereine/share
 import { api, describeError } from "@/lib/api";
 import { ATTENDANCE_LABEL, RSVP_STATUS_LABEL } from "@/lib/events";
 import { useApi, useBusy } from "@/lib/use-api";
-import { Alert, Button, Card, CellLabel, ErrorState, ListSkeleton, SectionTitle, stackTable } from "./ui";
+import { Alert, Button, Card, CellLabel, ErrorState, ListSkeleton, SectionTitle, stackTable, UserNameLink } from "./ui";
 import { SegmentedControl } from "./ui-client";
 import { toast } from "./ui-hosts";
 
@@ -90,7 +90,7 @@ export function EventAttendance({ event }: { event: EventItem }) {
                 const v = value(e.userId, e.status);
                 return (
                   <tr key={e.userId} className={stackTable.tr}>
-                    <td className={stackTable.tdMain}>{e.name}</td>
+                    <td className={stackTable.tdMain}><UserNameLink handle={e.handle} name={e.name} /></td>
                     <td className={stackTable.td}>
                       <CellLabel>Rückmeldung</CellLabel>
                       <span className="text-muted">{e.rsvp ? RSVP_STATUS_LABEL[e.rsvp] : "–"}</span>

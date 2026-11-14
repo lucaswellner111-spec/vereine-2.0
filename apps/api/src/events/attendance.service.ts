@@ -4,6 +4,7 @@ import type { AttendanceList, AttendanceStatus, PublicUser, RsvpState, SaveAtten
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
 import { eventAttendance, eventRsvps, orgMembers, teamMembers } from "../db/schema";
+import { ProfileAccess } from "../profiles/profile-access.service";
 import { EventsService, type EventRow } from "./events.service";
 
 /** Wert der abgelehnten Zeile bei ON CONFLICT DO UPDATE. */
@@ -21,6 +22,7 @@ export class AttendanceService {
     @Inject(DB) private readonly db: Database,
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(ProfileAccess) private readonly access: ProfileAccess,
   ) {}
 
   /**
@@ -39,11 +41,11 @@ export class AttendanceService {
     const rsvpBy = new Map(rsvps.map((r) => [r.userId, r.status as RsvpState]));
     const statusBy = new Map(marked.map((m) => [m.userId, m.status as AttendanceStatus]));
     const ids = [...new Set([...candidates, ...statusBy.keys()])];
-    const names = await this.directory.names(ids);
+    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
     return {
       entries: ids
         .filter((u) => names.has(u))
-        .map((u) => ({ userId: u, name: names.get(u)!, status: statusBy.get(u) ?? null, rsvp: rsvpBy.get(u) ?? null }))
+        .map((u) => ({ userId: u, name: names.get(u)!, handle: handles.get(u) ?? null, status: statusBy.get(u) ?? null, rsvp: rsvpBy.get(u) ?? null }))
         .sort((a, b) => a.name.localeCompare(b.name, "de")),
     };
   }

@@ -22,7 +22,7 @@ import {
   type InvoiceSummary,
   type PublicUser,
 } from "@vereine/shared";
-import { CurrentUser, SessionGuard } from "../auth/session.guard";
+import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { BillingService } from "./billing.service";
 import { TwoFactorGuard } from "../orgs/two-factor.guard";
@@ -91,6 +91,7 @@ export class BillingController {
   @UseGuards(TwoFactorGuard)
   @Post("invoices/:id/finalize")
   finalize(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<InvoiceDetail> {
+    requireVerifiedEmail(user); // verschickt die Rechnung per Mail
     return this.billing.finalize(user, id);
   }
 

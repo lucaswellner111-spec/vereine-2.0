@@ -348,6 +348,23 @@ export class OrgsService {
     });
   }
 
+  /**
+   * Plattform-Werkzeug (Grenzfall Vereinsloeschung/Austritt): setzt eine Person als Vorstand, aber NUR wenn der Verein
+   * keinen aktiven Vorstand mehr hat. Legt die Mitgliedschaft an oder hebt sie auf (aktiv, Rolle admin).
+   */
+  async assignAdminIfOrphaned(slug: string, targetId: string): Promise<{ orgId: string; orgName: string }> {
+    const org = await this.requireBySlug(slug);
+    await this.db.transaction(async (tx) => {
+      await this.lockOrg(tx, org.id);
+      if ((await this.adminCount(org.id, tx)) > 0) throw new ConflictException("Der Verein hat bereits einen Vorstand.");
+      await tx
+        .insert(orgMembers)
+        .values({ orgId: org.id, userId: targetId, role: "admin", status: "active" })
+        .onConflictDoUpdate({ target: [orgMembers.orgId, orgMembers.userId], set: { role: "admin", status: "active" } });
+    });
+    return { orgId: org.id, orgName: org.name };
+  }
+
   /** Austritt (selbst) oder Entfernen (Vorstand). */
   async removeMember(slug: string, actor: PublicUser, targetId: string): Promise<void> {
     const org = await this.requireBySlug(slug);
