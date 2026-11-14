@@ -4,6 +4,7 @@ import {
   resolveReportSchema,
   type ChatReportItem,
   type MailQuota,
+  type OpsStatus,
   type PublicUser,
   type ReportItem,
   type WaitlistOverview,
@@ -13,6 +14,7 @@ import { CurrentUser, PlatformAdminGuard } from "../auth/session.guard";
 import { ChatService } from "../chat/chat.service";
 import { parse } from "../common/parse";
 import { MailService } from "../mail/mail.service";
+import { OpsService } from "../ops/ops.service";
 import { ModerationService } from "../posts/moderation.service";
 import { WaitlistService } from "../waitlist/waitlist.service";
 
@@ -26,6 +28,7 @@ export class PlatformController {
     @Inject(ModerationService) private readonly moderation: ModerationService,
     @Inject(ChatService) private readonly chat: ChatService,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(OpsService) private readonly ops: OpsService,
     @Inject(WaitlistService) private readonly waitlist: WaitlistService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
@@ -53,6 +56,12 @@ export class PlatformController {
   @Get("mail-quota")
   async mailQuota(): Promise<MailQuota> {
     return { driver: this.mail.driverName, ...(await this.mail.quota()) };
+  }
+
+  /** Betriebsalarme (Worker, Jobs, Mail-Kontingent, Platte, Backup-Alter): nur Zahlen, keine Personendaten. */
+  @Get("ops")
+  opsStatus(): Promise<OpsStatus> {
+    return this.ops.status();
   }
 
   @Get("reports")

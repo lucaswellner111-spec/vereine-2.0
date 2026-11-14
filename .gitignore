@@ -23,3 +23,5 @@ infra/demo/out/
 e2e/playwright-report/
 e2e/test-results/
 e2e/blob-report/
+infra/demo/fiktiv/out/
+infra/loadtest/out/

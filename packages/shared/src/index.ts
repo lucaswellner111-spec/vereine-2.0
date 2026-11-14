@@ -92,6 +92,21 @@ export type MailQuota = {
   warning: boolean;
 };
 
+/** Betriebsalarme (Plattform-Seite, Mail an den Betreiber). Nur Zahlen und feste Texte, keine Personendaten. */
+export const OPS_ALERT_KINDS = ["worker", "jobs-failed", "jobs-backlog", "mail-quota", "disk", "backup"] as const;
+export type OpsAlertKind = (typeof OPS_ALERT_KINDS)[number];
+export type OpsAlert = { kind: OpsAlertKind; title: string; detail: string };
+export type OpsStatus = {
+  checkedAt: string;
+  /** Leere Liste = alles in Ordnung. */
+  alerts: OpsAlert[];
+  worker: "up" | "down" | "inline";
+  jobs: { waiting: number; active: number; delayed: number; failed: number } | null;
+  disk: { usedPercent: number } | null;
+  backup: { configured: boolean; ageHours: number | null; ok: boolean | null; bytes: number | null };
+  alertMail: boolean;
+};
+
 /** Zwecke, die Nutzer selbst ein-/ausschalten duerfen (terms/privacy sind Vertragsgrundlage). */
 export const OPTIONAL_CONSENTS = ["personalized_feed", "analytics", "marketing_email"] as const;
 export const setConsentSchema = z.object({

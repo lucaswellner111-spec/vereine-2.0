@@ -1,20 +1,95 @@
-# Vorschau mit Domain und automatischem HTTPS (Let's Encrypt).
-# Aktivieren: in .env.preview setzen: CADDY_FILE=Caddyfile.tls, DOMAIN=<deine-domain>,
-# COOKIE_SECURE=true, WEB_ORIGIN=https://<deine-domain>; DNS A/AAAA auf den Server, Ports 80+443 in der Hetzner-Firewall.
+# Produktion/Vorschau mit Domain und automatischem HTTPS (Let's Encrypt), EIN Server, Caddy direkt am Internet.
+# Aktivieren: in .env.preview setzen: CADDY_FILE=Caddyfile.tls, DOMAIN=<deine-domain>, ACME_EMAIL=<adresse>,
+# COOKIE_SECURE=true, WEB_ORIGIN=https://<deine-domain>; DNS A (kein AAAA, siehe unten) auf den Server, Ports 80+443 in der Hetzner-Firewall.
+#
+# trusted_proxies: ABSICHTLICH NICHT gesetzt. Caddy sieht hier die echte Besucher-IP direkt am Socket; {client_ip} ist dann
+# nicht faelschbar (ein mitgeschickter X-Forwarded-For wird ignoriert). Nur mit einem eigenen Proxy/Load-Balancer DAVOR
+# (HTTP-faehig, der X-Forwarded-For setzt) duerfte hier `servers { trusted_proxies static <Netz des Proxys> }` stehen, nie
+# private_ranges/0.0.0.0/0 allgemein. Ein L4-Load-Balancer (Hetzner TCP-Passthrough) setzt keinen Header: dort Proxy Protocol
+# nutzen (siehe Caddyfile). Achtung Docker: Erreicht ein Client Caddy ueber den Docker-Userland-Proxy (z. B. IPv6), kommt er mit
+# privater Bridge-IP an und das Rate-Limit je IP greift fuer alle gleichzeitig. Deshalb keine AAAA-Eintraege setzen oder
+# in /etc/docker/daemon.json {"ip6tables": true, "experimental": true} aktivieren (docs/BETRIEB.md).
+#
+# Rate-Limits: Das Standard-Image caddy:2 hat KEIN Rate-Limit-Modul. Je-IP-Grenzen sitzen in der API (Redis, Login 10/min,
+# oeffentliche Seiten, Mail-Auth). Optional mit Plugin: infra/docker/caddy.Dockerfile + infra/deploy/ratelimit.caddy.example.
+# Hier greifen: Zeitlimits (Slowloris), Header-/Body-Grenzen, Hetzner-Firewall (nur 80/443) und Hetzner-DDoS-Basisschutz.
+#
+# Logs: Zugriffslog in /var/log/caddy (Volume caddy_logs), 14 Tage, IP auf /24 (IPv4) bzw. /56 (IPv6) gekuerzt,
+# ohne Cookies/Authorization, Kalender-Token im Pfad geschwaerzt.
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 60s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
+(accesslog) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20MiB
+			roll_keep 14
+			roll_keep_for 336h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip ip_mask {
+					ipv4 24
+					ipv6 56
+				}
+				request>client_ip ip_mask {
+					ipv4 24
+					ipv6 56
+				}
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Forwarded-For delete
+				resp_headers>Set-Cookie delete
+				request>uri regexp "(/api/calendar/)[^/?]+" "${1}GESCHWAERZT"
+			}
+		}
+	}
+}
 
 www.{$DOMAIN} {
 	redir https://{$DOMAIN}{uri} permanent
 }
 
 {$DOMAIN} {
+	import security
+	import accesslog
 	encode zstd gzip
+
+	# Uploads: Bilder sind auf 8 MB begrenzt (API), etwas Luft fuer das Multipart-Geruest
+	request_body {
+		max_size 10MB
+	}
 
 	handle /ws {
 		reverse_proxy chat-gateway:4100
 	}
 
-	# Messwerte nur intern (Prometheus), nie oeffentlich
-	handle /api/metrics {
+	# Messwerte und Entwicklungs-Routen nie oeffentlich
+	@internal path /api/metrics /api/metrics/* /api/__dev /api/__dev/*
+	handle @internal {
 		respond 404
 	}
 
@@ -29,10 +104,5 @@ www.{$DOMAIN} {
 		reverse_proxy web:3000 {
 			header_up X-Real-IP {client_ip}
 		}
-	}
-
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		-Server
 	}
 }

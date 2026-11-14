@@ -1,0 +1,12 @@
+[Unit]
+Description=Klubnest Sicherung (Datenbank, Medien, Konfiguration, offsite)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/vereine/ops.env
+ExecStart=/opt/vereine/infra/ops/backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3h

@@ -1,0 +1,7 @@
+[Unit]
+Description=Klubnest Sicherung pruefen (Alter, Groesse, Offsite)
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/vereine/ops.env
+ExecStart=/opt/vereine/infra/ops/check-backup.sh

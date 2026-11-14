@@ -1,0 +1,21 @@
+# Alertmanager: Mail an den Betreiber ueber den EU-SMTP-Dienst (z. B. Scaleway TEM). Das SMTP-Passwort liegt als Datei
+# (/secrets/smtp_pass), nicht hier. Platzhalter vor dem Einsatz ersetzen. Gruppiert, damit kein Mail-Sturm entsteht.
+global:
+  smtp_smarthost: "smtp.tem.scw.cloud:587"
+  smtp_from: "alarm@klubnest.example"
+  smtp_auth_username: "SMTP-BENUTZER"
+  smtp_auth_password_file: /secrets/smtp_pass
+  smtp_require_tls: true
+
+route:
+  receiver: betreiber
+  group_by: ["alertname", "kind"]
+  group_wait: 1m
+  group_interval: 15m
+  repeat_interval: 24h # hoechstens einmal taeglich wiederholen
+
+receivers:
+  - name: betreiber
+    email_configs:
+      - to: "betreiber@klubnest.example"
+        send_resolved: true

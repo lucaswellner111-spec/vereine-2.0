@@ -14,6 +14,7 @@ import { MediaModule } from "./media/media.module";
 import { MembersModule } from "./members/members.module";
 import { ProfilesModule } from "./profiles/profiles.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { OpsModule } from "./ops/ops.module";
 import { OrgsModule } from "./orgs/orgs.module";
 import { PlatformModule } from "./platform/platform.module";
 import { PostsModule } from "./posts/posts.module";
@@ -22,7 +23,7 @@ import { PublicModule } from "./public/public.module";
 import { WaitlistModule } from "./waitlist/waitlist.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule, WaitlistModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule, WaitlistModule, OpsModule],
   controllers: [HealthController, MetricsController],
 })
 export class AppModule {}

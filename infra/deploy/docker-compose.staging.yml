@@ -1,0 +1,29 @@
+# Staging-Variante: wird ZUSAETZLICH zur Preview/Produktions-Compose-Datei geladen (eigener Server, eigene Testdaten).
+#   docker compose -f infra/deploy/docker-compose.preview.yml -f infra/deploy/docker-compose.staging.yml --env-file .env.staging up -d --build
+# Mit den Betriebsskripten: COMPOSE_EXTRA="-f /opt/vereine/infra/deploy/docker-compose.staging.yml" ENV_FILE=/opt/vereine/.env.staging
+#   MEDIA_VOLUME=vereine-staging_mediadata (der Projektname bestimmt den Volume-Namen).
+#
+# Unterschiede zu Produktion:
+#  - eigener Projektname (eigene Volumes/Netz, nie mit Produktion vermischt)
+#  - Mail wird NIE versendet (Treiber log), keine echten Adressen
+#  - Caddyfile.staging: nur freigegebene IPs (STAGING_ALLOW_CIDR), X-Robots-Tag noindex
+#  - AVV_REQUIRED aus, damit Testvereine ohne Zustimmungsablauf nutzbar sind
+# Echte Personendaten gehoeren nie nach Staging; Testdaten per infra/demo/fiktiv (erfundene Personen).
+name: vereine-staging
+
+services:
+  api:
+    environment:
+      MAIL_DRIVER: log
+      AVV_REQUIRED: ""
+      OPERATOR_ALERT_EMAIL: ""
+      # Nur Staging: IP des Lastgenerators vom Rate-Limit ausnehmen (sonst bremst die API einen einzelnen Absender auf 200/min)
+      RATE_LIMIT_ALLOWLIST: ${LOADTEST_IP:-}
+  worker:
+    environment:
+      MAIL_DRIVER: log
+      AVV_REQUIRED: ""
+      OPERATOR_ALERT_EMAIL: ""
+  caddy:
+    environment:
+      STAGING_ALLOW_CIDR: ${STAGING_ALLOW_CIDR:?STAGING_ALLOW_CIDR in .env.staging setzen (z. B. 203.0.113.4/32)}

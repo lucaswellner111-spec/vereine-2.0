@@ -1,0 +1,62 @@
+# Alarmregeln. Die Schwellen fuer Worker/Jobs/Mail/Platte/Backup stecken in der API (OPS_* Variablen, apps/api/src/ops);
+# hier wird nur `klubnest_alert_active` ausgewertet, damit Prometheus, die Plattform-Seite und die Betreiber-Mail
+# dieselben Kriterien nutzen. Nur Zahlen und feste Texte, keine Personendaten.
+groups:
+  - name: klubnest
+    rules:
+      - alert: ApiNichtErreichbar
+        expr: up{job="api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "API antwortet nicht auf /metrics (Container, Token oder Netz pruefen)" }
+
+      - alert: DatenbankDown
+        expr: klubnest_db_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "Datenbank nicht erreichbar" }
+
+      - alert: WorkerDown
+        expr: klubnest_worker_up == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations: { summary: "Worker ohne Lebenszeichen: Mails, Erinnerungen und Aufraeumjobs laufen nicht" }
+
+      - alert: BetriebsalarmAktiv
+        expr: klubnest_alert_active == 1
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Betriebsalarm {{ $labels.kind }} aktiv (jobs-failed, jobs-backlog, mail-quota, disk, backup; Details: Plattform-Seite)" }
+
+      - alert: SicherungZuAlt
+        expr: klubnest_backup_age_seconds > 30 * 3600
+        for: 10m
+        labels: { severity: critical }
+        annotations: { summary: "Letzte erfolgreiche Sicherung aelter als 30 Stunden" }
+
+      - alert: PlatteVoll
+        expr: klubnest_disk_used_percent >= 80
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Platte zu {{ $value }} % belegt" }
+
+      - alert: FehlerquoteHoch
+        expr: |
+          sum(rate(klubnest_http_requests_total{status="5xx"}[10m]))
+            / clamp_min(sum(rate(klubnest_http_requests_total[10m])), 0.001) > 0.01
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Mehr als 1 % Serverfehler (5xx) in 10 Minuten" }
+
+      - alert: AntwortzeitHoch
+        expr: |
+          histogram_quantile(0.95, sum(rate(klubnest_http_request_duration_seconds_bucket[10m])) by (le)) > 0.4
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 ueber 400 ms (Ausbau-Ausloeser laut docs/ARCHITEKTUR.md)" }
+
+      - alert: EventLoopTraege
+        expr: nodejs_eventloop_lag_p99_seconds > 0.2
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Event-Loop-Verzoegerung p99 ueber 200 ms" }

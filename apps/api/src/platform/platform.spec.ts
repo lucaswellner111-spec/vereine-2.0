@@ -73,6 +73,18 @@ describe("Plattform-Moderation", () => {
     expect(audit).toHaveLength(1);
   });
 
+  it("Betriebslage: nur fuer die Plattform-Rolle, nur Zahlen/Texte ohne Personendaten", async () => {
+    expect((await app.inject({ method: "GET", url: "/platform/ops" })).statusCode).toBe(401);
+    expect((await req(vera, "GET", "/platform/ops")).statusCode).toBe(403);
+    const res = await req(root, "GET", "/platform/ops");
+    expect(res.statusCode).toBe(200);
+    const ops = res.json();
+    expect(ops).toMatchObject({ worker: "inline", alerts: [], backup: { configured: false } });
+    expect(JSON.stringify(ops)).not.toMatch(/@example\.de/);
+    // Health nennt den Worker-Zustand ebenfalls
+    expect((await app.inject({ method: "GET", url: "/health/ready" })).json().worker).toBe("inline");
+  });
+
   let privatePostId: string;
 
   it("Persoenliche Beitraege (ohne Verein): Meldung -> Plattform-Warteschlange -> Ausblenden mit Begruendung", async () => {

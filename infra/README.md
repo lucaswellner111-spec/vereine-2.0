@@ -18,24 +18,25 @@ ansible-playbook -i inventory.ini bootstrap.yml
 
 ## Noch offen (bewusst nicht Teil dieses Gerüsts)
 - **Remote-State** fuer Terraform (Hetzner Object Storage oder verschluesseltes Backend) - bis dahin liegt der State lokal und ist per `.gitignore` ausgeschlossen.
-- **Postgres/Redis auf dem DB-Server** (Ansible-Rolle inkl. Volume-Mount, pgBackRest-Backups, Restore-Test).
+- **Postgres/Redis auf dem DB-Server** (Ansible-Rolle inkl. Volume-Mount, WAL-Archivierung/pgBackRest; die tägliche Vollsicherung steht in `infra/ops`).
 - **Object Storage**-Bucket (Medien) - vom hcloud-Provider nicht verwaltet, separat anlegen.
-- **Monitoring** (Prometheus/Grafana/Loki), Registry und Deploy-Pipeline.
+- **Registry** (Images werden bisher auf dem Server gebaut) und zentrale Log-Sammlung (Loki).
 - **AVV mit Hetzner** abschliessen und DNS (A/AAAA auf Load Balancer) setzen.
 
-## Backups (Vorschau/Staging)
-- `infra/deploy/backup.sh`: Postgres-Dump (gzip, nur root lesbar, die letzten 14 bleiben, Plausibilitaetspruefung).
-- `infra/deploy/restore-test.sh`: stellt das neueste Backup in einer Wegwerf-Datenbank wieder her und zaehlt Nutzer.
-- Taeglich per Cron (auf dem Server als root einrichten, bewusst nicht automatisch installiert):
-  `17 3 * * * /opt/vereine/infra/deploy/backup.sh >> /var/log/vereine-backup.log 2>&1`
-- Produktion: Dumps zusaetzlich verschluesselt auf eine Hetzner Storage Box kopieren (pgBackRest/WAL-Archivierung im Plan).
+## Betrieb: Backup, Restore, Deploy, Monitoring, Lasttest
+Vollständiges Handbuch mit Checkliste „Go-Live“: **`docs/BETRIEB.md`**. Kurzüberblick:
+- **Backup** (`infra/ops/backup.sh`): Postgres, Medien und Konfiguration (ohne Klartext-Geheimnisse) verschlüsselt mit age, Aufbewahrung 14 täglich / 8 wöchentlich / 6 monatlich, Offsite per rsync auf die Hetzner Storage Box, Timer unter `infra/ops/systemd/`, Prüfung `check-backup.sh`. Die alten Aufrufe `infra/deploy/backup.sh` und `restore-test.sh` leiten dorthin weiter.
+- **Restore** (`infra/ops/restore.sh`): `verify` (Wegwerf-DB), `fresh` (Restore-Übung mit Wegwerf-Container), `live` (echt, mit Rückfrage).
+- **Deploy mit Rollback** (`infra/ops/deploy.sh`): Sicherung zuerst, dann Bauen mit Tag, Ausrollen (Migrationen beim API-Start), Smoke-Test (`smoke.sh`), bei Fehler Rollback aufs vorige Tag. GitHub-Vorlage `.github/workflows/deploy.yml` (ohne Geheimnisse im Repository). Staging: `infra/deploy/docker-compose.staging.yml` + `Caddyfile.staging`.
+- **Monitoring**: Alarme in der App (Worker, Jobs, Mail-Kontingent, Platte, Backup-Alter) mit Mail an `OPERATOR_ALERT_EMAIL` und Plattform-Seite; `infra/ops/uptime-check.sh` von außen; optional `infra/monitoring/` (Prometheus/Alertmanager).
+- **Firewall/DDoS** (nur EU): `infra/terraform/firewall-single/` (ein Server) bzw. `main.tf` (zwei Server); SSH nur von der eigenen IP.
+- **Lasttest**: `infra/loadtest/` (k6, nur gegen Staging).
+- **Demo-Daten**: `infra/demo/` (fiktiver Satz in `fiktiv/`, Löschen mit Kontrolle `cleanup-demo.sh`).
 
-## Deploy (Vorschau)
-1. `ssh root@<server> "cd /opt/vereine && bash infra/deploy/backup.sh"`
-2. `git archive --format=tar HEAD | ssh root@<server> "cd /opt/vereine && tar -xf - && docker compose -f infra/deploy/docker-compose.preview.yml --env-file .env.preview up -d --build"`
-3. Aufraeumen (sonst fuellt der Build-Cache die Platte, ~1 GB je Deploy):
-   `ssh root@<server> "docker builder prune -f --filter until=72h && docker image prune -f && df -h /"`
-4. Smoke-Test: `/`, `/api/health/ready` (200), `/api/auth/me` (401).
+## Deploy (Vorschau, von Hand)
+1. Quellstand hochladen: `git archive --format=tar HEAD | ssh root@<server> "cd /opt/vereine && tar -xf -"`
+2. `ssh root@<server> "/opt/vereine/infra/ops/deploy.sh"` (sichert, baut, rollt aus, testet, rollt bei Fehler zurück).
+3. Smoke-Test läuft im Skript: `/`, `/api/health/ready` (200, Worker), `/api/auth/me` (401).
 
 ## Redis
 - Cache/Zaehler-Speicher fuer Sessions (60 s) und Rate-Limit, ohne Persistenz, 128 MB LRU. `REDIS_URL` setzen; ohne Redis faellt die API auf einen Prozess-Cache zurueck (nur lokal sinnvoll).

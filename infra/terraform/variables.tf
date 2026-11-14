@@ -34,8 +34,13 @@ variable "ssh_public_key" {
 }
 
 variable "admin_cidrs" {
-  description = "IP-Bereiche, die per SSH zugreifen duerfen (z. B. [\"203.0.113.4/32\"])"
+  description = "IP-Bereiche, die per SSH zugreifen duerfen (z. B. [\"203.0.113.4/32\"]). Nie das ganze Internet."
   type        = list(string)
+
+  validation {
+    condition     = length(var.admin_cidrs) > 0 && !anytrue([for c in var.admin_cidrs : contains(["0.0.0.0/0", "::/0"], c)])
+    error_message = "admin_cidrs darf nicht leer sein und nicht 0.0.0.0/0 oder ::/0 enthalten (SSH nur von der eigenen IP)."
+  }
 }
 
 variable "app_server_count" {

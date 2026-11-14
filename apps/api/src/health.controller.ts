@@ -5,6 +5,7 @@ import { CACHE, type Cache } from "./cache/cache.module";
 import { DB, type Database } from "./db/db.module";
 import { JobsService } from "./jobs/jobs.service";
 import { MailService } from "./mail/mail.service";
+import { OpsService } from "./ops/ops.service";
 
 @Controller("health")
 export class HealthController {
@@ -13,6 +14,7 @@ export class HealthController {
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(OpsService) private readonly ops: OpsService,
   ) {}
 
   @Get()
@@ -29,7 +31,10 @@ export class HealthController {
     const queue = await this.jobs.stats().catch(() => null);
     // Mail-Kontingent (Kostenbremse): nur Zahlen, ab 80 % "warning" (nicht wichtige Mails werden dann zurueckgehalten)
     const quota = await this.mail.quota().catch(() => null);
+    // Worker-Lebenszeichen (Cache-Redis): "down" ist ein Alarmkriterium fuer Uptime-Checks, keine Bereitschaftsfrage der API
+    const { worker } = await this.ops.status().catch(() => ({ worker: "unknown" as const }));
     const body = {
+      worker,
       status: db && cache ? "ok" : "degraded",
       db: db ? "up" : "down",
       cache: cache ? `up (${this.cache.kind})` : "down",

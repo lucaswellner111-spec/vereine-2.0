@@ -1,0 +1,55 @@
+# Deploy auf den Server (Vorlage). Nur manuell auslösbar und nur, wenn die Repository-Variable DEPLOY_ENABLED=true gesetzt ist.
+# KEINE Geheimnisse im Repository: Server, Benutzer, SSH-Schlüssel und known_hosts liegen als Secrets/Variablen in der
+# GitHub-Umgebung "production" (Settings -> Environments -> production, mit "Required reviewers"):
+#   Secrets:    DEPLOY_SSH_KEY (eigener Schlüssel nur für Deploy), DEPLOY_KNOWN_HOSTS (Ausgabe von ssh-keyscan, vorher mit dem Server abgleichen)
+#   Variablen:  DEPLOY_HOST, DEPLOY_USER
+# Ablauf: Quellstand hochladen, dann infra/ops/deploy.sh auf dem Server (Sicherung -> Bauen -> Ausrollen -> Smoke-Test -> bei Fehler Rollback).
+# Siehe docs/BETRIEB.md, Abschnitt 8.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git-Stand (Branch, Tag oder Commit), Standard: main"
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: SSH vorbereiten
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Quellstand hochladen
+        run: |
+          SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes"
+          git archive --format=tar HEAD | $SSH "$TARGET" "cd /opt/vereine && tar -xf -"
+          git rev-parse --short HEAD | $SSH "$TARGET" "cat > /opt/vereine/.release"
+      - name: Deploy (Sicherung, Bauen, Ausrollen, Smoke-Test, Rollback bei Fehler)
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes "$TARGET" "/opt/vereine/infra/ops/deploy.sh"
+      - name: Schlüssel entfernen
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
