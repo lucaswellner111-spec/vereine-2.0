@@ -53,6 +53,15 @@ export function fastifyOptions(opts: { logger?: boolean } = {}) {
   return { trustProxy: trustProxySetting(), logger: opts.logger === false ? false : loggerOptions };
 }
 
+/**
+ * IPs ohne Rate-Limit (`RATE_LIMIT_ALLOWLIST`, kommagetrennt). NUR fuer den Lastgenerator in der Staging-Umgebung
+ * (docs/BETRIEB.md, infra/loadtest): In Produktion bleibt die Variable leer. Es zaehlt die Client-IP, die Fastify aus dem
+ * vertrauenswuerdigen Proxy-Header ableitet (nicht faelschbar, siehe trustProxySetting).
+ */
+export function rateLimitAllowList(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.RATE_LIMIT_ALLOWLIST ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export async function configureApp(
   app: NestFastifyApplication,
   opts: { rateLimit?: boolean } = {},
@@ -72,6 +81,7 @@ export async function configureApp(
       redis,
       nameSpace: "rl:",
       skipOnError: true, // Redis-Ausfall darf die API nicht lahmlegen (Fail-open)
+      allowList: rateLimitAllowList(),
       max: (req) => (isStrictRoute(req) ? 10 : 200),
       timeWindow: "1 minute",
       // HttpException statt Roh-Fehler: sauberes 429 ohne Fehler-Log-Flut.

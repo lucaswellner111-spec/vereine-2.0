@@ -2,7 +2,7 @@
 
 import { ShieldOff } from "lucide-react";
 import { useState } from "react";
-import { WAITLIST_REGION_LABELS, WAITLIST_ROLE_LABELS, type ChatReportItem, type MailQuota, type WaitlistOverview } from "@vereine/shared";
+import { WAITLIST_REGION_LABELS, WAITLIST_ROLE_LABELS, type ChatReportItem, type MailQuota, type OpsStatus, type WaitlistOverview } from "@vereine/shared";
 import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, LinkButton, PageHeader, stackTable, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
@@ -37,6 +37,7 @@ export default function PlatformPage() {
       <BackButton fallback="/feed" className="md:hidden">Zurück</BackButton>
       <PageHeader title="Plattform-Moderation" subtitle="Meldungen ohne Vereinszuständigkeit. Jeder Zugriff auf Chat-Inhalte wird protokolliert." />
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
+      <OpsCard />
       <MailQuotaCard />
       <SegmentedControl
         aria-label="Meldungsart"
@@ -63,6 +64,36 @@ export default function PlatformPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** Betriebslage: Alarme (Worker, Jobs, Mail-Kontingent, Platte, Backup). Gleiche Kriterien wie die Alarm-Mail an den Betreiber. */
+function OpsCard() {
+  const o = useApi<OpsStatus>("/platform/ops").data;
+  if (!o) return null;
+  return (
+    <Card className="mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">Betrieb</p>
+        <Badge tone={o.alerts.length ? "danger" : "neutral"}>{o.alerts.length ? `${o.alerts.length} Alarm${o.alerts.length === 1 ? "" : "e"}` : "Alles in Ordnung"}</Badge>
+      </div>
+      {o.alerts.length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm">
+          {o.alerts.map((a) => (
+            <li key={a.kind}>
+              <span className="font-medium">{a.title}.</span> <span className="text-muted">{a.detail}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-xs text-muted">
+        Worker: {o.worker === "up" ? "läuft" : o.worker === "down" ? "keine Rückmeldung" : "im API-Prozess"}
+        {o.disk && ` · Platte ${o.disk.usedPercent} %`}
+        {o.jobs && ` · Jobs: ${o.jobs.waiting} wartend, ${o.jobs.failed} fehlgeschlagen`}
+        {o.backup.configured && (o.backup.ageHours === null ? " · Sicherung: keine gefunden" : ` · letzte Sicherung vor ${Math.floor(o.backup.ageHours)} Std.`)}
+        {!o.alertMail && " · Alarm-Mail aus (OPERATOR_ALERT_EMAIL nicht gesetzt)"}
+      </p>
+    </Card>
   );
 }
 

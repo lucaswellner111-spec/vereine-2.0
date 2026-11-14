@@ -21,6 +21,8 @@ export type MailTemplates = {
   "waitlist-confirm": { orgName?: string; link: string; validHours: number; removeLink: string };
   /** Warteliste: erneute Anmeldung einer schon bestaetigten Adresse (statt Fehlermeldung, gegen Enumeration). */
   "waitlist-exists": { link: string; removeLink: string };
+  /** Betriebsalarm an den Betreiber (feste Texte und Zahlen, keine Personendaten). */
+  "ops-alert": { title: string; detail: string; link: string };
 };
 export type MailTemplate = keyof MailTemplates;
 export const MAIL_TEMPLATES: MailTemplate[] = [
@@ -36,6 +38,7 @@ export const MAIL_TEMPLATES: MailTemplate[] = [
   "notification-digest",
   "waitlist-confirm",
   "waitlist-exists",
+  "ops-alert",
 ];
 
 /**
@@ -56,6 +59,7 @@ export const TEMPLATE_META: Record<MailTemplate, { priority: "critical" | "norma
   "notification-digest": { priority: "normal", category: "digest" },
   "waitlist-confirm": { priority: "normal", category: "notice" },
   "waitlist-exists": { priority: "normal", category: "notice" },
+  "ops-alert": { priority: "critical", category: "notice" },
 };
 
 export type RenderedMail = { subject: string; text: string; html: string };
@@ -264,6 +268,16 @@ export function renderMail<T extends MailTemplate>(template: T, data: MailTempla
         { label: `${BRAND} ansehen`, link: d.link },
         `Du warst das nicht? Dann ignoriere diese E-Mail einfach.`,
         { unsubscribe: d.removeLink, unsubscribeText: "Doch keine Infos mehr?", unsubscribeLabel: "Von der Warteliste austragen" },
+      );
+    }
+    case "ops-alert": {
+      const d = data as MailTemplates["ops-alert"];
+      return compose(
+        `${BRAND}-Alarm: ${d.title}`,
+        "Hallo,",
+        [d.detail, `Du bekommst diese Meldung höchstens einmal pro Ereignisart und Tag. Details findest du auf der Plattform-Seite.`],
+        { label: "Plattform-Seite öffnen", link: d.link },
+        `Automatische Betriebsmeldung ohne Personendaten.`,
       );
     }
   }

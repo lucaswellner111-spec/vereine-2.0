@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { fastifyOptions, isStrictRoute } from "./app.setup";
+import fastifyRateLimit from "@fastify/rate-limit";
+import { fastifyOptions, isStrictRoute, rateLimitAllowList } from "./app.setup";
 
 describe("Proxy-Vertrauen (TRUST_PROXY)", () => {
   const app = Fastify({ ...fastifyOptions({ logger: false }) });
@@ -26,5 +27,28 @@ describe("Proxy-Vertrauen (TRUST_PROXY)", () => {
     expect(isStrictRoute({ method: "POST", routeOptions: { url: "/auth/login" } })).toBe(true);
     expect(isStrictRoute({ method: "GET", routeOptions: { url: "/auth/me" } })).toBe(false);
     expect(isStrictRoute({ method: "DELETE", routeOptions: { url: "/privacy/account" } })).toBe(true);
+  });
+});
+
+describe("Rate-Limit-Ausnahme fuer den Lastgenerator (RATE_LIMIT_ALLOWLIST)", () => {
+  it("liest kommagetrennte IPs, leer = keine Ausnahme", () => {
+    expect(rateLimitAllowList({} as NodeJS.ProcessEnv)).toEqual([]);
+    expect(rateLimitAllowList({ RATE_LIMIT_ALLOWLIST: " 203.0.113.7 , ,198.51.100.2" } as NodeJS.ProcessEnv)).toEqual(["203.0.113.7", "198.51.100.2"]);
+  });
+
+  async function limited(allow: string[], ip: string) {
+    const app = Fastify({ logger: false });
+    await app.register(fastifyRateLimit, { max: 3, timeWindow: "1 minute", allowList: allow });
+    app.get("/x", async () => "ok");
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i++) codes.push((await app.inject({ method: "GET", url: "/x", remoteAddress: ip })).statusCode);
+    await app.close();
+    return codes;
+  }
+
+  it("nur die freigegebene IP wird nicht gebremst", async () => {
+    expect(await limited(["203.0.113.7"], "203.0.113.7")).toEqual([200, 200, 200, 200, 200, 200]);
+    expect(await limited(["203.0.113.7"], "198.51.100.9")).toContain(429);
+    expect(await limited([], "203.0.113.7")).toContain(429);
   });
 });

@@ -368,6 +368,7 @@ describe("Mail: Vorlagen", () => {
     "notification-digest": { name: "Lena", lines: ["2 neue Kommentare", "1 neue Rechnung"], link: "https://klubnest.de/benachrichtigungen", unsubscribeLink: "https://klubnest.de/abmelden#t=y" },
     "waitlist-confirm": { orgName: "SV Grün", link: "https://klubnest.de/warteliste/bestaetigen#t=1", validHours: 48, removeLink: "https://klubnest.de/warteliste/austragen#t=r" },
     "waitlist-exists": { link: "https://klubnest.de/", removeLink: "https://klubnest.de/warteliste/austragen#t=r" },
+    "ops-alert": { title: "Sicherung zu alt", detail: "Die letzte erfolgreiche Sicherung ist 40 Stunden alt.", link: "https://klubnest.de/plattform" },
   };
 
   it.each(MAIL_TEMPLATES)("%s: Text und HTML, Deutsch in Du-Form, ohne externe Ressourcen", (t) => {
