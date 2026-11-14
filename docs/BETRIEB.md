@@ -209,6 +209,7 @@ Reaktionszeit-Vorschlag (Gründer entscheidet): Alarm `worker`, `backup` **am se
 4. Ausrollen. Die API führt **beim Start** die Migrationen aus, also erst **nach** der erfolgreichen Sicherung.
 5. Smoke-Test (`smoke.sh`: Startseite, `/api/auth/me` 401, `/api/metrics` 404, Bereitschaft, Worker, Sicherheits-Header, Container gesund).
 6. Fehler: automatischer **Rollback der Images** auf das vorige Tag und erneuter Smoke-Test.
+7. **Aufräumen nach erfolgreichem Smoke-Test (Pflichtschritt, im Skript eingebaut):** `docker builder prune -f` (gesamter ungenutzter Build-Cache; er war die Hauptursache für volle Platten, siehe `docs/GROESSEN-BUDGET.md`), `docker image prune -f` und Entfernen alter eigener `vereine-api:*`/`vereine-web:*`-Tags. Es bleiben nur das neue und das vorige Tag (Rückfall) erhalten; mehr Rückfall-Tags mit `KEEP_IMAGES=<n>`. Fremde Images werden nicht angefasst. Das Skript schreibt danach die Größen aus `docker system df` ins Protokoll; die Uptime-Prüfung (`uptime-check.sh`) warnt, wenn der Docker-Speicher über `UPTIME_DOCKER_MAX_GB` (Standard 15) wächst.
 
 Wichtig: Ein Rollback macht **Migrationen nicht rückgängig**. Migrationen müssen deshalb rückwärtskompatibel sein (erst Spalte hinzufügen und befüllen, später entfernen). Bei einer zerstörenden Migration: `restore.sh live <Satz vor dem Deploy>` (das Skript nennt den Satz).
 

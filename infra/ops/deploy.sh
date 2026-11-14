@@ -23,7 +23,8 @@ STATE="$APP_DIR/.deploy"
 mkdir -p "$STATE"
 CURRENT="$(cat "$STATE/current" 2>/dev/null || true)"
 PREVIOUS="$(cat "$STATE/previous" 2>/dev/null || true)"
-KEEP_IMAGES="${KEEP_IMAGES:-3}"
+# Rueckfall-Tags: neben dem neuen Tag bleibt nur das vorige erhalten (= die letzten 2); KEEP_IMAGES = Anzahl weiterer aelterer Tags
+KEEP_IMAGES="${KEEP_IMAGES:-0}"
 
 # Basis-URL fuer den Smoke-Test: bei HTTPS-Domain lokal ueber --resolve (kein DNS/Hairpin noetig)
 smoke() {
@@ -113,9 +114,13 @@ echo "$TAG" > "$STATE/current"
 echo "$(date -u +%FT%TZ) $TAG backup=${BACKUP_SET:-none}" >> "$STATE/history"
 ops_log "Deploy $TAG erfolgreich (vorher: ${CURRENT:-<keins>})."
 
-# Alte Tags entfernen, die beiden aktuellen bleiben immer
+# Alte Tags entfernen: nur eigene vereine-api/vereine-web-Tags, das neue und das vorige (Rueckfall) bleiben immer,
+# dazu hoechstens KEEP_IMAGES weitere (Standard 0 = insgesamt die letzten 2).
 for repo in vereine-api vereine-web; do
-  docker image ls "$repo" --format '{{.Tag}}' | grep -vx -e local -e "$TAG" -e "${CURRENT:-__none__}" | sort -r | tail -n +"$((KEEP_IMAGES))" \
-    | while read -r t; do docker rmi "$repo:$t" >/dev/null 2>&1 || true; done
+  docker image ls "$repo" --format '{{.Tag}}' | grep -vx -e local -e "$TAG" -e "${CURRENT:-__none__}" | sort -r | tail -n +"$((KEEP_IMAGES + 1))"     | while read -r t; do docker rmi "$repo:$t" >/dev/null 2>&1 || true; done
 done
-docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
+# Nach erfolgreichem Smoke-Test den gesamten ungenutzten Build-Cache und lose Zwischen-Images loeschen
+# (Hauptursache fuer volle Platten: ein Deploy legt mehrere GB Cache an). Laufende Container und die beiden Tags bleiben.
+docker builder prune -f >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true
+ops_log "Aufgeraeumt: Build-Cache und alte Image-Tags entfernt. $(docker system df --format '{{.Type}} {{.Size}}' 2>/dev/null | tr '\n' ';')"
