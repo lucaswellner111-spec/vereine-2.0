@@ -175,6 +175,12 @@ a, button, summary, label, select, input, textarea, [role="button"], [role="tab"
   touch-action: manipulation;
 }
 
+/* Verschachtelte Scrollbereiche: Momentum in Safari, Scrollkette zur Seite nicht durchreichen */
+[class*="overflow-y-auto"], [class*="overflow-x-auto"] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 /* Umbrueche: Ueberschriften ausgewogen, Fliesstext ohne Einzelwort-Zeilen */
 h1, h2, h3 { text-wrap: balance; }
 p, li { text-wrap: pretty; }
