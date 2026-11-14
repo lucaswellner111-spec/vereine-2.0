@@ -4,7 +4,7 @@ import { createOrgApi, expect, signupApi, test } from "./fixtures";
 async function collectCspViolations(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     (window as unknown as { __csp: string[] }).__csp = [];
-    document.addEventListener("securitypolicyviolation", (e) => (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+    document.addEventListener("securitypolicyviolation", (e) => (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber} ${(e.sample || "").slice(0, 80)}`));
   });
   return () => page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
 }
@@ -26,7 +26,12 @@ test("CSP mit Nonce: Skripte nur mit Nonce, keine Verstoesse auf Startseite, Anm
   await createOrgApi(page.request, `SV Csp ${info.workerIndex}`);
   await page.goto("/feed");
   await expect(page.getByRole("navigation", { name: "Hauptnavigation" }).first()).toBeVisible();
-  expect(await violations()).toEqual([]);
+  // Navigation im Browser (RSC-Abruf, Chunks nachladen) darf unter der Nonce-CSP nicht haengen
+  await page.getByRole("link", { name: "Kalender" }).first().click();
+  await expect(page).toHaveURL(/\/kalender/);
+  await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+  // `eval`: Zod prueft beim Start per `new Function`, ob eval erlaubt ist (abgefangen, nur ein Pruefversuch, kein eval-Einsatz)
+  expect((await violations()).filter((v) => !v.startsWith("script-src eval"))).toEqual([]);
 });
 
 test("Bot-Abwehr ist in der E2E-Umgebung aus: Config meldet enabled=false, Formulare laufen ohne Loesung", async ({ page }) => {
