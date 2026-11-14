@@ -296,7 +296,7 @@ describe("Termine P4b: Bearbeiten, Limit/Warteliste, Helferlisten, Anwesenheit, 
 
     const list = (await req(mod, "GET", `/events/${ev}/attendance`)).json();
     const mias = list.entries.find((x: { userId: string }) => x.userId === mia.id);
-    expect(mias).toEqual({ userId: mia.id, name: "mia", handle: "mia", status: null, rsvp: "yes" }); // handle: Profil-Link in der Anwesenheitsliste
+    expect(mias).toEqual({ userId: mia.id, name: "mia", handle: "mia", status: null, rsvp: "yes", youth: false }); // handle: Profil-Link in der Anwesenheitsliste
     expect(list.entries.some((x: { userId: string }) => x.userId === tom.id)).toBe(false);
 
     const saved = (await req(mod, "PUT", `/events/${ev}/attendance`, {
