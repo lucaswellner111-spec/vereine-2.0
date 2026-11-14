@@ -64,7 +64,7 @@ function UnreadBadge({ n, floating }: { n: number; floating?: boolean }) {
 }
 
 /** Bereiche, die am Handy unter "Mehr" liegen (dort ist "Mehr" der aktuelle Bereich). */
-const MORE_PREFIXES = ["/verwaltung", "/einstellungen", "/rechnungen", "/personen", "/plattform", "/spenden"];
+const MORE_PREFIXES = ["/verwaltung", "/einstellungen", "/rechnungen", "/kinder", "/personen", "/plattform", "/spenden"];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -274,7 +274,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
             href="/einstellungen/profil"
             label="Einstellungen"
             icon={Settings}
-            active={pathname.startsWith("/einstellungen") || pathname === "/rechnungen"}
+            active={pathname.startsWith("/einstellungen") || pathname === "/rechnungen" || pathname.startsWith("/kinder")}
             items={SETTINGS_ITEMS}
           />
         </nav>

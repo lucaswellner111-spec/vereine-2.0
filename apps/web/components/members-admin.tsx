@@ -283,7 +283,7 @@ export function MemberRegistry({ slug, isAdmin, onError }: { slug: string; isAdm
               {page.items.map((m) => (
                 <tr key={m.userId} className={stackTable.tr}>
                   <td className={stackTable.td}><CellLabel>Nr.</CellLabel><span className="font-mono text-xs">{m.memberNo}</span></td>
-                  <td className={stackTable.tdMain}><UserNameLink handle={m.handle} name={m.name} /> {m.minor && <Badge tone="accent">minderjährig</Badge>}</td>
+                  <td className={stackTable.tdMain}><UserNameLink handle={m.handle} name={m.name} /> {m.youth ? <Badge tone="brand">Jugend</Badge> : m.minor && <Badge tone="accent">minderjährig</Badge>}{m.youth && m.guardianName && <span className="block text-xs text-muted">Elternteil: {m.guardianName}</span>}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Rolle</CellLabel>{ROLE_LABEL[m.role]}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Ort</CellLabel>{m.city || "–"}</td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Beitragsklasse</CellLabel>{m.feeClassName ?? "–"}</td>

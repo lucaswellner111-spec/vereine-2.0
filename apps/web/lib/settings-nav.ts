@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, IdCard, Receipt, ShieldCheck, User, Lock, type LucideIcon } from "lucide-react";
+import { Baby, Bell, CalendarDays, IdCard, Receipt, ShieldCheck, User, Lock, type LucideIcon } from "lucide-react";
 
 /** Unterpunkte der Einstellungen (Seitenleiste am Desktop, Tab-Leiste am Handy). */
 export const SETTINGS_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
@@ -8,5 +8,6 @@ export const SETTINGS_ITEMS: { href: string; label: string; icon: LucideIcon }[]
   { href: "/einstellungen/mitgliedsdaten", label: "Meine Mitgliedsdaten", icon: IdCard },
   { href: "/einstellungen/mitteilungen", label: "Mitteilungen", icon: Bell },
   { href: "/einstellungen/kalender", label: "Kalender", icon: CalendarDays },
+  { href: "/kinder", label: "Meine Kinder", icon: Baby },
   { href: "/rechnungen", label: "Rechnungen", icon: Receipt },
 ];

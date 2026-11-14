@@ -168,6 +168,9 @@ export function FeeRunAdmin({ slug, classesVersion = 0 }: { slug: string; classe
             {preview.byClass.some((c) => c.amountCents === 0 && c.members > 0) && (
               <Alert tone="info">Mindestens eine Klasse kostet 0 €; dafür entstehen Entwürfe über 0 €.</Alert>
             )}
+            {preview.withoutRecipient > 0 && (
+              <Alert tone="info">{preview.withoutRecipient} {preview.withoutRecipient === 1 ? "Kind hat" : "Kinder haben"} keinen Rechnungsempfänger (Elternteil) und {preview.withoutRecipient === 1 ? "wird" : "werden"} übersprungen.</Alert>
+            )}
             {preview.withoutClass > 0 && (
               <Alert tone="info">{preview.withoutClass} {preview.withoutClass === 1 ? "aktives Mitglied hat" : "aktive Mitglieder haben"} keine Beitragsklasse und {preview.withoutClass === 1 ? "bekommt" : "bekommen"} keine Rechnung.</Alert>
             )}
@@ -196,7 +199,7 @@ export function FeeRunAdmin({ slug, classesVersion = 0 }: { slug: string; classe
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Fällig</CellLabel>{dateDe(r.dueDate)}</td>
                   <td className={stackTable.td}><CellLabel>Status</CellLabel><Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge></td>
                   <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Entwürfe</CellLabel>{r.status === "done" ? r.createdCount : "–"}</td>
-                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Übersprungen</CellLabel>{r.status === "done" ? r.skippedCount : "–"}</td>
+                  <td className={clsx(stackTable.td, "text-muted")}><CellLabel>Übersprungen</CellLabel>{r.status === "done" ? r.skippedCount : "–"}{r.status === "done" && r.skippedNoRecipient > 0 && <span className="block text-xs text-danger">{r.skippedNoRecipient} {r.skippedNoRecipient === 1 ? "Kind" : "Kinder"} ohne Rechnungsempfänger</span>}</td>
                   <td className={clsx(stackTable.tdActions, "sm:text-right")}>
                     {r.status === "failed" && (
                       <Button size="sm" variant="secondary" busy={retrying} className="max-sm:w-full" onClick={() => retry(r)}>Erneut versuchen</Button>

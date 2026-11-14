@@ -16,9 +16,10 @@ const preview: FeeRunPreview = {
     { feeClassId: "c2", name: "Jugend", amountCents: 6000, members: 1, totalCents: 6000 },
   ],
   withoutClass: 3,
+  withoutRecipient: 0,
   periodTaken: false,
 };
-const doneRun: FeeRunItem = { id: "r1", periodLabel: "2027", dueDate: "2027-01-31", feeClassIds: ["c1", "c2"], status: "done", createdCount: 2, skippedCount: 0, attempts: 1, createdAt: "2026-11-08T10:00:00.000Z", finishedAt: "2026-11-08T10:00:01.000Z" };
+const doneRun: FeeRunItem = { id: "r1", periodLabel: "2027", dueDate: "2027-01-31", feeClassIds: ["c1", "c2"], status: "done", createdCount: 2, skippedCount: 0, skippedNoRecipient: 0, attempts: 1, createdAt: "2026-11-08T10:00:00.000Z", finishedAt: "2026-11-08T10:00:01.000Z" };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
