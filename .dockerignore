@@ -5,3 +5,11 @@
 .git
 .env*
 infra/terraform
+**/.next*
+.claude
+e2e
+docs
+.github
+**/*.log
+**/test-results
+**/playwright-report
