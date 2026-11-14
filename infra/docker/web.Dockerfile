@@ -8,6 +8,21 @@ RUN npm ci --workspace @vereine/web --workspace @vereine/shared --include-worksp
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+# Oeffentliche Firmendaten (Impressum usw.) werden beim Build eingebettet, siehe apps/web/lib/legal-config.ts
+ARG NEXT_PUBLIC_ALLOW_INDEXING
+ARG NEXT_PUBLIC_LEGAL_COMPANY
+ARG NEXT_PUBLIC_LEGAL_FORM
+ARG NEXT_PUBLIC_LEGAL_STREET
+ARG NEXT_PUBLIC_LEGAL_POSTAL_CITY
+ARG NEXT_PUBLIC_LEGAL_COUNTRY
+ARG NEXT_PUBLIC_LEGAL_REPRESENTATIVES
+ARG NEXT_PUBLIC_LEGAL_REGISTER
+ARG NEXT_PUBLIC_LEGAL_VAT_ID
+ARG NEXT_PUBLIC_LEGAL_EMAIL
+ARG NEXT_PUBLIC_LEGAL_PHONE
+ARG NEXT_PUBLIC_LEGAL_DPO
+ARG NEXT_PUBLIC_LEGAL_DSA_EMAIL
+ARG NEXT_PUBLIC_LEGAL_AUTHORITY
 RUN npm run build -w @vereine/shared && npm run build -w @vereine/web
 
 FROM node:22-slim
