@@ -9,6 +9,7 @@ import {
   reportSchema,
   deleteCommentSchema,
   moderatePostSchema,
+  notificationsQuerySchema,
   profileMediaQuerySchema,
   type ProfileMediaPage,
   resolveReportSchema,
@@ -23,6 +24,7 @@ import {
 } from "@vereine/shared";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
+import { ActivityService } from "./activity.service";
 import { ModerationService } from "./moderation.service";
 import { PostsService } from "./posts.service";
 
@@ -32,6 +34,7 @@ export class PostsController {
   constructor(
     @Inject(PostsService) private readonly posts: PostsService,
     @Inject(ModerationService) private readonly moderation: ModerationService,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   @Get("feed")
@@ -171,6 +174,29 @@ export class PostsController {
     return this.posts.toggleLike(user, id);
   }
 
+  /** Wer hat den Beitrag geliked (Like-Liste als Sheet). */
+  @Get("posts/:id/likes")
+  likers(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Query() query: unknown) {
+    return this.posts.likers(user, id, parse(notificationsQuerySchema, query ?? {}).cursor);
+  }
+
+  @Post("comments/:id/like")
+  @HttpCode(200)
+  likeComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.posts.toggleCommentLike(user, id);
+  }
+
+  /** Meine Likes / meine Kommentare (Aktivitaet), Keyset-Paging. */
+  @Get("me/likes")
+  myLikes(@CurrentUser() user: PublicUser, @Query() query: unknown) {
+    return this.activity.myLikes(user, parse(notificationsQuerySchema, query ?? {}).cursor);
+  }
+
+  @Get("me/comments")
+  myComments(@CurrentUser() user: PublicUser, @Query() query: unknown) {
+    return this.activity.myComments(user, parse(notificationsQuerySchema, query ?? {}).cursor);
+  }
+
   @Get("posts/:id/comments")
   comments(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<CommentItem[]> {
     return this.posts.listComments(user, id);
@@ -178,7 +204,8 @@ export class PostsController {
 
   @Post("posts/:id/comments")
   addComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<CommentItem> {
-    return this.posts.addComment(user, id, parse(createCommentSchema, body).body);
+    const input = parse(createCommentSchema, body);
+    return this.posts.addComment(user, id, input.body, input.parentId);
   }
 
   /** Eigenen Kommentar oder Kommentar unter eigenem persoenlichen Beitrag loeschen. */

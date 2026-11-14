@@ -243,9 +243,26 @@ export const comments = social.table(
     postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
     authorId: uuid("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
+    /** Antwort auf einen Kommentar (eine Ebene); mit dem Elternkommentar geloescht. */
+    parentId: uuid("parent_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("comments_post_idx").on(t.postId), index("comments_author_created_idx").on(t.authorId, t.createdAt)],
+  (t) => [
+    index("comments_post_idx").on(t.postId),
+    index("comments_author_created_idx").on(t.authorId, t.createdAt),
+    index("comments_parent_idx").on(t.parentId).where(sql`parent_id IS NOT NULL`),
+  ],
+);
+
+/** Likes auf Kommentare (je Person einer). */
+export const commentLikes = social.table(
+  "comment_likes",
+  {
+    commentId: uuid("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.commentId, t.userId] }), index("comment_likes_user_created_idx").on(t.userId, t.createdAt)],
 );
 
 /** Umfrage an einem Beitrag (Einfachwahl, anonym). Unveraenderlich nach dem Anlegen. */
@@ -327,11 +344,17 @@ export const notifications = social.table(
     data: jsonb("data").notNull().default({}),
     /** Ausloesende Person (Kommentar, Folgen); Kontoloeschung entfernt ihre Benachrichtigungen bei anderen (Kaskade). */
     actorId: uuid("actor_id").references(() => users.id, { onDelete: "cascade" }),
+    /** Buendelung (Likes): je Empfaenger/Ziel/Typ/Tag eine Zeile; null = Einzelbenachrichtigung. */
+    groupKey: text("group_key"),
+    /** Gebuendelt: die zuletzt ausloesenden Personen (hoechstens 3, ohne Fremdschluessel; Kontoloeschung entfernt sie per eraseUser). */
+    actorIds: uuid("actor_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    actorCount: integer("actor_count").notNull().default(0),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("notifications_user_created_idx").on(t.userId, t.createdAt),
+    uniqueIndex("notifications_group_uq").on(t.userId, t.groupKey).where(sql`group_key IS NOT NULL`),
     index("notifications_actor_idx").on(t.actorId).where(sql`actor_id IS NOT NULL`),
     index("notifications_created_idx").on(t.createdAt),
   ],

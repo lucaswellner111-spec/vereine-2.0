@@ -154,11 +154,12 @@ export class PrivacyService implements OnModuleInit {
         expiresAt: s.expiresAt.toISOString(),
       })),
       posts: ownPosts.map((p) => ({ body: p.body, kind: p.kind, orgId: p.orgId, at: p.createdAt.toISOString(), deleted: !!p.deletedAt })),
-      comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, at: c.createdAt.toISOString() })),
+      comments: ownComments.map((c) => ({ body: c.body, postId: c.postId, replyTo: c.parentId, at: c.createdAt.toISOString() })),
       follows: followed.map((f) => ({ orgId: f.orgId, at: f.createdAt.toISOString() })),
       following: social.following,
       followers: social.followers,
       likes: postData.likes,
+      commentLikes: postData.commentLikes,
       reports: postData.reports,
       notifications: notificationRows,
       pushSubscriptions: pushRows,
@@ -220,6 +221,7 @@ export class PrivacyService implements OnModuleInit {
     await this.orgAdmin.eraseUser(userId);
     await this.avv.eraseUser(userId); // AVV-Nachweis bleibt, die Person wird entkoppelt
     await this.postsSvc.eraseUser(userId);
+    await this.notifications.eraseUser(userId); // gebuendelte Benachrichtigungen (Likes) anderer: Person entfernen
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt, auch als betroffene Person in fremden Eintraegen).
       await tx.update(auditLog).set({ userId: null }).where(eq(auditLog.userId, userId));

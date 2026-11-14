@@ -709,6 +709,12 @@ export class ChatService implements OnModuleInit {
     return (await this.blockedBetween(userId, [otherId])).has(otherId);
   }
 
+  /** Alle Personen, mit denen `userId` in irgendeiner Richtung eine Sperre hat (fuer Benachrichtigungen anderer Bereiche). */
+  async blockedWith(userId: string): Promise<string[]> {
+    const rows = await this.db.select().from(chatBlocks).where(or(eq(chatBlocks.blockerId, userId), eq(chatBlocks.blockedId, userId)) as SQL);
+    return [...new Set(rows.map((r) => (r.blockerId === userId ? r.blockedId : r.blockerId)))];
+  }
+
   private async blockedBetween(userId: string, ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.db

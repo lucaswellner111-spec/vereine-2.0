@@ -45,6 +45,13 @@ export function pushMessage(type: Type, d: Record<string, string>): PushPayload 
       return { title: `Neue Rechnung von ${d.orgName ?? ""}`, body: d.amount ?? "", url: "/rechnungen" };
     case "invoice_overdue":
       return { title: "Rechnung überfällig", body: d.orgName ?? "", url: "/rechnungen" };
+    case "like":
+    case "comment_like":
+      return { title: "Gefällt mir", body: "Jemand mag deinen Beitrag.", url: d.postId ? `/beitrag/${d.postId}` : "/feed" };
+    case "comment_reply":
+      return { title: "Neue Antwort", body: "Jemand hat auf deinen Kommentar geantwortet.", url: d.postId ? `/beitrag/${d.postId}` : "/feed" };
+    case "mention":
+      return { title: "Du wurdest erwähnt", body: "Jemand hat dich in einem Beitrag oder Kommentar erwähnt.", url: d.postId ? `/beitrag/${d.postId}` : "/feed" };
     case "fee_run_done":
       return { title: "Beitragslauf fertig", body: `${d.periodLabel ?? ""}: ${d.created ?? "0"} Entwürfe`, url: "/verwaltung/rechnungen" };
   }

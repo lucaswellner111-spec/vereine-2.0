@@ -222,7 +222,11 @@ export const updatePostSchema = z.object({
 });
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 
-export const createCommentSchema = z.object({ body: z.string().trim().min(1).max(500) });
+export const createCommentSchema = z.object({
+  body: z.string().trim().min(1).max(500),
+  /** Antwort auf einen Kommentar (nur eine Ebene: der Elternkommentar darf selbst keine Antwort sein). */
+  parentId: z.string().uuid().optional(),
+});
 export const reportSchema = z.object({
   reason: z.enum(["spam", "hate", "illegal", "other"]),
   note: z.string().trim().max(300).optional(),
@@ -459,11 +463,36 @@ export type NotificationItem = {
     | "follow_accepted"
     | "invoice_new"
     | "invoice_overdue"
-    | "fee_run_done";
+    | "fee_run_done"
+    | "like"
+    | "comment_like"
+    | "comment_reply"
+    | "mention";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
+  /** Ausloesende Personen (bei gebuendelten Likes die ersten, neueste zuerst); Namen werden beim Lesen aufgeloest. */
+  actors?: NotificationActor[];
+  /** Gesamtzahl der ausloesenden Personen (bei Buendelung groesser als `actors.length`). */
+  count?: number;
+  /** Vorschau des Beitrags: erstes Bild (Medien-ID) oder Textauszug. */
+  preview?: { mediaId: string | null; text: string | null } | null;
 };
+export type NotificationActor = {
+  id: string;
+  name: string;
+  handle: string | null;
+  avatarId: string | null;
+  /** Nur bei Folgen-Benachrichtigungen: folge ich der Person schon? */
+  following?: "none" | "requested" | "following";
+};
+/** Eigene Likes/Kommentare ("Aktivitaet"): Vorschau des Beitrags, Keyset-Paging. */
+export type ActivityPostRef = { id: string; mediaId: string | null; text: string; by: string };
+export type MyLikeItem = { postId: string; at: string; post: ActivityPostRef };
+export type MyCommentItem = { id: string; body: string; at: string; post: ActivityPostRef };
+export type ActivityPage<T> = { items: T[]; nextCursor: string | null };
+export type LikerItem = { id: string; name: string; handle: string | null; avatarId: string | null; at: string };
+export type LikersPage = { items: LikerItem[]; total: number; nextCursor: string | null };
 export type NotificationsResponse = {
   unread: number;
   items: NotificationItem[];
@@ -475,7 +504,16 @@ export const notificationsQuerySchema = z.object({
   cursor: z.string().max(500).optional(),
 });
 export const markNotificationsReadSchema = z.object({ ids: z.array(z.string().uuid()).max(100).optional() });
-export type CommentItem = { id: string; body: string; createdAt: string; author: { id: string; name: string; handle?: string | null } };
+export type CommentItem = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: { id: string; name: string; handle?: string | null };
+  /** Eltern-Kommentar bei Antworten, sonst null. */
+  parentId?: string | null;
+  likes?: number;
+  likedByMe?: boolean;
+};
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -547,7 +585,9 @@ export const chatCandidatesQuerySchema = z.object({ q: z.string().trim().max(80)
 export type ChatEvent =
   | { type: "message"; conversationId: string; messageId: string }
   | { type: "conversation"; conversationId: string }
-  | { type: "read"; conversationId: string };
+  | { type: "read"; conversationId: string }
+  /** Neue Benachrichtigung (nur ID; Inhalt holt der Client per REST). */
+  | { type: "notification"; id: string };
 
 // --- Plattform-Moderation ----------------------------------------------------
 

@@ -1,5 +1,5 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Put, Query, UseGuards } from "@nestjs/common";
-import { emailPrefsSchema, markNotificationsReadSchema, notificationsQuerySchema, type EmailPrefs, type NotificationsResponse, type PublicUser } from "@vereine/shared";
+import { Body, Controller, Delete, Get, HttpCode, Inject, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { emailPrefsSchema, markNotificationsReadSchema, notificationsQuerySchema, type EmailPrefs, type NotificationItem, type NotificationsResponse, type PublicUser } from "@vereine/shared";
 import { DigestService } from "./digest.service";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
@@ -29,6 +29,21 @@ export class NotificationsController {
     const { limit, cursor } = parse(notificationsQuerySchema, query ?? {});
     const n = Math.min(Math.max(Number(limit) || 30, 1), 100);
     return this.service.list(user.id, n, cursor);
+  }
+
+  /** Einzelne Benachrichtigung (fuer das Live-Banner). */
+  @Get(":id")
+  async one(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<NotificationItem> {
+    const item = await this.service.get(user.id, id);
+    if (!item) throw new NotFoundException("Benachrichtigung nicht gefunden.");
+    return item;
+  }
+
+  /** Ausblenden = eigene Benachrichtigung loeschen. */
+  @Delete(":id")
+  @HttpCode(204)
+  hide(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
+    return this.service.remove(user.id, id);
   }
 
   @Post("read")
