@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseWaitlistSource, WAITLIST_CHECK_INBOX, WAITLIST_CONSENT_TEXT, waitlistSignupSchema } from "@vereine/shared";
+import { resetCaptchaCache } from "@/lib/captcha";
 import { WaitlistForm } from "./waitlist-form";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -31,7 +32,9 @@ describe("WaitlistForm", () => {
   it("schickt Rolle, Region, feste Quelle, Zeit seit Anzeige und leeren Honeypot; zeigt die neutrale Antwort", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-13T10:00:00Z"));
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => json({ message: WAITLIST_CHECK_INBOX }, 202));
+    resetCaptchaCache();
+    // Sicherheitspruefung (Proof-of-Work) ist hier serverseitig aus; nur die Anmeldung wird gezaehlt
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => (url.endsWith("/captcha/config") ? json({ enabled: false }) : json({ message: WAITLIST_CHECK_INBOX }, 202)));
     vi.stubGlobal("fetch", fetchMock);
     render(<WaitlistForm source="flyer" />);
     vi.setSystemTime(new Date("2026-11-13T10:00:07Z")); // 7 s ausgefuellt
@@ -42,8 +45,8 @@ describe("WaitlistForm", () => {
     const submit = screen.getByRole("button", { name: "Auf die Warteliste" }) as HTMLButtonElement;
     await waitFor(() => expect(submit.disabled).toBe(false), { timeout: 4000 });
     fireEvent.click(submit);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith("/waitlist"))).toBe(true));
+    const [url, init] = fetchMock.mock.calls.find((c) => String(c[0]).endsWith("/waitlist")) as [string, RequestInit];
     expect(url).toMatch(/\/waitlist$/);
     const body = JSON.parse(String(init.body));
     expect(body).toMatchObject({ email: "lena@example.de", role: "kasse", region: "lk-leipzig", source: "flyer", consent: true });
