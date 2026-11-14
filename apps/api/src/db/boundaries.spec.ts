@@ -142,3 +142,18 @@ describe("Warteliste-Bereich", () => {
     }
   });
 });
+
+/** Der AVV-Bereich (Schema `avv`) kennt nur seine Nachweistabelle; Namen kommen ueber UsersDirectory, Rechte prueft der Aufrufer. */
+describe("AVV-Bereich", () => {
+  const AVV_TABLES = ["avvArea", "avvAcceptances"];
+  it("importiert nur avv-Tabellen aus dem Schema", () => {
+    for (const file of sources(join(root, "avv"))) {
+      const src = readFileSync(file, "utf8");
+      const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) =>
+        m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean),
+      );
+      const foreign = imports.filter((i) => !AVV_TABLES.includes(i));
+      expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
+    }
+  });
+});

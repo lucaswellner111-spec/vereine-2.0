@@ -12,6 +12,7 @@ import type {
   PublicUser,
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
+import { AvvService } from "../avv/avv.service";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { decryptGcm, derivedKey, encryptGcm } from "../common/secret-key";
 import { DB, type Database } from "../db/db.module";
@@ -40,6 +41,7 @@ export class OrgAdminService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(MailService) private readonly mail: MailService,
     @Inject(OrgEvents) private readonly events: OrgEvents,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   // --- Stammdaten ---------------------------------------------------------------
@@ -163,6 +165,7 @@ export class OrgAdminService {
    */
   async mailInvite(user: PublicUser, slug: string, id: string, email: string): Promise<void> {
     const org = await this.requireAdmin(user, slug);
+    await this.avv.assertAccepted(org.id); // Mail im Auftrag des Vereins (Art. 28)
     const token = await this.activeToken(org.id, id);
     const result = await this.mail.send(
       email,

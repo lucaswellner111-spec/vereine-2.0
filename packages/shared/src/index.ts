@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_ORG_TAGS, MAX_POST_TAGS, TAG_IDS } from "./tags";
 export * from "./tags";
+export * from "./avv";
 
 export const ROLES = [
   "platform_admin",

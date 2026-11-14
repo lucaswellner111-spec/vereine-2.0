@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import type { FeeRunInput, FeeRunItem, FeeRunPreview, FeeRunStatus, OrgRole, PublicUser } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { AvvService } from "../avv/avv.service";
 import { berlinDate } from "../common/berlin-date";
 import { isUniqueViolation } from "../common/pg-errors";
 import { DB, type Database } from "../db/db.module";
@@ -44,6 +45,7 @@ export class FeeRunsService implements OnModuleInit {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   onModuleInit() {
@@ -90,6 +92,7 @@ export class FeeRunsService implements OnModuleInit {
 
   async create(user: PublicUser, slug: string, input: FeeRunInput): Promise<FeeRunItem> {
     const org = await this.requireBiller(user, slug);
+    await this.avv.assertAccepted(org.id);
     await this.classesFor(org.id, input.feeClassIds);
     if (input.dueDate < berlinDate()) throw new BadRequestException("Die Fälligkeit darf nicht in der Vergangenheit liegen.");
     let row: RunRow;
@@ -121,6 +124,7 @@ export class FeeRunsService implements OnModuleInit {
   /** Fehlgeschlagenen Lauf neu starten (Versuchszaehler zurueck); schon erzeugte Entwuerfe bleiben (idempotent). */
   async retry(user: PublicUser, slug: string, id: string): Promise<FeeRunItem> {
     const org = await this.requireBiller(user, slug);
+    await this.avv.assertAccepted(org.id);
     const [run] = await this.db.select().from(feeRuns).where(and(eq(feeRuns.id, id), eq(feeRuns.orgId, org.id))).limit(1);
     if (!run) throw new NotFoundException("Beitragslauf nicht gefunden.");
     const [reset] = await this.db

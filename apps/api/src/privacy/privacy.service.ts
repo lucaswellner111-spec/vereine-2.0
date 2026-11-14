@@ -29,6 +29,7 @@ import { DigestService } from "../notifications/digest.service";
 import { SuppressionsService } from "../mail/suppressions.service";
 import { ago, RETENTION } from "../common/retention";
 import { WaitlistService } from "../waitlist/waitlist.service";
+import { AvvService } from "../avv/avv.service";
 
 /** Nach dieser Zeit schliesst der Job `privacy.erase-pending` abgebrochene Kontoloeschungen ab. */
 const ERASE_GRACE_MS = 15 * 60_000;
@@ -63,6 +64,7 @@ export class PrivacyService implements OnModuleInit {
     @Inject(DigestService) private readonly digest: DigestService,
     @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
     @Inject(WaitlistService) private readonly waitlist: WaitlistService,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   onModuleInit() {
@@ -140,6 +142,7 @@ export class PrivacyService implements OnModuleInit {
       emailSettings: await this.digest.exportFor(user.id),
       mailSuppressions: await this.suppressions.exportFor(user.email),
       waitlist: await this.waitlist.exportFor(user.email),
+      avvAcceptances: await this.avv.exportFor(user.id), // Zustimmungen zum AVV, die diese Person fuer Vereine abgegeben hat
       consents: consentHistory.map((c) => ({
         purpose: c.purpose,
         granted: c.granted,
@@ -215,6 +218,7 @@ export class PrivacyService implements OnModuleInit {
     await this.mediaSvc.eraseUser(userId); // Bilddateien (Zeilen folgen per Kaskade)
     // Verweise ohne Fremdschluessel: Ersteller von Einladungen, Bearbeiter von Meldungen, "Weniger davon" anderer
     await this.orgAdmin.eraseUser(userId);
+    await this.avv.eraseUser(userId); // AVV-Nachweis bleibt, die Person wird entkoppelt
     await this.postsSvc.eraseUser(userId);
     await this.db.transaction(async (tx) => {
       // Protokoll bleibt ohne Personenbezug (userId wird entkoppelt, auch als betroffene Person in fremden Eintraegen).

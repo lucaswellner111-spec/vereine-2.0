@@ -190,6 +190,13 @@
       "when": 1794345927846,
       "tag": "0026_waitlist",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794603308106,
+      "tag": "0027_avv_acceptance",
+      "breakpoints": true
     }
   ]
 }

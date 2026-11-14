@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { OrgRole } from "@vereine/shared";
 import { itemsForRole, VERWALTUNG_ITEMS, useVerwaltung } from "@/lib/verwaltung";
+import { AvvBanner } from "./avv-admin";
 import { Alert, ArrowLink, BackLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "./ui";
 
 export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; onError: (m: string | null) => void };
@@ -63,6 +64,7 @@ export function VerwaltungPage({ id, children }: { id: string; children: (ctx: V
       {detail && role && !allowed && (
         <EmptyState title="Mit deiner Rolle hast du auf diese Seite keinen Zugriff." action={<ArrowLink href="/verwaltung">Zurück zur Verwaltung</ArrowLink>} />
       )}
+      {detail && role && allowed && slug && id !== "vertrag" && <AvvBanner key={slug} slug={slug} />}
       {detail && role && allowed && slug && children({ slug, role, refresh, onError: setError })}
     </>
   );
