@@ -29,7 +29,7 @@ test("Aktivitaet: gebuendelte Likes, Erwaehnung, Tabs, Ausblenden, Weiterleitung
   const list = page.getByRole("tabpanel");
   await expect(list.getByRole("heading", { name: "Heute" })).toBeVisible();
   await expect(list.getByText("Cleo und Ben gefällt dein Beitrag.")).toBeVisible();
-  await expect(list.getByText(/Ben hat dich in einem Kommentar erwähnt/)).toBeVisible();
+  await expect(list.getByText(/Ben hat kommentiert/)).toBeVisible();
   await expect(list.getByText("(ungelesen)").first()).toBeAttached();
   await expectAccessible(page, "Aktivitaet");
 
@@ -46,7 +46,7 @@ test("Aktivitaet: gebuendelte Likes, Erwaehnung, Tabs, Ausblenden, Weiterleitung
   await expect(list.getByText("Cleo und Ben gefällt dein Beitrag.")).toBeHidden();
   await page.reload();
   await expect(page.getByText("Cleo und Ben gefällt dein Beitrag.")).toBeHidden();
-  await expect(page.getByText(/Ben hat dich in einem Kommentar erwähnt/)).toBeVisible();
+  await expect(page.getByText(/Ben hat kommentiert/)).toBeVisible();
 
   // Alle gelesen
   await page.getByRole("button", { name: "Alle gelesen" }).click();
@@ -77,7 +77,7 @@ test("Beitrag: Doppeltipp aufs Bild, Like-Liste, Antwort und Kommentar-Like", as
   // Like-Liste als Sheet
   await emil.getByRole("button", { name: /1 Person gefällt das, Liste anzeigen/ }).click();
   const sheet = emil.getByRole("dialog", { name: "Gefällt mir" });
-  await expect(sheet.getByText("Emil")).toBeVisible();
+  await expect(sheet.getByRole("link", { name: "Emil", exact: true }).first()).toBeVisible();
   await expectAccessible(emil, "Like-Liste");
   await emil.keyboard.press("Escape");
   await expect(sheet).toBeHidden();

@@ -394,7 +394,6 @@ export function PostCard({
             >
               {/* key: Herz ploppt bei jedem Wechsel neu auf */}
               <Heart key={String(post.likedByMe)} size={18} aria-hidden className={clsx(post.likedByMe && "animate-pop fill-current text-like")} />
-              {post.likes === 0 && <span aria-hidden>0</span>}
             </Button>
             {post.likes > 0 && (
               <button
