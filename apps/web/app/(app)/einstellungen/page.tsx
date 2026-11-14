@@ -54,7 +54,7 @@ export default function SettingsIndexPage() {
         ))}
       </ListGroup>
       <ListGroup className="mt-6">
-        <ListRow icon={LogOut} tone="danger" title="Abmelden" danger onClick={() => void logout().then(() => router.replace("/login"))} />
+        <ListRow icon={LogOut} tone="danger" title="Abmelden" danger onClick={() => void logout()} />
       </ListGroup>
     </>
   );

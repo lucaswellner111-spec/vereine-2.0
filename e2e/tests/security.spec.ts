@@ -30,8 +30,9 @@ test("CSP mit Nonce: Skripte nur mit Nonce, keine Verstoesse auf Startseite, Anm
   await page.getByRole("link", { name: "Kalender" }).first().click();
   await expect(page).toHaveURL(/\/kalender/);
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
-  // `eval`: Zod prueft beim Start per `new Function`, ob eval erlaubt ist (abgefangen, nur ein Pruefversuch, kein eval-Einsatz)
-  expect((await violations()).filter((v) => !v.startsWith("script-src eval"))).toEqual([]);
+  // Auch kein `script-src eval`: Zod laeuft im Browser ohne JIT (packages/shared/src/zod-setup.ts), sonst loest sein
+  // `new Function`-Test bei jedem Seitenaufruf einen Verstoss aus
+  expect(await violations()).toEqual([]);
 });
 
 test("Bot-Abwehr ist in der E2E-Umgebung aus: Config meldet enabled=false, Formulare laufen ohne Loesung", async ({ page }) => {

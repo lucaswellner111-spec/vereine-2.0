@@ -13,6 +13,8 @@ import { Avatar } from "./ui";
 
 /** So lange bleibt ein Banner stehen (pausiert bei Zeiger/Fokus). */
 export const BANNER_MS = 4000;
+/** Hoechstens eine Abfrage der Unterhaltungsliste in diesem Zeitfenster, egal wie viele Nachrichten eintreffen. */
+export const CONVERSATION_THROTTLE_MS = 3000;
 /** Wischen nach oben ab dieser Strecke (px) schliesst das Banner. */
 const SWIPE_CLOSE = 36;
 
@@ -90,6 +92,8 @@ export function NotificationHubProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [banner, setBanner] = useState<BannerState>({ current: null, more: 0 });
   const seen = useRef(new Set<string>());
+  // Nachrichten-Ereignisse werden gesammelt (je Unterhaltung die neueste) und mit EINER Listenabfrage je Zeitfenster aufgeloest
+  const convo = useRef<{ last: number; timer: ReturnType<typeof setTimeout> | null; queue: Map<string, string> }>({ last: 0, timer: null, queue: new Map() });
 
   const refresh = useCallback(() => {
     api<NotificationsResponse>("/notifications?limit=1")
@@ -110,6 +114,38 @@ export function NotificationHubProvider({ children }: { children: ReactNode }) {
     setBanner((s) => pushBanner(s, item));
   }, []);
 
+  const flushConversations = useCallback(() => {
+    const c = convo.current;
+    c.timer = null;
+    c.last = Date.now();
+    const queue = new Map(c.queue);
+    c.queue.clear();
+    if (queue.size === 0) return;
+    api<ConversationSummary[]>("/chat/conversations")
+      .then((list) => {
+        for (const [conversationId, messageId] of queue) {
+          const conv = list.find((x) => x.id === conversationId);
+          if (!conv?.lastMessage || conv.lastMessage.mine || conv.unread === 0) continue;
+          show({
+            key: `m:${messageId}`,
+            title: conv.title,
+            text: conv.lastMessage.preview,
+            href: `/chat?c=${conv.id}`,
+            avatar: { name: conv.title, mediaId: conv.avatarId },
+            thumbMediaId: null,
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, [show]);
+
+  useEffect(() => {
+    const c = convo.current;
+    return () => {
+      if (c.timer) clearTimeout(c.timer);
+    };
+  }, []);
+
   useChatEvents((e) => {
     if (e.type === "poll") {
       refresh();
@@ -127,20 +163,9 @@ export function NotificationHubProvider({ children }: { children: ReactNode }) {
       // Im offenen Chat derselben Unterhaltung kein Banner; sonst Titel/Vorschau aus der Unterhaltungsliste
       const open = isConversationOpen(e.conversationId, { pathname: location.pathname, search: location.search }, document.visibilityState === "visible");
       if (open) return;
-      api<ConversationSummary[]>("/chat/conversations")
-        .then((list) => {
-          const c = list.find((x) => x.id === e.conversationId);
-          if (!c?.lastMessage || c.lastMessage.mine || c.unread === 0) return;
-          show({
-            key: `m:${e.messageId}`,
-            title: c.title,
-            text: c.lastMessage.preview,
-            href: `/chat?c=${c.id}`,
-            avatar: { name: c.title, mediaId: c.avatarId },
-            thumbMediaId: null,
-          });
-        })
-        .catch(() => undefined);
+      const c = convo.current;
+      c.queue.set(e.conversationId, e.messageId);
+      if (!c.timer) c.timer = setTimeout(flushConversations, Math.max(0, CONVERSATION_THROTTLE_MS - (Date.now() - c.last)));
     }
   });
 
@@ -160,6 +185,20 @@ export function NotificationBanner({ state, onNext }: { state: BannerState; onNe
   const [drag, setDrag] = useState(0);
   const start = useRef<{ y: number; id: number } | null>(null);
   const moved = useRef(false);
+
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  // Per Tastatur erreichbar: Alt+M springt zur sichtbaren Mitteilung (Fokus pausiert die Anzeige, WCAG 2.2.1)
+  useEffect(() => {
+    if (!current) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        linkRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current]);
 
   useEffect(() => {
     if (!current || paused) return;
@@ -216,7 +255,9 @@ export function NotificationBanner({ state, onNext }: { state: BannerState; onNe
         >
           {/* Dehnbarer Link ueber die ganze Flaeche; der Schliessen-Knopf liegt darueber */}
           <Link
+            ref={linkRef}
             href={current.href}
+            aria-keyshortcuts="Alt+M"
             onClick={(e) => {
               if (moved.current) return e.preventDefault();
               onNext();

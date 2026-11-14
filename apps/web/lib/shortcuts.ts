@@ -23,6 +23,7 @@ export const SHORTCUT_LIST: { keys: string[]; label: string }[] = [
   ...Object.entries(GOTO).map(([k, g]) => ({ keys: ["g", k], label: `Zu ${g.label} springen` })),
   { keys: ["n"], label: "Neuer Beitrag (im Feed)" },
   { keys: ["?"], label: "Diese Übersicht anzeigen" },
+  { keys: ["Alt", "M"], label: "Zur eingeblendeten Mitteilung springen (pausiert die Anzeige)" },
   { keys: ["Esc"], label: "Dialog oder Menü schließen" },
 ];
 

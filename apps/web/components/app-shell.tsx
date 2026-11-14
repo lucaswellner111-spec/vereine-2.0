@@ -221,7 +221,9 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
   }, [pathname]);
   const doLogout = () => {
     setMoreOpen(false);
-    void logout().then(() => router.replace("/login"));
+    // Weiterleitung macht allein der Wachposten oben (AppShell-Effekt bei user === null): eine zweite, gleichzeitige
+    // router.replace("/login") liess unter Last die Navigation haengen (E2E auth.spec)
+    void logout();
   };
 
   return (
