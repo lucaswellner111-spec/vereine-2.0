@@ -1,0 +1,39 @@
+# OPTIONAL: Prometheus + Alertmanager neben der App (kein Grafana noetig; die Plattform-Seite zeigt die Lage).
+# Nur im Docker-Netz erreichbar, keine veroeffentlichten Ports (Zugriff per SSH-Tunnel: ssh -L 9090:localhost:9090 ...).
+# Start:  cd /opt/vereine/infra/monitoring
+#   install -d -m 700 secrets
+#   (METRICS_TOKEN aus .env.preview in secrets/metrics_token kopieren, SMTP-Passwort in secrets/smtp_pass; beide 600)
+#   docker compose -f docker-compose.monitoring.yml up -d
+# APP_NETWORK: Netz der App-Compose (Projektname "deploy" -> deploy_default; Staging: vereine-staging_default). Pruefen: docker network ls
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d", "--web.listen-address=:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./secrets/metrics_token:/secrets/metrics_token:ro
+      - promdata:/prometheus
+    networks: [app]
+    logging: &log
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./secrets/smtp_pass:/secrets/smtp_pass:ro
+    networks: [app]
+    logging: *log
+
+networks:
+  app:
+    external: true
+    name: ${APP_NETWORK:-deploy_default}
+
+volumes:
+  promdata:

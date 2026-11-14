@@ -56,6 +56,21 @@ resource "hcloud_firewall" "app" {
     port        = "443"
     source_ips  = ["0.0.0.0/0", "::/0"]
   }
+
+  rule {
+    description = "HTTP/3 (QUIC)"
+    direction   = "in"
+    protocol    = "udp"
+    port        = "443"
+    source_ips  = ["0.0.0.0/0", "::/0"]
+  }
+
+  rule {
+    description = "Ping zur Fehlersuche (ICMP)"
+    direction   = "in"
+    protocol    = "icmp"
+    source_ips  = ["0.0.0.0/0", "::/0"]
+  }
 }
 
 resource "hcloud_firewall" "db" {
