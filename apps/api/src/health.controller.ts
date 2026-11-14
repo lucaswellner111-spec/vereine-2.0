@@ -28,12 +28,13 @@ export class HealthController {
     // Warteschlange: viele wartende/fehlgeschlagene Jobs = Worker steht oder haengt (Alarm-Kriterium, nicht Bereitschaft)
     const queue = await this.jobs.stats().catch(() => null);
     // Mail-Kontingent (Kostenbremse): nur Zahlen, ab 80 % "warning" (nicht wichtige Mails werden dann zurueckgehalten)
+    const failed = queue && queue.failed > 0 ? await this.jobs.failedSummary().catch(() => []) : [];
     const quota = await this.mail.quota().catch(() => null);
     const body = {
       status: db && cache ? "ok" : "degraded",
       db: db ? "up" : "down",
       cache: cache ? `up (${this.cache.kind})` : "down",
-      jobs: queue ? { mode: this.jobs.mode, ...queue } : { mode: this.jobs.mode },
+      jobs: queue ? { mode: this.jobs.mode, ...queue, ...(failed.length ? { failedJobs: failed } : {}) } : { mode: this.jobs.mode },
       mail: quota
         ? { driver: this.mail.driverName, percent: quota.percent, warning: quota.warning, day: `${quota.day.used}/${quota.day.limit}`, month: `${quota.month.used}/${quota.month.limit}` }
         : { driver: this.mail.driverName },

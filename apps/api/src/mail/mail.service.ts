@@ -62,6 +62,11 @@ export class MailService implements OnModuleInit {
     return this.driver.name;
   }
 
+  /** Worker-Start: legt den Treiber an und bricht bei fehlender/falscher SMTP-Konfiguration ab. */
+  assertDriverReady(): void {
+    (this.driver as { ensure?: () => unknown }).ensure?.();
+  }
+
   onModuleInit() {
     this.jobs.define("mail.send", async (d: unknown) => this.deliver(d));
   }

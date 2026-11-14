@@ -62,17 +62,10 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-https://klubnest.de}
       # Prometheus-Token fuer /metrics (leer = Route aus)
       METRICS_TOKEN: ${METRICS_TOKEN:-}
-      # Mail (Scaleway TEM per SMTP, siehe docs/DATENSCHUTZ-LAUNCH.md). MAIL_DRIVER=log verschickt nichts und braucht
-      # keine SMTP-Werte; bei smtp sind SMTP_HOST, SMTP_USER, SMTP_PASS und MAIL_FROM Pflicht (sonst bricht der Start ab).
+      # Mail: die API versendet nicht und bekommt KEINEN SMTP-Zugang (SMTP_*/MAIL_FROM nur im worker, ARCHITEKTUR Punkt 5).
       MAIL_DRIVER: ${MAIL_DRIVER:-log}
       # AVV-Zustimmung der Vereine erzwingen (docs/welle1/W1c-DOKU.md); leer = aus. Der Worker braucht es fuer den Import-Versand.
       AVV_REQUIRED: ${AVV_REQUIRED:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      MAIL_FROM: ${MAIL_FROM:-}
-      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       # Kostenbremse (leer = Standard 200/Tag, 3000/Monat)
       MAIL_DAILY_LIMIT: ${MAIL_DAILY_LIMIT:-}
       MAIL_MONTHLY_LIMIT: ${MAIL_MONTHLY_LIMIT:-}

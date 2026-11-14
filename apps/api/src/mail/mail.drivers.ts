@@ -119,3 +119,33 @@ export class MemoryMailDriver implements MailDriver {
 export function createMailDriver(cfg: MailConfig = mailConfigFromEnv()): MailDriver {
   return cfg.driver === "smtp" ? new SmtpMailDriver(cfg) : new LogMailDriver();
 }
+
+/** Nur der Treibername aus MAIL_DRIVER (ohne SMTP-Zugang zu lesen oder zu pruefen). Unbekannter Wert = Fehler. */
+export function mailDriverNameFromEnv(env: NodeJS.ProcessEnv = process.env): "log" | "smtp" {
+  const driver = (env.MAIL_DRIVER ?? "log").trim().toLowerCase();
+  if (driver === "log" || driver === "") return "log";
+  if (driver !== "smtp") throw new Error(`MAIL_DRIVER="${driver}" ist unbekannt (erlaubt: log, smtp).`);
+  return "smtp";
+}
+
+/**
+ * Legt den echten Treiber erst beim ersten Versand (bzw. `ensure()`) an. So startet die API ohne SMTP_USER/SMTP_PASS
+ * (die Zugangsdaten bekommt nur der Worker, siehe ARCHITEKTUR Punkt 5); der Worker ruft `ensure()` beim Start auf, damit
+ * eine Fehlkonfiguration dort sofort auffaellt.
+ */
+export class LazyMailDriver implements MailDriver {
+  private inner?: MailDriver;
+
+  constructor(
+    readonly name: "log" | "smtp",
+    private readonly factory: () => MailDriver = () => createMailDriver(mailConfigFromEnv()),
+  ) {}
+
+  ensure(): MailDriver {
+    return (this.inner ??= this.factory());
+  }
+
+  send(mail: OutgoingMail): Promise<void> {
+    return this.ensure().send(mail);
+  }
+}
