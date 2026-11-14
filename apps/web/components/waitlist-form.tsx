@@ -1,30 +1,60 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
-import { ORG_CATEGORIES, WAITLIST_CONSENT_TEXT, WAITLIST_ROLE_LABELS, WAITLIST_ROLES, waitlistSignupSchema, type WaitlistRole } from "@vereine/shared";
-import { Alert, Button, Checkbox, Field, FieldShell, Input, SelectField } from "@/components/ui";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  WAITLIST_CONSENT_TEXT,
+  WAITLIST_MIN_FILL_MS,
+  WAITLIST_REGION_LABELS,
+  WAITLIST_REGIONS,
+  WAITLIST_ROLE_LABELS,
+  WAITLIST_ROLES,
+  waitlistSignupSchema,
+  type WaitlistRegion,
+  type WaitlistRole,
+  type WaitlistSource,
+} from "@vereine/shared";
+import { Alert, Button, Checkbox, Field, SelectField } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 
-type Errors = Partial<Record<"email" | "orgName" | "city" | "orgType" | "consent", string>>;
+type Errors = Partial<Record<"email" | "orgName" | "consent", string>>;
 
 /**
- * Warteliste fuer Vereine (Startseite, ohne Login). Danach immer dieselbe neutrale Bestaetigung; die Anmeldung gilt erst
- * nach Klick auf den Link in der Mail (Double-Opt-in). Das Feld „website“ ist ein fuer Menschen unsichtbarer Honeypot.
+ * Warteliste (Startseite und /warteliste, ohne Login). Danach immer dieselbe neutrale Bestaetigung; die Anmeldung gilt erst
+ * nach Klick auf den Link in der Mail (Double-Opt-in). Bot-Schutz ohne Drittanbieter: das Feld „website“ ist ein fuer
+ * Menschen unsichtbarer Honeypot, dazu wird die Zeit seit Anzeige des Formulars mitgeschickt (Server prueft die Mindestzeit).
+ * `source` stammt aus `?q=` (festes Vokabular, auf dem Server erneut geprueft).
  */
-export function WaitlistForm() {
-  const [values, setValues] = useState({ email: "", orgName: "", city: "", orgType: "", role: "" as WaitlistRole | "", website: "" });
+export function WaitlistForm({ source }: { source?: WaitlistSource }) {
+  const [values, setValues] = useState({ email: "", orgName: "", role: "" as WaitlistRole | "", region: "" as WaitlistRegion | "", website: "" });
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const shownAt = useRef<number>(0);
+  // Knopf erst nach der Mindestzeit aktiv: Autofill/Passwortmanager werden so nie still vom Server verworfen.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    shownAt.current = Date.now();
+    const t = setTimeout(() => setReady(true), WAITLIST_MIN_FILL_MS + 100);
+    return () => clearTimeout(t);
+  }, []);
   const set = (k: keyof typeof values) => (e: { target: { value: string } }) => setValues((v) => ({ ...v, [k]: e.target.value }));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const parsed = waitlistSignupSchema.safeParse({ ...values, role: values.role || undefined, consent, website: values.website || undefined });
+    const parsed = waitlistSignupSchema.safeParse({
+      email: values.email,
+      orgName: values.orgName,
+      role: values.role || undefined,
+      region: values.region || undefined,
+      source,
+      consent,
+      website: values.website || undefined,
+      elapsedMs: shownAt.current ? Date.now() - shownAt.current : 0,
+    });
     if (!parsed.success) {
       const next: Errors = {};
       for (const issue of parsed.error.issues) {
@@ -32,9 +62,8 @@ export function WaitlistForm() {
         if (key && !next[key]) {
           next[key] =
             key === "email" ? "Bitte gib eine gültige E-Mail-Adresse an." :
-            key === "orgName" ? "Bitte gib den Namen deines Vereins an (2–120 Zeichen)." :
-            key === "consent" ? "Bitte bestätige die Einwilligung." :
-            "Bitte kürzer fassen.";
+            key === "orgName" ? "Bitte kürzer fassen (höchstens 120 Zeichen)." :
+            "Bitte bestätige die Einwilligung.";
         }
       }
       setErrors(next);
@@ -65,19 +94,16 @@ export function WaitlistForm() {
   return (
     <form onSubmit={submit} noValidate aria-label="Warteliste" className="space-y-4 rounded-[22px] border border-border/70 bg-surface p-5 text-left shadow-card sm:p-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="wl-email" label="E-Mail" type="email" autoComplete="email" required maxLength={254} value={values.email} onChange={set("email")} error={errors.email} />
-        <Field id="wl-org" label="Name des Vereins" autoComplete="organization" required maxLength={120} value={values.orgName} onChange={set("orgName")} error={errors.orgName} />
-        <Field id="wl-city" label="Ort (optional)" autoComplete="address-level2" maxLength={80} value={values.city} onChange={set("city")} error={errors.city} />
-        <FieldShell id="wl-type" label="Vereinsart (optional)" error={errors.orgType}>
-          <Input id="wl-type" list="wl-type-list" maxLength={60} value={values.orgType} onChange={set("orgType")} placeholder="z. B. Sport, Chor" className="w-full" />
-          <datalist id="wl-type-list">
-            {ORG_CATEGORIES.map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </FieldShell>
-        <SelectField id="wl-role" label="Deine Rolle (optional)" value={values.role} onChange={set("role")} className="sm:col-span-2">
+        <Field id="wl-email" label="E-Mail" type="email" autoComplete="email" required maxLength={254} value={values.email} onChange={set("email")} error={errors.email} className="sm:col-span-2" />
+        <SelectField id="wl-role" label="Deine Rolle (optional)" value={values.role} onChange={set("role")}>
           <option value="">Keine Angabe</option>
           {WAITLIST_ROLES.map((r) => <option key={r} value={r}>{WAITLIST_ROLE_LABELS[r]}</option>)}
         </SelectField>
+        <SelectField id="wl-region" label="Region (optional)" value={values.region} onChange={set("region")}>
+          <option value="">Keine Angabe</option>
+          {WAITLIST_REGIONS.map((r) => <option key={r} value={r}>{WAITLIST_REGION_LABELS[r]}</option>)}
+        </SelectField>
+        <Field id="wl-org" label="Name des Vereins (optional)" autoComplete="organization" maxLength={120} value={values.orgName} onChange={set("orgName")} error={errors.orgName} className="sm:col-span-2" />
       </div>
       {/* Honeypot: fuer Menschen und Screenreader verborgen, Bots fuellen es oft aus */}
       <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
@@ -92,7 +118,7 @@ export function WaitlistForm() {
         {errors.consent && <p id="wl-consent-error" className="mt-1 text-xs text-danger">{errors.consent}</p>}
       </div>
       {error && <Alert>{error}</Alert>}
-      <Button type="submit" busy={busy} className="w-full sm:w-auto">Auf die Warteliste</Button>
+      <Button type="submit" busy={busy} disabled={!ready} className="w-full sm:w-auto">Auf die Warteliste</Button>
     </form>
   );
 }

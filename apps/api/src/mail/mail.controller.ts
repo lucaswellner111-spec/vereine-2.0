@@ -15,7 +15,7 @@ export class MailController {
 
   @Post("unsubscribe")
   @HttpCode(200)
-  async unsubscribe(@Query("t") t: string | undefined, @Body() body: unknown): Promise<{ kind: "digest" | "invite" }> {
+  async unsubscribe(@Query("t") t: string | undefined, @Body() body: unknown): Promise<{ kind: "digest" | "invite" | "waitlist" }> {
     const token = t ?? parse(unsubscribeSchema, body ?? {}).token;
     const res = await this.mail.unsubscribe(token);
     if (!res) throw new BadRequestException("Dieser Abmeldelink ist ungültig.");

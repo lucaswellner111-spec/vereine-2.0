@@ -858,7 +858,8 @@ export const mailArea = pgSchema("mail");
 
 /**
  * Sperrliste: Adressen nur als HMAC-Hash (Teilschluessel "mail-address"), nie im Klartext.
- * scope: all (harter Bounce/Beschwerde, spaeter per Webhook) | invite (Abmeldung von Einladungs-Mails).
+ * scope: all (harter Bounce/Beschwerde, spaeter per Webhook) | invite (Abmeldung von Einladungs-Mails) |
+ * waitlist (Abmeldung von der Warteliste/vom Newsletter; nur Hash, damit nach dem Austragen nicht ungefragt wieder geschrieben wird).
  */
 export const mailSuppressions = mailArea.table(
   "suppressions",
@@ -886,10 +887,15 @@ export const waitlistEntries = waitlistArea.table(
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     /** Kleingeschrieben, eindeutig. */
     email: text("email").notNull(),
-    orgName: text("org_name").notNull(),
+    orgName: text("org_name").notNull().default(""),
     city: text("city").notNull().default(""),
     orgType: text("org_type").notNull().default(""),
+    /** Segment (Tag): vorstand | kasse | trainer | mitglied | fan | multiplikator (alt: sonstiges). */
     role: text("role"),
+    /** Segment Region: lk-leipzig | leipzig | andere. */
+    region: text("region"),
+    /** Herkunft der Anmeldung (festes Vokabular, z. B. flyer), nur Statistik. */
+    source: text("source"),
     status: text("status").notNull().default("pending"), // pending | confirmed
     tokenHash: text("token_hash"),
     tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),

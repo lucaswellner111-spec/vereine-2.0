@@ -26,6 +26,6 @@ async function orgPages(): Promise<MetadataRoute.Sitemap> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const fixed = ["", "/vereine-finden", "/registrieren", "/datenschutz", "/impressum", "/agb"].map((p) => ({ url: `${SITE_URL}${p}`, changeFrequency: "monthly" as const }));
+  const fixed = ["", "/vereine-finden", "/warteliste", "/registrieren", "/datenschutz", "/impressum", "/agb"].map((p) => ({ url: `${SITE_URL}${p}`, changeFrequency: "monthly" as const }));
   return [...fixed, ...(await orgPages())];
 }

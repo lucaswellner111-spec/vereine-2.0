@@ -6,7 +6,7 @@ test("Warteliste: Anmelden auf der Startseite, Mail, Link bestaetigen", async ({
   const form = page.getByRole("form", { name: "Warteliste" });
   await form.getByLabel("E-Mail", { exact: true }).fill(email);
   await form.getByLabel("Name des Vereins").fill("SV Warteliste");
-  await form.getByLabel("Ort (optional)").fill("Musterstadt");
+  await form.getByLabel("Region (optional)").selectOption("lk-leipzig");
   await form.getByLabel("Deine Rolle (optional)").selectOption("vorstand");
 
   // ohne Einwilligung kein Absenden
@@ -15,6 +15,7 @@ test("Warteliste: Anmelden auf der Startseite, Mail, Link bestaetigen", async ({
   await expectAccessible(page, "Startseite: Warteliste mit Fehler");
 
   await form.getByRole("checkbox").check();
+  await page.waitForTimeout(2500); // Bot-Schutz: Mindestzeit seit Anzeige des Formulars
   await form.getByRole("button", { name: "Auf die Warteliste" }).click();
   await expect(page.getByRole("status").getByText(/Fast geschafft – schau in dein Postfach/)).toBeVisible();
 

@@ -41,7 +41,7 @@ export default function WaitlistRemovePage() {
         <Alert>Dieser Link ist ungültig.</Alert>
       ) : (
         <>
-          <p className="text-sm text-muted">Wir löschen deine E-Mail-Adresse und die Angaben zu deinem Verein sofort von der Warteliste.</p>
+          <p className="text-sm text-muted">Wir löschen deine E-Mail-Adresse und deine Angaben sofort von der Warteliste. Gemerkt wird nur eine nicht umkehrbare Prüfsumme der Adresse, damit wir dir ohne neue Anmeldung nichts mehr schicken.</p>
           {error && <Alert>{error}</Alert>}
           <Button variant="danger" onClick={remove} busy={busy} disabled={!token} className="w-full">Austragen und löschen</Button>
         </>
