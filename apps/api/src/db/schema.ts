@@ -39,6 +39,8 @@ export const users = identity.table("users", {
    * (sonst verriete "Registrieren + Anmelden", ob eine Adresse schon ein Konto hat). Alte Konten: false.
    */
   pendingVerification: boolean("pending_verification").notNull().default(false),
+  /** Seit wann diese Person (Vorstand/Plattform-Admin) laut Richtlinie Zwei-Faktor braucht (Beginn der Uebergangsfrist). */
+  twoFactorRequiredSince: timestamp("two_factor_required_since", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });

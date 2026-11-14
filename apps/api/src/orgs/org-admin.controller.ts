@@ -13,27 +13,32 @@ import {
 import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { OrgAdminService } from "./org-admin.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 @Controller()
 @UseGuards(SessionGuard)
 export class OrgAdminController {
   constructor(@Inject(OrgAdminService) private readonly admin: OrgAdminService) {}
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/billing-profile")
   billingProfile(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgBillingProfile> {
     return this.admin.billingProfile(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Put("orgs/:slug/billing-profile")
   setBillingProfile(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgBillingProfile> {
     return this.admin.setBillingProfile(user, slug, parse(orgBillingProfileSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/invites")
   invites(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<InviteItem[]> {
     return this.admin.listInvites(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("orgs/:slug/invites")
   createInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<CreatedInvite> {
     requireVerifiedEmail(user);
@@ -41,6 +46,7 @@ export class OrgAdminController {
   }
 
   /** Link einer aktiven Einladung per Mail verschicken (Adresse wird nicht gespeichert; 100 Mails/Tag je Verein). */
+  @UseGuards(TwoFactorGuard)
   @Post("orgs/:slug/invites/:id/mail")
   @HttpCode(202)
   mailInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
@@ -48,12 +54,14 @@ export class OrgAdminController {
     return this.admin.mailInvite(user, slug, id, parse(inviteMailSchema, body).email);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/invites/:id/link")
   @Header("Cache-Control", "private, no-store")
   inviteLink(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<InviteLink> {
     return this.admin.inviteLink(user, slug, id);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Delete("orgs/:slug/invites/:id")
   @HttpCode(204)
   revokeInvite(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<void> {

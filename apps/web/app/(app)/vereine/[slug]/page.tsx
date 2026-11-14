@@ -158,7 +158,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
               {viewer.following ? "Du folgst" : "Folgen"}
             </Button>
             {viewer.membership === "none" && (
-              <Button variant="secondary" onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/membership`, { method: "POST", body: {} }))}>
+              <Button variant="secondary" onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/membership`, { method: "POST", body: {}, captcha: true }))}>
                 Mitglied werden
               </Button>
             )}

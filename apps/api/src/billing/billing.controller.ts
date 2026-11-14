@@ -25,6 +25,7 @@ import {
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { BillingService } from "./billing.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 @Controller()
 @UseGuards(SessionGuard)
@@ -36,6 +37,7 @@ export class BillingController {
     return this.billing.mine(user);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/invoices")
   list(
     @CurrentUser() user: PublicUser,
@@ -46,11 +48,13 @@ export class BillingController {
     return this.billing.list(user, slug, { status, year });
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/invoice-recipients")
   recipients(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<InvoiceRecipient[]> {
     return this.billing.recipients(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/invoices.csv")
   @Header("Content-Type", "text/csv; charset=utf-8")
   @Header("Content-Disposition", 'attachment; filename="rechnungen.csv"')
@@ -59,6 +63,7 @@ export class BillingController {
     return this.billing.csv(user, slug, year);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("orgs/:slug/invoices")
   create(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<InvoiceDetail> {
     return this.billing.create(user, slug, parse(createInvoiceSchema, body));
@@ -83,16 +88,19 @@ export class BillingController {
     return Buffer.from(bytes);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("invoices/:id/finalize")
   finalize(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<InvoiceDetail> {
     return this.billing.finalize(user, id);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("invoices/:id/paid")
   paid(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<InvoiceDetail> {
     return this.billing.markPaid(user, id);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("invoices/:id/void")
   void(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<InvoiceDetail> {
     return this.billing.voidInvoice(user, id, parse(voidInvoiceSchema, body).reason);

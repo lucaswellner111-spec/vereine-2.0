@@ -28,6 +28,7 @@ import {
 import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { OrgsService } from "./orgs.service";
+import { CaptchaGuard } from "../captcha/captcha.guard";
 
 @Controller("orgs")
 @UseGuards(SessionGuard)
@@ -137,6 +138,7 @@ export class OrgsController {
   }
 
   @Post(":slug/membership")
+  @UseGuards(CaptchaGuard)
   requestMembership(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgDetail> {
     return this.orgs.requestMembership(slug, user.id);
   }

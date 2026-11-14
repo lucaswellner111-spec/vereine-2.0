@@ -16,6 +16,7 @@ import {
 } from "@vereine/shared";
 import { Alert, Button, Checkbox, Field, SelectField } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
+import { CaptchaNote } from "@/components/captcha-note";
 
 type Errors = Partial<Record<"email" | "orgName" | "consent", string>>;
 
@@ -72,7 +73,7 @@ export function WaitlistForm({ source }: { source?: WaitlistSource }) {
     setErrors({});
     setBusy(true);
     try {
-      const res = await api<{ message: string }>("/waitlist", { method: "POST", body: parsed.data });
+      const res = await api<{ message: string }>("/waitlist", { method: "POST", body: parsed.data, captcha: true });
       setDone(res.message);
     } catch (err) {
       setError(describeError(err));
@@ -118,6 +119,7 @@ export function WaitlistForm({ source }: { source?: WaitlistSource }) {
         {errors.consent && <p id="wl-consent-error" className="mt-1 text-xs text-danger">{errors.consent}</p>}
       </div>
       {error && <Alert>{error}</Alert>}
+      <CaptchaNote />
       <Button type="submit" busy={busy} disabled={!ready} className="w-full sm:w-auto">Auf die Warteliste</Button>
     </form>
   );

@@ -6,6 +6,7 @@ import { Alert, Button, Checkbox, Field } from "@/components/ui";
 import { describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { rememberNext, safeNext, withNext } from "@/lib/next-url";
+import { CaptchaNote } from "@/components/captcha-note";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -78,6 +79,7 @@ export default function RegisterPage() {
           gelesen.
         </Checkbox>
       </div>
+      <CaptchaNote />
       <Button type="submit" busy={busy} className="w-full">
         Konto erstellen
       </Button>

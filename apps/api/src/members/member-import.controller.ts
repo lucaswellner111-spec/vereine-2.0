@@ -3,6 +3,7 @@ import type { FastifyRequest } from "fastify";
 import { MEMBER_IMPORT_LIMITS, type MemberImportPreview, type MemberImportResult, type PendingMemberPage, type PublicUser } from "@vereine/shared";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { MemberImportService } from "./member-import.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 /** CSV per multipart (Feld "file"), hoechstens 1 MB. Inhalt prueft der Dienst (Zeilen mit Zod aus @vereine/shared). */
 async function readCsv(req: FastifyRequest): Promise<Buffer> {
@@ -20,7 +21,7 @@ async function readCsv(req: FastifyRequest): Promise<Buffer> {
 }
 
 @Controller("orgs/:slug/member-imports")
-@UseGuards(SessionGuard)
+@UseGuards(SessionGuard, TwoFactorGuard)
 export class MemberImportController {
   constructor(@Inject(MemberImportService) private readonly imports: MemberImportService) {}
 

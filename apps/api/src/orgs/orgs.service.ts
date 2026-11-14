@@ -111,6 +111,16 @@ export class OrgsService {
     return this.summaries(rows);
   }
 
+  /** Ist die Person Vorstand (Rolle admin) in mindestens einem Verein? (Zwei-Faktor-Pflicht) */
+  async isAnyAdmin(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")))
+      .limit(1);
+    return !!row;
+  }
+
   /** Vereine, fuer die der Nutzer Beitraege veroeffentlichen darf (Vorstand/Moderation). */
   async publishable(userId: string): Promise<OrgSummary[]> {
     const rows = await this.db

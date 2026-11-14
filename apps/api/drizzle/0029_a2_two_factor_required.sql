@@ -1,0 +1,1 @@
+ALTER TABLE "identity"."users" ADD COLUMN "two_factor_required_since" timestamp with time zone;

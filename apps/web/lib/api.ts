@@ -1,3 +1,5 @@
+import { CAPTCHA_HEADER } from "@vereine/shared";
+import { captchaToken } from "./captcha";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -8,15 +10,20 @@ export class ApiError extends Error {
   }
 }
 
-type Options = { method?: string; body?: unknown; signal?: AbortSignal };
+/** captcha: vor dem Senden die Sicherheitspruefung (Proof-of-Work) loesen und als Header mitschicken, sofern der Server sie verlangt. */
+type Options = { method?: string; body?: unknown; signal?: AbortSignal; captcha?: boolean };
 
 /** Duenner Fetch-Wrapper. Alle Aufrufe gehen same-origin an /api (Caddy bzw. Next-Rewrite -> NestJS). */
-export async function api<T = void>(path: string, { method = "GET", body, signal }: Options = {}): Promise<T> {
+export async function api<T = void>(path: string, { method = "GET", body, signal, captcha }: Options = {}): Promise<T> {
+  const token = captcha ? await captchaToken(signal) : null;
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  if (token) headers[CAPTCHA_HEADER] = token;
   const res = await fetch(`/api${path}`, {
     method,
     signal,
     credentials: "same-origin",
-    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
