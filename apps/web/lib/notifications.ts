@@ -52,8 +52,10 @@ export function describeNotification(n: NotificationItem): { text: string; href:
       return { text: `Neuer Mitgliedsantrag bei ${d.orgName}`, href: "/verwaltung/antraege" };
     case "membership_decision":
       return {
-        text: d.decision === "approve" ? `Du bist jetzt Mitglied bei ${d.orgName}.` : `Dein Antrag bei ${d.orgName} wurde abgelehnt.`,
-        href: `/vereine/${d.orgSlug}`,
+        text: d.child
+          ? d.decision === "approve" ? `Dein Kind ist jetzt Mitglied bei ${d.orgName}.` : `Der Antrag für dein Kind bei ${d.orgName} wurde abgelehnt.`
+          : d.decision === "approve" ? `Du bist jetzt Mitglied bei ${d.orgName}.` : `Dein Antrag bei ${d.orgName} wurde abgelehnt.`,
+        href: d.child ? "/kinder" : `/vereine/${d.orgSlug}`,
       };
     case "event_created":
       return { text: `Neuer Termin${d.series ? `serie (${d.series}×)` : ""} bei ${d.orgName}: ${d.title} (ab ${fmt(d.startsAt)})`, href: "/kalender" };
@@ -77,6 +79,10 @@ export function describeNotification(n: NotificationItem): { text: string; href:
       return { text: `Rechnung ${d.number} von ${d.orgName} ist überfällig.`, href: "/rechnungen" };
     case "fee_run_done":
       return { text: `Beitragslauf „${d.periodLabel}“ bei ${d.orgName} fertig: ${d.created} Entwürfe zum Prüfen und Finalisieren.`, href: "/verwaltung/rechnungen" };
+    case "child_rsvp":
+      return { text: `${d.status === "yes" ? "Zusage" : d.status === "no" ? "Absage" : "Rückmeldung"} für dein Kind: ${d.title} (${fmt(d.startsAt)})`, href: d.eventId ? `/kalender/${d.eventId}` : "/kinder" };
+    case "child_graduation":
+      return { text: `Dein Kind wird in ${d.days} Tagen 16 und braucht dann ein eigenes Konto.`, href: "/kinder" };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }
@@ -98,6 +104,8 @@ export const NOTIFICATION_ICONS: Record<NotificationItem["type"], LucideIcon> = 
   invoice_overdue: TriangleAlert,
   fee_run_done: ReceiptText,
   post_hidden: EyeOff,
+  child_rsvp: CalendarCheck,
+  child_graduation: AlarmClock,
   like: Heart,
   comment_like: Heart,
   comment_reply: CornerDownRight,
