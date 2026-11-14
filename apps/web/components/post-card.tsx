@@ -323,7 +323,7 @@ export function PostCard({
           {/* Zeile 1: Name (+ Badge), Zeile 2: @Handle · Zeit · bearbeitet */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {post.org ? (
-              <Link href={`/vereine/${post.org.slug}`} className="font-bold tracking-tight hover:underline">{post.org.name}</Link>
+              <Link href={`/vereine/${post.org.slug}`} className="hit-area relative font-bold tracking-tight hover:underline">{post.org.name}</Link>
             ) : (
               <UserNameLink handle={post.author.handle} name={post.author.name} className="font-bold tracking-tight" />
             )}
@@ -333,7 +333,7 @@ export function PostCard({
           <div className="flex flex-wrap items-center gap-x-1 text-xs text-muted">
             {!post.org && post.author.handle && <span className="truncate">@{post.author.handle} ·</span>}
             {post.org && <span>Verein ·</span>}
-            <Link href={postHref(post.id)} className="hover:underline">
+            <Link href={postHref(post.id)} className="hit-area relative hover:underline">
               <time dateTime={post.createdAt}>{timeAgo(post.createdAt)}</time>
             </Link>
             {post.editedAt && (

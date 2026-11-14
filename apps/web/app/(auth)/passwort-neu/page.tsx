@@ -42,7 +42,7 @@ export default function NewPasswordPage() {
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Passwort geändert</h1>
         <Alert tone="success">Dein neues Passwort gilt ab sofort. Aus Sicherheitsgründen wurdest du auf allen Geräten abgemeldet.</Alert>
-        <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline">Jetzt anmelden</Link>
+        <Link href="/login" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Jetzt anmelden</Link>
       </div>
     );
   }
@@ -52,7 +52,7 @@ export default function NewPasswordPage() {
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Neues Passwort</h1>
         <Alert>Der Link ist ungültig oder abgelaufen.</Alert>
-        <Link href="/passwort-vergessen" className="block text-center text-sm font-medium text-brand hover:underline">Neuen Link anfordern</Link>
+        <Link href="/passwort-vergessen" className="block text-center text-sm font-medium text-brand hover:underline pointer-coarse:py-3">Neuen Link anfordern</Link>
       </div>
     );
   }

@@ -95,7 +95,7 @@ export function CommandPalette() {
       { id: "t-dark", label: "Darstellung: Dunkel", icon: Moon, group: "Aktionen", run: () => applyTheme("dark") },
       { id: "t-system", label: "Darstellung: Automatisch", icon: Monitor, group: "Aktionen", run: () => applyTheme("system") },
       { id: "shortcuts", label: "Tastenkürzel anzeigen", hint: "?", icon: Keyboard, group: "Aktionen", run: openShortcuts },
-      { id: "logout", label: "Abmelden", icon: LogOut, group: "Aktionen", run: () => void logout().then(() => router.replace("/login")) },
+      { id: "logout", label: "Abmelden", icon: LogOut, group: "Aktionen", run: () => void logout() },
     ];
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     const filtered = words.length ? base.filter((e) => words.every((w) => e.label.toLowerCase().includes(w))) : base.slice(0, 9);

@@ -115,4 +115,17 @@ describe("NotificationBanner", () => {
     expect(screen.queryByTestId("notification-banner")).toBeNull();
     expect(screen.getByRole("status")).toBeTruthy();
   });
+
+  it("WCAG 2.2.1: per Tastatur erreichbar (Alt+M), Fokus pausiert die Anzeige, nach Verlassen laeuft sie weiter", () => {
+    const onNext = vi.fn();
+    render(<NotificationBanner state={{ current: item("a"), more: 0 }} onNext={onNext} />);
+    act(() => void vi.advanceTimersByTime(BANNER_MS - 500));
+    fireEvent.keyDown(window, { key: "m", altKey: true });
+    expect(document.activeElement).toBe(screen.getByRole("link"));
+    act(() => void vi.advanceTimersByTime(60_000));
+    expect(onNext).not.toHaveBeenCalled();
+    fireEvent.blur(screen.getByRole("link"));
+    act(() => void vi.advanceTimersByTime(BANNER_MS + 1));
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
 });

@@ -73,7 +73,7 @@ describe("AVV-Akzeptanz (Art. 28 DSGVO)", () => {
     expect((await req(mia, "GET", `/orgs/${org}/avv`)).statusCode).toBe(403);
     const st = (await req(vera, "GET", `/orgs/${org}/avv`)).json();
     expect(st).toMatchObject({ required: false, upToDate: false, blocked: false, accepted: null, canAccept: true });
-    expect(st.current).toMatchObject({ version: AVV_DOCUMENT.version, status: "draft", textHash: avvHash(AVV_DOCUMENT) });
+    expect(st.current).toMatchObject({ version: AVV_DOCUMENT.version, status: "published", textHash: avvHash(AVV_DOCUMENT) });
     expect((await req(kai, "GET", `/orgs/${org}/avv`)).json().canAccept).toBe(false);
   });
 

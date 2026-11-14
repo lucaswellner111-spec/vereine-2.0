@@ -1,0 +1,36 @@
+# Größen-Budget: Server-Speicher, Images, Code (Stand 2026-11-14)
+
+Ziel: Klubnest bleibt schlank und auf dem 40-GB-Server (38 GB nutzbar) lange ohne Aufrüsten lauffähig und liegt bei Ladegröße und Aufbau im Bereich guter moderner Webanwendungen. Zahlen unten sind gemessen, Vergleichswerte sind Richtgrößen aus meinem Wissen und vor Außenbehauptungen zu prüfen.
+
+## Gemessen (Vorschau-Server nach dem Deploy)
+| Posten | Größe | Bewertung |
+|---|---|---|
+| Datenbank | 11 MB | winzig; wächst mit Nutzung, nicht mit dem Code |
+| Medien (Bilder) | ~1 MB | winzig; ab Echtbetrieb größter Wachstumsposten (Plan: Object Storage) |
+| Backups auf dem Server | wenige MB je Satz | ok, Rotation 14 Tage |
+| Docker-Images (api/worker/chat) | je ~920 MB | **zu groß**, Ziel < 350 MB |
+| Docker-Image web | ~1,66 GB | **zu groß**, Ziel < 400 MB (Next `output: standalone`) |
+| Docker-Build-Cache | war 17,7 GB | **Hauptursache**: Platte stieg von 47 % auf 64 %; am 2026-11-14 mit `docker builder prune` geleert, Platte 21 % |
+| Web-JS (`.next/static`) gesamt | 2,6 MB (alle Routen, ungezippt) | gut für den Funktionsumfang |
+| Quellcode (TS/TSX, ohne Tests/Dependencies grob) | ca. 49.000 Zeilen | für den Umfang (Verwaltung, Chat, Feed, Termine, Rechnungen) im normalen Rahmen |
+| `node_modules` lokal | 787 MB | normal für ein Monorepo, nicht im Betrieb relevant |
+
+Die **Daten** sind nicht das Problem, sondern **Build-Reste und große Images**. Jeder Deploy mit `--build` legt mehrere GB Build-Cache an.
+
+## Richtwerte für den Vergleich (Richtgrößen, zu prüfen)
+- Erstes Laden einer Seite: guter Richtwert ≤ 170 KB JavaScript (gzip) je Route; Core Web Vitals: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1.
+- Docker-Images moderner Next/Node-Dienste: Web 150–400 MB, API 200–400 MB (multi-stage, nur Produktionsabhängigkeiten, `standalone`).
+- Datenbank: ein Verein mit 200 Mitgliedern liegt im einstelligen MB-Bereich ohne Bilder; Bilder dominieren (hier: WebP, EXIF entfernt, größte Variante gespeichert).
+
+## Maßnahmen (Reihenfolge nach Nutzen)
+1. **Nach jedem Deploy `docker builder prune -f`** (und alte `prev`-Tags auf die letzten 2 begrenzen). In `infra/ops/deploy.sh` einbauen, in `docs/BETRIEB.md` als Pflichtschritt.
+2. **Images verschlanken:** Multi-Stage-Builds, `npm ci --omit=dev` bzw. `npm prune --omit=dev` im Endimage, Next `output: "standalone"`, kein Dev-/Test-/Playwright-Inhalt im Image, gemeinsame Basis für api/worker/chat-gateway (heute dasselbe Image mehrfach getaggt, die Schichten teilen sich, aber das Image ist zu groß).
+3. **Bundle-Budget in CI:** Build-Ausgabe von Next auswerten und bei > 170 KB gzip erstem Laden je Route oder > 3,5 MB `.next/static` warnen/fehlschlagen; schwere Komponenten nur dynamisch laden (z. B. QR-Erzeugung, PDF, Diagramme).
+4. **Messung:** Lighthouse/Web-Vitals-Lauf lokal gegen den Produktionsbuild (ohne Drittanbieter) auf Startseite, Feed, Termin, Verein; Ergebnis hier eintragen.
+5. **Medien:** vor Echtbetrieb Object Storage (Hetzner S3) und Größenlimits je Verein; Bildverarbeitung bleibt WebP.
+6. **Alarm:** Platte > 80 % und Backup-Alter alarmieren bereits (Modul `ops`, Plattform-Karte). Zusätzlich Docker-Speicher (`docker system df`) in die Uptime-/Ops-Prüfung aufnehmen.
+7. **Code-Hygiene:** ungenutzte Abhängigkeiten und tote Dateien regelmäßig suchen (z. B. `npx depcheck`, `npx knip`), Duplikate in Komponenten zusammenführen.
+
+## Stand der Umsetzung
+- Erledigt: Build-Cache geleert (2026-11-14), Zahlen erfasst.
+- Offen: Punkte 1–4 und 6–7 (Paket E1 „Schlank“, noch nicht gestartet).

@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
     const target = process.env.API_INTERNAL_URL ?? "http://localhost:4000";
     return [{ source: "/api/:path*", destination: `${target}/:path*` }];
   },
+  async redirects() {
+    // Frueherer Name der persoenlichen Mitgliedsdaten (Verwechslung mit Verwaltung > Vereinsdaten)
+    return [{ source: "/einstellungen/vereinsdaten", destination: "/einstellungen/mitgliedsdaten", permanent: true }];
+  },
   async headers() {
     return [
       // Der Service Worker darf nie veraltet aus dem Cache kommen (sonst bleiben Updates haengen).
