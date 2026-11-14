@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 // Die CSP (mit Nonce je Anfrage) setzt middleware.ts, Aufbau in lib/csp.ts.
@@ -9,6 +10,10 @@ const nextConfig: NextConfig = {
   // Eigener Build-Ordner (z. B. ".next-2"), wenn zwei Next-Server parallel im selben Ordner laufen
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
+  // Schlankes Docker-Image: Next buendelt nur die tatsaechlich benoetigten Dateien (.next/standalone). Die Ablaufverfolgung
+  // startet im Monorepo-Wurzelordner, damit @vereine/shared und die Schrift aus dem Wurzel-node_modules mitkommen.
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   // Nur fuer lokale Entwicklung: /api -> NestJS. In Produktion routet Caddy /api direkt zur API.
   async rewrites() {
     const target = process.env.API_INTERNAL_URL ?? "http://localhost:4000";

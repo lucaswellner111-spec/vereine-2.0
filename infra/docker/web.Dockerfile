@@ -27,11 +27,13 @@ RUN npm run build -w @vereine/shared && npm run build -w @vereine/web
 
 FROM node:22-slim
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
-COPY --from=build /app/node_modules node_modules
-COPY --from=build /app/packages/shared packages/shared
-COPY --from=build /app/apps/web apps/web
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+# Next "standalone": enthaelt nur die tatsaechlich benoetigten Dateien samt eigenem node_modules (Ablaufverfolgung ab
+# Repo-Wurzel, daher liegt der Server unter apps/web/server.js). Statische Dateien und public/ kopiert Next nicht mit.
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static apps/web/.next/static
+COPY --from=build /app/apps/web/public apps/web/public
 USER node
 EXPOSE 3000
-WORKDIR /app/apps/web
-CMD ["npx", "next", "start", "-p", "3000"]
+# API_INTERNAL_URL wird zur Laufzeit gelesen (Compose); Middleware/CSP-Nonce sind im Server enthalten.
+CMD ["node", "apps/web/server.js"]
