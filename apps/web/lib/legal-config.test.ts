@@ -61,5 +61,5 @@ describe("legal-config", () => {
 
     expect(run({ NEXT_PUBLIC_ALLOW_INDEXING: "1", LEGAL_STRICT: "1" }).status).toBe(1);
     expect(run({ ...FULL_ENV, NEXT_PUBLIC_ALLOW_INDEXING: "1", LEGAL_STRICT: "1" }).status).toBe(0);
-  });
+  }, 60_000); // fuenf Node-Starts, auf einer ausgelasteten Maschine langsam
 });
