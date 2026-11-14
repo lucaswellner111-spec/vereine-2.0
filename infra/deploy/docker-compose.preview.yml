@@ -63,6 +63,11 @@ services:
       # Prometheus-Token fuer /metrics (leer = Route aus)
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       # Mail: die API versendet nicht und bekommt KEINEN SMTP-Zugang (SMTP_*/MAIL_FROM nur im worker, ARCHITEKTUR Punkt 5).
+      # Bounce-/Beschwerde-Webhook (Scaleway TEM): Signatur-Geheimnis, mind. 32 Zeichen (openssl rand -hex 32); leer = Endpunkt aus (404).
+      MAIL_WEBHOOK_SECRET: ${MAIL_WEBHOOK_SECRET:-}
+      # Zwei-Faktor-Pflicht fuer Vorstaende/Plattform-Admins und Bot-Abwehr: leer = an in Produktion, "false" = aus (docs/welle2/A2-DOKU.md)
+      TWOFACTOR_ENFORCE: ${TWOFACTOR_ENFORCE:-}
+      CAPTCHA_ENFORCE: ${CAPTCHA_ENFORCE:-}
       MAIL_DRIVER: ${MAIL_DRIVER:-log}
       # AVV-Zustimmung der Vereine erzwingen (docs/welle1/W1c-DOKU.md); leer = aus. Der Worker braucht es fuer den Import-Versand.
       AVV_REQUIRED: ${AVV_REQUIRED:-}
