@@ -14,6 +14,7 @@ import type {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { AvvService } from "../avv/avv.service";
 import { DB, type Database } from "../db/db.module";
 import { feeClasses, memberCounters, memberProfiles, pendingMembers } from "../db/schema";
 import { OrgEvents } from "../orgs/org-events";
@@ -53,6 +54,7 @@ export class MembersService implements OnModuleInit {
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   onModuleInit() {
@@ -177,6 +179,7 @@ export class MembersService implements OnModuleInit {
 
   async update(user: PublicUser, slug: string, userId: string, input: AdminMemberProfileInput): Promise<MemberRecord> {
     const org = await this.requireRole(user, slug, ["admin"]);
+    await this.avv.assertAccepted(org.id);
     await this.ensureProfiles(org.id);
     if (input.feeClassId) await this.requireClass(org.id, input.feeClassId);
     const res = await this.db
@@ -282,18 +285,21 @@ export class MembersService implements OnModuleInit {
 
   async createClass(user: PublicUser, slug: string, input: FeeClassInput): Promise<FeeClassItem[]> {
     const org = await this.requireRole(user, slug, ["admin"]);
+    await this.avv.assertAccepted(org.id);
     await this.saveClass(org.id, input);
     return this.listClasses(user, slug);
   }
 
   async updateClass(user: PublicUser, slug: string, id: string, input: FeeClassInput): Promise<FeeClassItem[]> {
     const org = await this.requireRole(user, slug, ["admin"]);
+    await this.avv.assertAccepted(org.id);
     await this.saveClass(org.id, input, id);
     return this.listClasses(user, slug);
   }
 
   async deleteClass(user: PublicUser, slug: string, id: string): Promise<void> {
     const org = await this.requireRole(user, slug, ["admin"]);
+    await this.avv.assertAccepted(org.id);
     const res = await this.db.delete(feeClasses).where(and(eq(feeClasses.id, id), eq(feeClasses.orgId, org.id))).returning({ id: feeClasses.id });
     if (res.length === 0) throw new NotFoundException("Beitragsklasse nicht gefunden.");
   }

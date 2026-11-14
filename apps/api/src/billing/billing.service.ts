@@ -11,6 +11,7 @@ import type {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { AvvService } from "../avv/avv.service";
 import { DB, type Database } from "../db/db.module";
 import { invoiceCounters, invoiceItems, invoices } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
@@ -51,6 +52,7 @@ export class BillingService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   onModuleInit() {
@@ -174,6 +176,7 @@ export class BillingService implements OnModuleInit {
 
   async create(user: PublicUser, slug: string, input: CreateInvoiceInput): Promise<InvoiceDetail> {
     const org = await this.requireBiller(user, slug);
+    await this.avv.assertAccepted(org.id);
     if (!(await this.orgs.activeRole(org.id, input.recipientUserId))) {
       throw new BadRequestException("Der Empfaenger ist kein aktives Mitglied des Vereins.");
     }
@@ -211,6 +214,7 @@ export class BillingService implements OnModuleInit {
   async finalize(user: PublicUser, id: string): Promise<InvoiceDetail> {
     const { row, biller } = await this.access(user, id);
     if (!biller) throw new ForbiddenException("Nur Vorstand und Kassenwart verwalten Rechnungen.");
+    await this.avv.assertAccepted(row.orgId);
     if (row.status !== "draft") throw new BadRequestException("Nur Entwuerfe koennen finalisiert werden.");
 
     // Rechnungsdatum und Jahr des Nummernkreises nach deutschem Kalendertag (Silvester 23:30 UTC = Neujahr).
@@ -284,6 +288,7 @@ export class BillingService implements OnModuleInit {
   async deleteDraft(user: PublicUser, id: string): Promise<void> {
     const { row, biller } = await this.access(user, id);
     if (!biller) throw new ForbiddenException("Nur Vorstand und Kassenwart verwalten Rechnungen.");
+    await this.avv.assertAccepted(row.orgId);
     if (row.status !== "draft") throw new BadRequestException("Nur Entwuerfe koennen geloescht werden; finalisierte Rechnungen werden storniert.");
     await this.db.delete(invoices).where(and(eq(invoices.id, id), eq(invoices.status, "draft")));
   }
@@ -291,6 +296,7 @@ export class BillingService implements OnModuleInit {
   async markPaid(user: PublicUser, id: string): Promise<InvoiceDetail> {
     const { row, biller } = await this.access(user, id);
     if (!biller) throw new ForbiddenException("Nur Vorstand und Kassenwart verwalten Rechnungen.");
+    await this.avv.assertAccepted(row.orgId);
     if (row.status !== "open") throw new BadRequestException("Nur offene Rechnungen koennen als bezahlt markiert werden.");
     const [updated] = await this.db
       .update(invoices)
@@ -305,6 +311,7 @@ export class BillingService implements OnModuleInit {
   async voidInvoice(user: PublicUser, id: string, reason: string): Promise<InvoiceDetail> {
     const { row, biller } = await this.access(user, id);
     if (!biller) throw new ForbiddenException("Nur Vorstand und Kassenwart verwalten Rechnungen.");
+    await this.avv.assertAccepted(row.orgId);
     if (row.status !== "open" && row.status !== "paid") throw new BadRequestException("Nur finalisierte Rechnungen koennen storniert werden.");
     const [updated] = await this.db
       .update(invoices)

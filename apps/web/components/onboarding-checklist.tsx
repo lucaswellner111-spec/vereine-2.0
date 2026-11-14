@@ -3,7 +3,7 @@
 import { Check, Circle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { EventItem, FeeClassItem, InviteItem, OrgBillingProfile, OrgDetail } from "@vereine/shared";
+import type { AvvStatus, EventItem, FeeClassItem, InviteItem, OrgBillingProfile, OrgDetail } from "@vereine/shared";
 import { api } from "@/lib/api";
 import { Card } from "./ui";
 
@@ -35,7 +35,8 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
       api<EventItem[]>(`/orgs/${slug}/events`).catch(() => []),
       api<FeeClassItem[]>(`/orgs/${slug}/fee-classes`).catch(() => []),
       api<{ posts: unknown[] }>(`/orgs/${slug}/posts`).catch(() => ({ posts: [] })),
-    ]).then(([org, profile, invites, events, classes, posts]) => {
+      api<AvvStatus>(`/orgs/${slug}/avv`).catch(() => null),
+    ]).then(([org, profile, invites, events, classes, posts, avv]) => {
       if (!alive) return;
       setSteps([
         { id: "tags", label: "Sportarten und Themen festlegen", hint: "Damit Interessierte deinen Verein finden.", href: `/vereine/${slug}`, done: org.tags.length > 0 },
@@ -44,6 +45,8 @@ export function OnboardingChecklist({ slug }: { slug: string }) {
         { id: "post", label: "Ersten Beitrag veröffentlichen", hint: "Zeig, dass dein Verein lebt.", href: "/feed", done: posts.posts.length > 0 },
         { id: "data", label: "Vereinsdaten eintragen", hint: "Anschrift und IBAN erscheinen auf Rechnungen.", href: "/verwaltung/vereinsdaten", done: !!profile && (profile.address.length > 0 || profile.iban.length > 0) },
         { id: "fees", label: "Beitragsklassen anlegen", hint: "Grundlage für Beiträge und Rechnungen.", href: "/verwaltung/beitraege", done: classes.length > 0 },
+        // Ohne Status (Fehler) keinen Punkt zeigen; sonst erledigt, sobald die aktuelle Fassung akzeptiert ist
+        ...(avv ? [{ id: "avv", label: "Vertrag zur Auftragsverarbeitung akzeptieren", hint: "Nötig, damit wir Mitgliederdaten und Rechnungen in deinem Auftrag verarbeiten dürfen.", href: "/verwaltung/vertrag", done: avv.upToDate }] : []),
       ]);
     })
       // Ohne Vereinsdaten keine Checkliste (sie ist nur eine Hilfe, kein Pflichtbereich)

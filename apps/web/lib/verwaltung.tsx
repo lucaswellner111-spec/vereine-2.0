@@ -3,6 +3,7 @@
 import {
   Building2,
   CalendarDays,
+  FileSignature,
   Flag,
   LayoutDashboard,
   Link2,
@@ -34,6 +35,7 @@ export const VERWALTUNG_ITEMS: VerwaltungItem[] = [
   { id: "moderation", label: "Moderation", icon: Flag, roles: ["admin", "moderator"] },
   { id: "rechnungen", label: "Rechnungen", icon: Receipt, roles: ["admin", "treasurer"] },
   { id: "vereinsdaten", label: "Vereinsdaten", icon: Building2, roles: ["admin", "treasurer"] },
+  { id: "vertrag", label: "Vertrag zur Auftragsverarbeitung", icon: FileSignature, roles: ["admin", "treasurer"] },
 ];
 
 export const itemsForRole = (role: OrgRole | null | undefined) => (role ? VERWALTUNG_ITEMS.filter((i) => i.roles.includes(role)) : []);

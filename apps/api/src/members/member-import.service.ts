@@ -13,6 +13,7 @@ import {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { AvvService } from "../avv/avv.service";
 import { appLink } from "../common/app-url";
 import { berlinDate } from "../common/berlin-date";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
@@ -67,6 +68,7 @@ export class MemberImportService implements OnModuleInit {
     @Inject(MailService) private readonly mail: MailService,
     @Inject(MailLimits) private readonly mailLimits: MailLimits,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(AvvService) private readonly avv: AvvService,
   ) {}
 
   onModuleInit() {
@@ -229,6 +231,7 @@ export class MemberImportService implements OnModuleInit {
 
   async confirm(user: PublicUser, slug: string, file: Buffer): Promise<MemberImportResult> {
     const org = await this.requireAdmin(user, slug);
+    await this.avv.assertAccepted(org.id); // Mitgliederdaten und Einladungsmails im Auftrag des Vereins
     const { preview, valid } = await this.analyze(org.id, file);
     if (valid.length === 0) throw new BadRequestException("Die Datei enthält keine gültigen neuen Mitglieder.");
     const [{ open }] = await this.db.select({ open: count() }).from(pendingMembers).where(eq(pendingMembers.orgId, org.id));
@@ -259,6 +262,17 @@ export class MemberImportService implements OnModuleInit {
   async sendInvites(orgId: string): Promise<{ sent: number; remaining: number }> {
     const org = (await this.orgs.lookupByIds([orgId])).get(orgId);
     if (!org) return { sent: 0, remaining: 0 };
+    // AVV nicht (mehr) akzeptiert: nichts verschicken, Zeilen bleiben "queued" und gehen nach der Zustimmung raus.
+    try {
+      await this.avv.assertAccepted(orgId);
+    } catch (err) {
+      if (err instanceof ForbiddenException) {
+        const [{ waiting: n }] = await this.db.select({ waiting: count() }).from(pendingMembers).where(and(eq(pendingMembers.orgId, orgId), eq(pendingMembers.status, "queued")));
+        if (Number(n) > 0) await this.jobs.enqueue(JOB, { orgId }, { delayMs: msUntilNextMorning(), attempts: 3, backoffMs: 60_000 }); // spaeter erneut versuchen
+        return { sent: 0, remaining: Number(n) };
+      }
+      throw err;
+    }
     const stale = new Date(Date.now() - STALE_MS);
     const waiting = or(eq(pendingMembers.status, "queued"), and(eq(pendingMembers.status, "sending"), lt(pendingMembers.sentAt, stale)));
     const batch = await this.db

@@ -906,3 +906,26 @@ export const waitlistEntries = waitlistArea.table(
     index("waitlist_entries_status_idx").on(t.status, t.requestedAt),
   ],
 );
+
+// --- AVV-Akzeptanz (eigener Bereich, nur eigene Tabelle, keine Fremdschluessel) ------------------------
+
+export const avvArea = pgSchema("avv");
+
+/**
+ * Nachweis der Zustimmung eines Vereins zum Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO). Append-only: nur INSERT;
+ * einzige erlaubte Aenderung ist `accepted_by` auf NULL (Kontoloeschung der zustimmenden Person, Trigger sperrt alles
+ * andere). Keine IP-Adresse. Zeilen bleiben nach Vereinsloeschung bestehen (Nachweispflicht, offene Rechtsfrage).
+ */
+export const avvAcceptances = avvArea.table(
+  "acceptances",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    orgId: uuid("org_id").notNull(),
+    version: text("version").notNull(),
+    textHash: text("text_hash").notNull(),
+    /** Null nach Kontoloeschung der zustimmenden Person. */
+    acceptedBy: uuid("accepted_by"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("avv_acceptances_org_version_unique").on(t.orgId, t.version), index("avv_acceptances_by_idx").on(t.acceptedBy)],
+);

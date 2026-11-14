@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { AvvModule } from "../avv/avv.module";
 import { BillingModule } from "../billing/billing.module";
 import { ChatModule } from "../chat/chat.module";
 import { EventsModule } from "../events/events.module";
@@ -16,7 +17,7 @@ import { PrivacyService } from "./privacy.service";
 import { RetentionService } from "./retention.service";
 
 @Module({
-  imports: [AuthModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule, WaitlistModule],
+  imports: [AuthModule, AvvModule, BillingModule, ChatModule, EventsModule, MailModule, MediaModule, MembersModule, NotificationsModule, OrgsModule, PostsModule, ProfileAccessModule, WaitlistModule],
   controllers: [PrivacyController],
   providers: [PrivacyService, RetentionService],
 })

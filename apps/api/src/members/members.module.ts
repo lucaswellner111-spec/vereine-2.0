@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
+import { AvvModule } from "../avv/avv.module";
 import { MailModule } from "../mail/mail.module";
 import { OrgsModule } from "../orgs/orgs.module";
 import { ProfileAccessModule } from "../profiles/profile-access.module";
@@ -9,7 +10,7 @@ import { MembersController } from "./members.controller";
 import { MembersService } from "./members.service";
 
 @Module({
-  imports: [AuthModule, OrgsModule, ProfileAccessModule, MailModule],
+  imports: [AuthModule, AvvModule, OrgsModule, ProfileAccessModule, MailModule],
   controllers: [MembersController, MemberImportController],
   providers: [MembersService, MemberImportService],
   exports: [MembersService, MemberImportService],
