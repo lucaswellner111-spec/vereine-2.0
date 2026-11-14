@@ -163,12 +163,12 @@ export function NavGroup({
             onClick={() => setChoice(!expanded)}
             className={clsx("mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-text", active && "text-brand")}
           >
-            <ChevronDown size={16} aria-hidden className={clsx("transition-transform", expanded && "rotate-180")} />
+            <ChevronDown size={16} aria-hidden className={clsx("transition-transform duration-200 ease-out", expanded && "rotate-180")} />
           </button>
         )}
       </div>
       {expanded && hasItems && (
-        <div id={`${id}-register`} className="ml-5 mt-1 space-y-0.5 border-l border-border pl-2">
+        <div id={`${id}-register`} className="ml-5 mt-1 animate-rise space-y-0.5 border-l border-border pl-2">
           {header}
           {items.map(({ href: subHref, label: subLabel, icon: SubIcon }) => {
             const current = pathname === subHref || pathname.startsWith(subHref + "/");

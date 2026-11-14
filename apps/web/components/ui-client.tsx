@@ -214,7 +214,7 @@ function DialogPanel({
   return (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex justify-center bg-scrim/50 p-4 backdrop-blur-[2px]",
+        "fixed inset-0 z-50 flex animate-fade justify-center bg-scrim/50 p-4 backdrop-blur-[2px]",
         placement === "sheet" ? "items-end max-sm:px-0 max-sm:pb-0 sm:items-center" : "items-center",
       )}
       onMouseDown={(e) => {
