@@ -16,6 +16,7 @@ import { openCommandPalette } from "@/lib/shortcuts";
 import { LazyCommandPalette, LazyKeyboardShortcuts } from "./lazy";
 import { MobileMoreSheet } from "./mobile-more-sheet";
 import { NotificationBell } from "./notification-bell";
+import { NotificationHubProvider } from "./notification-hub";
 import { OfflineBanner } from "./offline-banner";
 import { EmailVerifyBanner } from "./email-verify-banner";
 import { ThemeToggle } from "./theme-toggle";
@@ -84,6 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Die Chat-Verbindung und die Verwaltungs-Auswahl werden erst fuer angemeldete Nutzer aufgebaut.
   return (
     <ChatProvider>
+      <NotificationHubProvider>
       <VerwaltungProvider>
         <MyProfileProvider>
           <ShellChromeProvider>
@@ -93,6 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <LazyCommandPalette />
         <LazyKeyboardShortcuts />
       </VerwaltungProvider>
+      </NotificationHubProvider>
     </ChatProvider>
   );
 }

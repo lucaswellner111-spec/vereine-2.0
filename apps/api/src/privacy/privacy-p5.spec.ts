@@ -125,7 +125,7 @@ describe("Datenschutz P5: vollstaendige Auskunft, Bilder-ZIP, Loeschung", () => 
     expect(body.likes).toEqual([expect.objectContaining({ postId: benPostId })]);
     expect(body.comments).toEqual([expect.objectContaining({ body: "Annas Kommentar", postId: benPostId })]);
     expect(body.reports).toEqual([expect.objectContaining({ postId: benPostId, reason: "spam", note: "Annas Notiz", status: "open" })]);
-    expect(body.notifications.map((n: { type: string }) => n.type).sort()).toEqual(["comment", "new_follower"]);
+    expect(body.notifications.map((n: { type: string }) => n.type).sort()).toEqual(["comment", "like", "new_follower"]);
     expect(body.pushSubscriptions).toEqual([{ host: "fcm.googleapis.com", at: expect.any(String) }]);
     expect(body.twoFactor).toMatchObject({ enabled: true });
     expect(body.events.responses).toEqual([expect.objectContaining({ eventId, status: "yes" })]);
