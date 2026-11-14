@@ -195,6 +195,7 @@ describe("Rate-Limit: strenge Routen und Login-Sperre", () => {
       set: async (k, v) => void store.set(k, v),
       del: async (k) => void store.delete(k),
       incr: async () => { throw new Error("Redis weg"); },
+      setNx: async () => true,
       ping: async () => true,
     };
     const { app } = await boot({ cache: flaky });
@@ -225,6 +226,7 @@ describe("Health: Ausfall", () => {
       del: async () => undefined,
       incr: async () => 1,
       ping: async () => false,
+      setNx: async () => true,
     };
     const { app } = await boot({ cache: broken });
     const res = await app.inject({ method: "GET", url: "/health/ready" });
