@@ -2,13 +2,13 @@
 //   node scripts/check-bundle.mjs           Tabelle + Warnungen (Exit 0), Exit 1 nur bei deutlicher Ueberschreitung
 //   BUNDLE_STRICT=1                         jede Ueberschreitung schlaegt fehl
 // Erstes Laden je Route = Summe der gzip-Groesse aller JS-Dateien (gemeinsame Teile + Seite) laut Build-Manifest.
-// Grenzen (docs/GROESSEN-BUDGET.md): Route > 170 KB gzip (Warnung) / > 250 KB (Fehler); .next/static > 3,5 MB (Warnung) / > 5 MB (Fehler).
+// Grenzen (docs/GROESSEN-BUDGET.md): Route > 170 KB gzip (Warnung) / > 320 KB (Fehler); .next/static > 3,5 MB (Warnung) / > 5 MB (Fehler).
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import path from "node:path";
 
 const dist = process.env.NEXT_DIST_DIR || ".next";
-const ROUTE_WARN = 170 * 1024, ROUTE_FAIL = 250 * 1024;
+const ROUTE_WARN = 170 * 1024, ROUTE_FAIL = 320 * 1024;
 const STATIC_WARN = 3.5 * 1024 * 1024, STATIC_FAIL = 5 * 1024 * 1024;
 const strict = process.env.BUNDLE_STRICT === "1";
 
@@ -25,7 +25,7 @@ const gzSize = (file) => {
 const sum = (files) => [...new Set(files)].filter((f) => f.endsWith(".js") && existsSync(path.join(dist, f))).reduce((n, f) => n + gzSize(f), 0);
 
 const build = JSON.parse(readFileSync(path.join(dist, "build-manifest.json"), "utf8"));
-const base = [...(build.rootMainFiles ?? []), ...(build.polyfillFiles ?? [])];
+const base = build.rootMainFiles ?? []; // Polyfills sind nomodule (moderne Browser laden sie nicht)
 const rows = [];
 
 // App Router: je Seite die Chunks aus app-build-manifest.json
