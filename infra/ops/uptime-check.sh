@@ -43,6 +43,19 @@ case "$URL" in
     ;;
 esac
 
+# Docker-Speicher (nur wenn dieses Skript auf dem Server selbst laeuft, also docker vorhanden ist):
+# Images + Build-Cache + Container + Volumes aus `docker system df`; Warnung ab UPTIME_DOCKER_MAX_GB (Standard 15 GB).
+if command -v docker >/dev/null 2>&1; then
+  docker_bytes="$(docker system df --format '{{.Size}}' 2>/dev/null | awk '
+    function tobytes(s,   n, u) { n = s + 0; u = toupper(s); sub(/^[0-9.]+/, "", u)
+      if (u ~ /^KB/) return n * 1e3; if (u ~ /^MB/) return n * 1e6; if (u ~ /^GB/) return n * 1e9; if (u ~ /^TB/) return n * 1e12; return n }
+    { total += tobytes($1) } END { printf "%.0f", total }')"
+  max_gb="${UPTIME_DOCKER_MAX_GB:-15}"
+  if [ -n "$docker_bytes" ] && [ "$docker_bytes" -gt $(( max_gb * 1000000000 )) ]; then
+    PROBLEMS+=("Docker-Speicher bei $(( docker_bytes / 1000000000 )) GB (Grenze ${max_gb} GB): docker builder prune -f && docker image prune -f")
+  fi
+fi
+
 now="OK"; [ "${#PROBLEMS[@]}" -eq 0 ] || now="FEHLER"
 before="$(cat "$STATE_FILE" 2>/dev/null || echo OK)"
 echo "$now" > "$STATE_FILE"

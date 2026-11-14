@@ -22,6 +22,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Bundle-Budget (Warnung > 170 KB gzip je Route, > 3,5 MB static; Fehler nur bei deutlicher Ueberschreitung)
+      - run: npm run check:bundle -w @vereine/web
       # Nur Laufzeit-Abhaengigkeiten; Funde in reinen Entwicklungswerkzeugen (drizzle-kit/esbuild) blockieren nicht.
       - run: npm audit --omit=dev --audit-level=high
 
