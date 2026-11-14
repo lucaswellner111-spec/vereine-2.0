@@ -13,8 +13,10 @@ import {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { CACHE, type Cache } from "../cache/cache.module";
 import { appLink } from "../common/app-url";
 import { berlinDate } from "../common/berlin-date";
+import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { DB, type Database } from "../db/db.module";
 import { feeClasses, pendingMembers } from "../db/schema";
@@ -39,6 +41,9 @@ const FIELD_LABEL: Record<MemberImportField, string> = {
 };
 /** Haengt ein Versand (Absturz des Workers), gibt der naechste Lauf die Zeile nach dieser Zeit wieder frei. */
 const STALE_MS = 15 * 60_000;
+/** Nutzungslimits (je Stunde): Pruefungen je Vorstand, Bestaetigungen je Verein. Schuetzt vor Massenabfragen und Mail-Missbrauch. */
+export const IMPORT_PREVIEWS_PER_HOUR = 30;
+export const IMPORT_CONFIRMS_PER_HOUR = 20;
 
 type ValidRow = { line: number; firstName: string; lastName: string; email: string; memberNo: number | null; joinedOn: string | null; feeClassId: string | null };
 
@@ -67,6 +72,7 @@ export class MemberImportService implements OnModuleInit {
     @Inject(MailService) private readonly mail: MailService,
     @Inject(MailLimits) private readonly mailLimits: MailLimits,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(CACHE) private readonly cache: Cache,
   ) {}
 
   onModuleInit() {
@@ -223,12 +229,14 @@ export class MemberImportService implements OnModuleInit {
 
   async preview(user: PublicUser, slug: string, file: Buffer): Promise<MemberImportPreview> {
     const org = await this.requireAdmin(user, slug);
+    await enforceLimit(this.cache, `import:prev:${org.id}:${user.id}`, IMPORT_PREVIEWS_PER_HOUR, 3600, limitMessage("Import-Prüfungen"));
     const { preview } = await this.analyze(org.id, file);
     return { ...preview, mail: await this.mailSplit(org.id, preview.valid) };
   }
 
   async confirm(user: PublicUser, slug: string, file: Buffer): Promise<MemberImportResult> {
     const org = await this.requireAdmin(user, slug);
+    await enforceLimit(this.cache, `import:conf:${org.id}`, IMPORT_CONFIRMS_PER_HOUR, 3600, limitMessage("Importe"));
     const { preview, valid } = await this.analyze(org.id, file);
     if (valid.length === 0) throw new BadRequestException("Die Datei enthält keine gültigen neuen Mitglieder.");
     const [{ open }] = await this.db.select({ open: count() }).from(pendingMembers).where(eq(pendingMembers.orgId, org.id));

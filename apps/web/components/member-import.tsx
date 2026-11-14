@@ -36,6 +36,8 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
   const [preview, setPreview] = useState<MemberImportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onlyProblems, setOnlyProblems] = useState(false);
+  const [informed, setInformed] = useState(false);
+  const [result, setResult] = useState<MemberImportResult | null>(null);
   const [checking, runCheck] = useBusy();
   const [importing, runImport] = useBusy();
   const pending = useApi<PendingMemberPage>(`/orgs/${slug}/member-imports/pending?limit=100`);
@@ -45,6 +47,7 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
     setPreview(null);
     setError(null);
     setOnlyProblems(false);
+    setInformed(false);
   }
 
   function choose(e: ChangeEvent<HTMLInputElement>) {
@@ -52,6 +55,7 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
     e.target.value = ""; // dieselbe Datei nach Korrektur erneut waehlbar
     if (!f) return;
     setPreview(null);
+    setResult(null);
     setError(null);
     if (f.size > MEMBER_IMPORT_LIMITS.maxBytes) return setError("Die Datei ist größer als 1 MB. Bitte teile sie auf.");
     setFile(f);
@@ -73,6 +77,7 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
       try {
         const res = await uploadCsv<MemberImportResult>(slug, "", file);
         reset();
+        setResult(res);
         pending.reload();
         onImported?.();
         toast.success(
@@ -99,9 +104,9 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
           </p>
         </div>
         <Alert tone="info">
-          Verantwortlich für diese Daten ist dein Verein (Rechtsgrundlage: Mitgliedschaft, Art. 6 Abs. 1 lit. b DSGVO). Übernommen werden nur Name, E-Mail, Nummer, Eintritt und
-          Beitragsklasse, andere Spalten werden verworfen. Jede Person bekommt eine persönliche Einladung ({MEMBER_IMPORT_LIMITS.inviteValidDays} Tage gültig) und wird erst mit der
-          Annahme Mitglied bei Klubnest; ohne Annahme löschen wir die Angaben danach. Informiere deine Mitglieder vorher, z. B. in der Datenschutzerklärung des Vereins.
+          Dein Verein ist verantwortlich und prüft, dass er die Personen einladen darf. Lade nur Personen hoch, die mit einer Einladung rechnen. Übernommen werden nur Name, E-Mail,
+          Nummer, Eintritt und Beitragsklasse, andere Spalten werden verworfen. Es entsteht kein Konto: Jede Person bekommt eine persönliche Einladung ({MEMBER_IMPORT_LIMITS.inviteValidDays} Tage
+          gültig) und wird erst mit der Annahme Mitglied bei Klubnest. Ohne Annahme löschen wir die Angaben danach.
         </Alert>
         <div className="flex flex-wrap items-center gap-2">
           <FileButton accept=".csv,text/csv,text/plain" onChange={choose} disabled={checking || importing} aria-label="CSV-Datei auswählen" className="max-sm:w-full">
@@ -111,6 +116,24 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
         </div>
         {error && <Alert>{error}</Alert>}
       </Card>
+
+      <div role="status" data-testid="import-result">
+        {result && (
+          <section aria-labelledby="import-result-title">
+            <Card className="space-y-2">
+              <h2 id="import-result-title" className="text-base font-semibold">Ergebnis des Imports</h2>
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                <li>{plural(result.imported, "Person", "Personen")} {result.mailLater > 0 ? "vorgemerkt" : "vorgemerkt und eingeladen"}.</li>
+                <li>{result.mailToday} {result.mailToday === 1 ? "Einladung geht" : "Einladungen gehen"} heute raus.</li>
+                {result.mailLater > 0 && <li>{result.mailLater} {result.mailLater === 1 ? "Einladung folgt" : "Einladungen folgen"} automatisch an den nächsten Tagen (Tageslimit für Einladungs-Mails). Nichts geht verloren.</li>}
+                {result.skipped > 0 && <li>{plural(result.skipped, "Zeile wurde", "Zeilen wurden")} nicht übernommen (Fehler, Dublette oder bereits eingeladen).</li>}
+              </ul>
+              <p className="text-xs text-muted">Wer die Einladung annimmt, erscheint in der Mitgliederliste; den Stand siehst du unten bei den offenen Einladungen.</p>
+              <Button size="sm" variant="ghost" onClick={() => setResult(null)}>Schließen</Button>
+            </Card>
+          </section>
+        )}
+      </div>
 
       {preview && (
         <Card className="space-y-3">
@@ -174,8 +197,14 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
               </tbody>
             </table>
           </div>
+          {preview.valid > 0 && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={informed} onChange={(e) => setInformed(e.target.checked)} className="mt-1 size-4" />
+              <span>Ich habe die Personen informiert bzw. weiß, dass sie mit einer Einladung rechnen.</span>
+            </label>
+          )}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={confirm} busy={importing} disabled={preview.valid === 0} className="max-sm:w-full">
+            <Button onClick={confirm} busy={importing} disabled={preview.valid === 0 || !informed} className="max-sm:w-full">
               {preview.valid ? `${plural(preview.valid, "Person", "Personen")} einladen` : "Nichts zu importieren"}
             </Button>
             <Button variant="ghost" onClick={reset} disabled={importing} className="max-sm:w-full">Abbrechen</Button>

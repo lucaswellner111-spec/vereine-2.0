@@ -14,7 +14,7 @@ import { MAIL_DRIVER, MailService } from "../mail/mail.service";
 import { createTestDb } from "../testing/test-db";
 import { confirmEmailForTest } from "../testing/auth";
 import { detectDelimiter, mapColumns, parseCsv, parseDate } from "./csv";
-import { MemberImportService } from "./member-import.service";
+import { IMPORT_CONFIRMS_PER_HOUR, IMPORT_PREVIEWS_PER_HOUR, MemberImportService } from "./member-import.service";
 
 const password = "ein-sehr-langes-passwort";
 
@@ -269,5 +269,19 @@ describe("Mitglieder-Import (CSV + Einladungen)", () => {
     const removed = await app.get(MemberImportService).purgeExpired();
     expect(removed).toBe(1);
     expect((await db.select().from(schema.pendingMembers)).every((r) => r.status === "queued")).toBe(true);
+  });
+
+  it("Rate-Limit: zu viele Pruefungen/Bestaetigungen ergeben 429, ohne etwas zu speichern oder zu loggen", async () => {
+    const cache = app.get<Cache>(CACHE);
+    const file = ["Vorname;Nachname;E-Mail", "Rita;Rate;rita@example.de"].join("\n");
+    const prevKey = `lim:import:prev:${orgId}:${vera.id}`;
+    while (Number((await cache.get(prevKey)) ?? 0) < IMPORT_PREVIEWS_PER_HOUR) await cache.incr(prevKey, 3600);
+    const limited = await upload(vera, `${base}/preview`, file);
+    expect(limited.statusCode).toBe(429);
+    expect(JSON.stringify(limited.json())).not.toContain("rita@");
+    const confKey = `lim:import:conf:${orgId}`;
+    while (Number((await cache.get(confKey)) ?? 0) < IMPORT_CONFIRMS_PER_HOUR) await cache.incr(confKey, 3600);
+    expect((await upload(vera, base, file)).statusCode).toBe(429);
+    expect((await db.select().from(schema.pendingMembers).where(eq(schema.pendingMembers.email, "rita@example.de")))).toHaveLength(0);
   });
 });
