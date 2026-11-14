@@ -23,9 +23,10 @@ import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retent
 import { invalidatePublicOrg } from "../common/public-cache";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { DB, type Database } from "../db/db.module";
-import { comments, feedFeedback, follows, orgMembers, organizations, pollOptions, polls, pollVotes, postLikes, postMedia, posts, reports } from "../db/schema";
+import { commentLikes, comments, feedFeedback, follows, orgMembers, organizations, pollOptions, polls, pollVotes, postLikes, postMedia, posts, reports } from "../db/schema";
 import { diversify, reasonFor, scorePost, type Relation } from "../feed/ranking";
 import { MediaService } from "../media/media.service";
+import { ActivityService } from "./activity.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { ProfileAccess } from "../profiles/profile-access.service";
@@ -61,6 +62,7 @@ export class PostsService {
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(MediaService) private readonly mediaSvc: MediaService,
     @Inject(CACHE) private readonly cache: Cache,
+    @Inject(ActivityService) private readonly activity: ActivityService,
   ) {}
 
   async create(user: PublicUser, input: CreatePostInput): Promise<FeedPost> {
@@ -94,6 +96,7 @@ export class PostsService {
       await this.db.delete(posts).where(eq(posts.id, row.id)); // kein halber Beitrag
       throw err;
     }
+    await this.activity.notifyMentions(user, row, row.body, null, new Set()).catch(() => undefined); // Zusatz: nie den Beitrag verhindern
     // Rolle wurde oben geprueft: Vereinsbeitrag darf der Autor gleich bearbeiten
     const [post] = await this.hydrate([row.id], user.id, orgId ? { ...EMPTY_CTX, modOrgs: new Set([orgId]) } : EMPTY_CTX);
     return post;
@@ -314,20 +317,53 @@ export class PostsService {
   // --- Interaktionen ---------------------------------------------------------------------------
 
   async toggleLike(user: PublicUser, postId: string): Promise<{ liked: boolean; likes: number }> {
-    await this.requirePost(postId, user.id);
+    const post = await this.requirePost(postId, user.id);
+    await enforceLimit(this.cache, `like:toggle:${user.id}`, 600, 3600, limitMessage("Likes"));
     const removed = await this.db
       .delete(postLikes)
       .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, user.id)))
       .returning();
     if (removed.length === 0) await this.db.insert(postLikes).values({ postId, userId: user.id }).onConflictDoNothing(); // parallele Klicks
     const [{ n }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(postLikes).where(eq(postLikes.postId, postId));
+    // Benachrichtigung (gebuendelt) angleichen; ein Fehler dort darf das Liken nicht verhindern
+    await this.activity.syncPostLike(user.id, post).catch(() => undefined);
     return { liked: removed.length === 0, likes: n };
+  }
+
+  /** Kommentar-Like umschalten (Sichtbarkeit wie beim Beitrag). */
+  async toggleCommentLike(user: PublicUser, commentId: string): Promise<{ liked: boolean; likes: number }> {
+    const [c] = await this.db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
+    if (!c) throw new NotFoundException("Kommentar nicht gefunden.");
+    const post = await this.requirePost(c.postId, user.id);
+    await enforceLimit(this.cache, `like:toggle:${user.id}`, 600, 3600, limitMessage("Likes"));
+    const removed = await this.db
+      .delete(commentLikes)
+      .where(and(eq(commentLikes.commentId, commentId), eq(commentLikes.userId, user.id)))
+      .returning();
+    if (removed.length === 0) await this.db.insert(commentLikes).values({ commentId, userId: user.id }).onConflictDoNothing();
+    const [{ n }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(commentLikes).where(eq(commentLikes.commentId, commentId));
+    await this.activity.syncCommentLike(user.id, c, post).catch(() => undefined);
+    return { liked: removed.length === 0, likes: n };
+  }
+
+  /** Wer hat den Beitrag geliked (Sheet), mit Keyset-Paging. */
+  async likers(user: PublicUser, postId: string, cursor?: string) {
+    await this.requirePost(postId, user.id);
+    return this.activity.likers(user, postId, cursor);
   }
 
   async listComments(user: PublicUser, postId: string): Promise<CommentItem[]> {
     await this.requirePost(postId, user.id);
     const rows = await this.db
-      .select({ id: comments.id, body: comments.body, createdAt: comments.createdAt, authorId: comments.authorId })
+      .select({
+        id: comments.id,
+        body: comments.body,
+        createdAt: comments.createdAt,
+        authorId: comments.authorId,
+        parentId: comments.parentId,
+        likes: sql<number>`(select count(*)::int from ${commentLikes} where ${commentLikes.commentId} = ${comments.id})`,
+        liked: sql<boolean>`exists (select 1 from ${commentLikes} where ${commentLikes.commentId} = ${comments.id} and ${commentLikes.userId} = ${user.id})`,
+      })
       .from(comments)
       .where(eq(comments.postId, postId))
       .orderBy(comments.createdAt)
@@ -338,18 +374,45 @@ export class PostsService {
       body: r.body,
       createdAt: r.createdAt.toISOString(),
       author: { id: r.authorId, name: names.get(r.authorId) ?? "Gelöschter Nutzer", handle: profs.get(r.authorId)?.handle ?? null },
+      parentId: r.parentId,
+      likes: r.likes,
+      likedByMe: r.liked,
     }));
   }
 
-  async addComment(user: PublicUser, postId: string, body: string): Promise<CommentItem> {
+  async addComment(user: PublicUser, postId: string, body: string, parentId?: string): Promise<CommentItem> {
     const post = await this.requirePost(postId, user.id);
     await enforceLimit(this.cache, `comment:create:${user.id}`, 100, 3600, limitMessage("Kommentare"));
-    const [row] = await this.db.insert(comments).values({ postId, authorId: user.id, body }).returning();
-    if (post.authorId !== user.id) {
-      await this.notifications.notify([post.authorId], "comment", { postId, commenter: user.displayName, excerpt: body.slice(0, 80) }, { actorId: user.id });
+    let parentAuthor: string | null = null;
+    if (parentId) {
+      // Nur eine Ebene: Antworten auf Antworten gibt es nicht; der Elternkommentar muss zum selben Beitrag gehoeren.
+      const [parent] = await this.db.select().from(comments).where(and(eq(comments.id, parentId), eq(comments.postId, postId))).limit(1);
+      if (!parent) throw new NotFoundException("Kommentar nicht gefunden.");
+      if (parent.parentId) throw new BadRequestException("Auf eine Antwort kann nicht direkt geantwortet werden.");
+      parentAuthor = parent.authorId;
     }
+    const [row] = await this.db.insert(comments).values({ postId, authorId: user.id, body, parentId: parentId ?? null }).returning();
+    const notified = new Set<string>([user.id]);
+    const excerpt = body.slice(0, 80);
+    if (parentAuthor && (await this.activity.canNotify(user.id, parentAuthor, post))) {
+      await this.notifications.notify([parentAuthor], "comment_reply", { postId, commentId: row.id, excerpt }, { actorId: user.id });
+      notified.add(parentAuthor);
+    }
+    if (!notified.has(post.authorId) && (await this.activity.canNotify(user.id, post.authorId, post))) {
+      await this.notifications.notify([post.authorId], "comment", { postId, commenter: user.displayName, excerpt }, { actorId: user.id });
+      notified.add(post.authorId);
+    }
+    await this.activity.notifyMentions(user, post, body, row.id, notified).catch(() => undefined);
     const mine = await this.access.ensure(user.id);
-    return { id: row.id, body: row.body, createdAt: row.createdAt.toISOString(), author: { id: user.id, name: user.displayName, handle: mine?.handle ?? null } };
+    return {
+      id: row.id,
+      body: row.body,
+      createdAt: row.createdAt.toISOString(),
+      author: { id: user.id, name: user.displayName, handle: mine?.handle ?? null },
+      parentId: row.parentId,
+      likes: 0,
+      likedByMe: false,
+    };
   }
 
   /** Kommentar loeschen: eigene Kommentare (auch unter ausgeblendeten/geloeschten Beitraegen) oder unter eigenen persoenlichen Beitraegen. */
@@ -499,15 +562,17 @@ export class PostsService {
     );
   }
 
-  /** Auskunft (Art. 15): eigene Likes, eigene Meldungen (ohne Bearbeiter) und eigene "Weniger davon"-Eintraege. */
+  /** Auskunft (Art. 15): eigene Likes (Beitraege, Kommentare), eigene Meldungen (ohne Bearbeiter) und eigene "Weniger davon"-Eintraege. */
   async exportFor(userId: string) {
-    const [likes, own, feedback] = await Promise.all([
+    const [likes, commentLikeRows, own, feedback] = await Promise.all([
       this.db.select().from(postLikes).where(eq(postLikes.userId, userId)),
+      this.db.select().from(commentLikes).where(eq(commentLikes.userId, userId)),
       this.db.select().from(reports).where(eq(reports.reporterId, userId)),
       this.db.select().from(feedFeedback).where(eq(feedFeedback.userId, userId)),
     ]);
     return {
       likes: likes.map((l) => ({ postId: l.postId, at: l.createdAt.toISOString() })),
+      commentLikes: commentLikeRows.map((l) => ({ commentId: l.commentId, at: l.createdAt.toISOString() })),
       reports: own.map((r) => ({
         postId: r.postId,
         commentId: r.commentId,

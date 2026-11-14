@@ -76,6 +76,7 @@ describe("Avatar-Stellen", () => {
     "components/chat/new-chat.tsx": "Zeile ist ein Knopf",
     "components/chat/thread.tsx": "Gruppenkopf ohne Person (Direktchat nutzt UserAvatarLink)",
     "components/post-card.tsx": "Vereinslogo",
+    "components/notification-hub.tsx": "Live-Banner ist als Ganzes ein Link zum Ziel (Beitrag/Chat); die Aktivitaetsseite hat die Profil-Links",
     "components/ui.tsx": "Definition",
   };
   const root = join(__dirname, "..");

@@ -121,6 +121,24 @@ describe("WebSocket-Gateway", () => {
     await until(() => gateway.connections() === 0);
   });
 
+  it("stellt Benachrichtigungs-Ereignisse (nur ID) an den Empfaenger zu, nicht an Dritte", async () => {
+    const post = await rest(mia, "POST", "/posts", { body: "Live-Test" });
+    const miaSock = await connect(mia.cookie);
+    const ninaSock = await connect(nina.cookie);
+    await until(() => miaSock.events.length > 0 && ninaSock.events.length > 0);
+    await rest(ben, "POST", `/posts/${post.json().id}/like`);
+    await until(() => miaSock.events.some((e) => e.type === "notification"));
+    const ev = miaSock.events.find((e) => e.type === "notification");
+    expect(ev).toEqual({ type: "notification", id: expect.any(String) });
+    expect(JSON.stringify(miaSock.events)).not.toMatch(/ben/i); // keine Namen im Ereignis
+    expect(ninaSock.events.some((e) => e.type === "notification")).toBe(false);
+    // der Inhalt kommt per REST, nur fuer den Empfaenger
+    expect((await rest(mia, "GET", `/notifications/${ev.id}`)).json()).toMatchObject({ type: "like", count: 1 });
+    expect((await rest(nina, "GET", `/notifications/${ev.id}`)).statusCode).toBe(404);
+    [miaSock, ninaSock].forEach((s) => s.ws?.terminate());
+    await until(() => gateway.connections() === 0);
+  });
+
   it("begrenzt gleichzeitige Verbindungen pro Nutzer (5)", async () => {
     const socks = [];
     for (let i = 0; i < 5; i++) socks.push(await connect(nina.cookie));

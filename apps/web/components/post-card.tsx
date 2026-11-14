@@ -4,15 +4,18 @@ import { haptic } from "@/lib/haptics";
 import clsx from "clsx";
 import { EyeOff, Flag, Heart, Image as ImageIcon, Info, MessageCircle, Pencil, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { MAX_POST_TAGS, type CommentItem, type FeedPost } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { mediaUrl } from "@/lib/media";
 import { shareLink } from "@/lib/share";
 import { useBusy } from "@/lib/use-api";
+import { useDoubleTap } from "@/lib/use-double-tap";
 import { LazyLightbox, LazyTagPicker as TagPicker } from "./lazy";
+import { LikersSheet } from "./likers-sheet";
 import { PollView } from "./poll-view";
+import { RichText } from "./rich-text";
 import { TagChips } from "./tag-chips";
 import { ask, toast } from "./ui-hosts";
 import { Alert, Avatar, Badge, Button, Card, Input, TextareaField, UserAvatarLink, UserNameLink } from "./ui";
@@ -79,6 +82,10 @@ export function PostCard({
   const [editBusy, runEdit] = useBusy();
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [likers, setLikers] = useState(false);
+  const [burst, setBurst] = useState(0); // Doppeltipp aufs Bild: grosses Herz blendet kurz ein
+  const [replyTo, setReplyTo] = useState<{ parentId: string; name: string } | null>(null);
+  const draftRef = useRef<HTMLInputElement>(null);
 
   const liking = useRef(false);
   const run = async (fn: () => Promise<void>) => {
@@ -126,6 +133,37 @@ export function PostCard({
       }
     });
 
+  // Doppeltipp aufs Bild = Gefaellt mir (nie zurueck nehmen); einzelner Tipp vergroessert das Bild
+  const [imageIndex, setImageIndex] = useState(0);
+  const tapImage = useDoubleTap(
+    () => setLightbox(imageIndex),
+    () => {
+      setBurst((b) => b + 1);
+      if (!post.likedByMe) void like();
+    },
+  );
+
+  const toggleCommentLike = (c: CommentItem) => {
+    const before = comments;
+    const liked = !c.likedByMe;
+    if (liked) haptic(12);
+    setComments((list) => (list ?? []).map((x) => (x.id === c.id ? { ...x, likedByMe: liked, likes: Math.max(0, (x.likes ?? 0) + (liked ? 1 : -1)) } : x)));
+    api<{ liked: boolean; likes: number }>(`/comments/${c.id}/like`, { method: "POST", body: {} })
+      .then((r) => setComments((list) => (list ?? []).map((x) => (x.id === c.id ? { ...x, likedByMe: r.liked, likes: r.likes } : x))))
+      .catch((e) => {
+        setComments(before);
+        toast.error(describeError(e));
+      });
+  };
+
+  /** Antworten: eine Ebene. Auf eine Antwort antwortet man beim Elternkommentar und erwaehnt die Person. */
+  const startReply = (c: CommentItem) => {
+    const parentId = c.parentId ?? c.id;
+    setReplyTo({ parentId, name: c.author.name });
+    setDraft(c.author.handle && c.author.id !== user?.id ? `@${c.author.handle} ` : "");
+    setTimeout(() => draftRef.current?.focus(), 0);
+  };
+
   const toggleComments = () =>
     run(async () => {
       if (!open && comments === null) setComments(await api<CommentItem[]>(`/posts/${post.id}/comments`));
@@ -136,10 +174,11 @@ export function PostCard({
     e.preventDefault();
     if (!draft.trim()) return;
     void run(async () => {
-      const c = await api<CommentItem>(`/posts/${post.id}/comments`, { method: "POST", body: { body: draft } });
+      const c = await api<CommentItem>(`/posts/${post.id}/comments`, { method: "POST", body: { body: draft, ...(replyTo ? { parentId: replyTo.parentId } : {}) } });
       setComments((list) => [...(list ?? []), c]);
       setPost((p) => ({ ...p, comments: p.comments + 1 }));
       setDraft("");
+      setReplyTo(null);
     });
   };
 
@@ -149,8 +188,10 @@ export function PostCard({
     if (!(await ask("Kommentar löschen? Das lässt sich nicht rückgängig machen.", { confirmLabel: "Löschen", danger: true }))) return;
     try {
       await api(`/comments/${c.id}`, { method: "DELETE" });
-      setComments((list) => (list ?? []).filter((x) => x.id !== c.id));
-      setPost((p) => ({ ...p, comments: Math.max(0, p.comments - 1) }));
+      const gone = (comments ?? []).filter((x) => x.id === c.id || x.parentId === c.id).length; // Antworten verschwinden mit
+      setComments((list) => (list ?? []).filter((x) => x.id !== c.id && x.parentId !== c.id));
+      setPost((p) => ({ ...p, comments: Math.max(0, p.comments - gone) }));
+      if (replyTo?.parentId === c.id) setReplyTo(null);
       toast.success("Kommentar gelöscht.");
     } catch (e) {
       toast.error(describeError(e));
@@ -231,6 +272,45 @@ export function PostCard({
 
   const mediaIds = post.media.map((m) => m.id);
 
+  // Antworten (eine Ebene) unter ihren Elternkommentar; Antworten ohne geladenen Elternkommentar zaehlen als eigene Kommentare
+  const threads = useMemo(() => {
+    const list = comments ?? [];
+    const ids = new Set(list.map((c) => c.id));
+    const top = list.filter((c) => !c.parentId || !ids.has(c.parentId));
+    return top.map((c) => ({ comment: c, replies: list.filter((r) => r.parentId === c.id) }));
+  }, [comments]);
+
+  const renderComment = (c: CommentItem) => {
+    const items = commentMenu(c);
+    return (
+      <div className="flex items-start gap-1">
+        <div className="min-w-0 flex-1">
+          <UserNameLink handle={c.author.handle} name={c.author.name} className="font-medium" />{" "}
+          <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
+          <p className="break-words">
+            <RichText text={c.body} />
+          </p>
+          <div className="mt-0.5 flex items-center gap-3 text-xs text-muted">
+            <button
+              type="button"
+              aria-pressed={!!c.likedByMe}
+              aria-label={`Kommentar von ${c.author.name}: Gefällt mir${c.likes ? `, ${c.likes}` : ""}`}
+              onClick={() => toggleCommentLike(c)}
+              className="hit-area relative inline-flex items-center gap-1 hover:text-text"
+            >
+              <Heart size={13} aria-hidden className={clsx(c.likedByMe && "fill-current text-like")} />
+              {c.likes ? <span>{c.likes}</span> : null}
+            </button>
+            <button type="button" onClick={() => startReply(c)} className="hit-area relative font-medium hover:text-text">
+              Antworten
+            </button>
+          </div>
+        </div>
+        {items.length > 0 && <DropdownMenu label={`Optionen für Kommentar von ${c.author.name}`} items={items} triggerClassName="h-7 w-7" />}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <div className="flex items-start gap-3">
@@ -261,15 +341,22 @@ export function PostCard({
             )}
           </div>
 
-          {post.body && <p className="mt-2.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-relaxed">{post.body}</p>}
+          {post.body && (
+            <p className="mt-2.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-relaxed">
+              <RichText text={post.body} />
+            </p>
+          )}
 
           {post.media.length > 0 && (
-            <div className={clsx("mt-3 grid gap-1 overflow-hidden rounded-2xl", post.media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+            <div className={clsx("relative mt-3 grid gap-1 overflow-hidden rounded-2xl", post.media.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
               {post.media.map((m, i) => (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setLightbox(i)}
+                  onClick={() => {
+                    setImageIndex(i);
+                    tapImage();
+                  }}
                   aria-label={`Bild ${i + 1} von ${post.media.length} vergrößern`}
                   className={clsx("press block overflow-hidden bg-surface-2", post.media.length === 1 ? "" : "aspect-square", post.media.length === 3 && i === 0 && "row-span-2 aspect-auto")}
                 >
@@ -284,6 +371,11 @@ export function PostCard({
                   />
                 </button>
               ))}
+              {burst > 0 && (
+                <span key={burst} aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <Heart size={88} className="animate-heart fill-current text-like drop-shadow-lg" />
+                </span>
+              )}
             </div>
           )}
 
@@ -296,12 +388,23 @@ export function PostCard({
               variant="ghost"
               size="sm"
               aria-pressed={post.likedByMe}
-              aria-label={`Gefällt mir, ${post.likes}`}
+              aria-label="Gefällt mir"
               onClick={like}
+              className="px-2"
             >
               {/* key: Herz ploppt bei jedem Wechsel neu auf */}
-              <Heart key={String(post.likedByMe)} size={18} aria-hidden className={clsx(post.likedByMe && "animate-pop fill-current text-like")} /> {post.likes}
+              <Heart key={String(post.likedByMe)} size={18} aria-hidden className={clsx(post.likedByMe && "animate-pop fill-current text-like")} />
             </Button>
+            {post.likes > 0 && (
+              <button
+                type="button"
+                onClick={() => setLikers(true)}
+                aria-label={`${post.likes} ${post.likes === 1 ? "Person gefällt" : "Personen gefällt"} das, Liste anzeigen`}
+                className="hit-area relative -ml-1 mr-1 rounded-md px-1 text-sm hover:underline"
+              >
+                {post.likes}
+              </button>
+            )}
             <Button variant="ghost" size="sm" aria-expanded={open} aria-label={`Kommentare, ${post.comments}`} onClick={toggleComments}>
               <MessageCircle size={18} aria-hidden /> {post.comments}
             </Button>
@@ -323,35 +426,39 @@ export function PostCard({
 
           {open && (
             <div className="mt-3 border-t border-border pt-3">
-              <ul className="space-y-2">
-                {(comments ?? []).map((c) => {
-                  const items = commentMenu(c);
-                  return (
-                    <li key={c.id} className="text-sm">
-                      <div className="flex items-start gap-1">
-                        <div className="min-w-0 flex-1">
-                          <UserNameLink handle={c.author.handle} name={c.author.name} className="font-medium" />{" "}
-                          <span className="text-xs text-muted">{timeAgo(c.createdAt)}</span>
-                          <p className="break-words">{c.body}</p>
-                        </div>
-                        {items.length > 0 && (
-                          <DropdownMenu label={`Optionen für Kommentar von ${c.author.name}`} items={items} triggerClassName="h-7 w-7" />
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
+              <ul className="space-y-3">
+                {threads.map((t) => (
+                  <li key={t.comment.id} className="text-sm">
+                    {renderComment(t.comment)}
+                    {t.replies.length > 0 && (
+                      <ul className="ml-6 mt-2 space-y-2 border-l border-border pl-3">
+                        {t.replies.map((r) => (
+                          <li key={r.id}>{renderComment(r)}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
                 {comments?.length === 0 && <li className="text-xs text-muted">Noch keine Kommentare.</li>}
               </ul>
+              {replyTo && (
+                <p className="mt-3 flex items-center justify-between rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-muted">
+                  <span>Antwort an {replyTo.name}</span>
+                  <button type="button" onClick={() => { setReplyTo(null); setDraft(""); }} className="hit-area relative rounded px-1 font-medium text-brand hover:underline">
+                    Abbrechen
+                  </button>
+                </p>
+              )}
               <form onSubmit={addComment} className="mt-3 flex gap-2">
-                <label htmlFor={`c-${post.id}`} className="sr-only">Kommentar</label>
+                <label htmlFor={`c-${post.id}`} className="sr-only">{replyTo ? `Antwort an ${replyTo.name}` : "Kommentar"}</label>
                 <Input
+                  ref={draftRef}
                   id={`c-${post.id}`}
                   size="sm"
                   value={draft}
                   maxLength={500}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Kommentar schreiben …"
+                  placeholder={replyTo ? "Antwort schreiben …" : "Kommentar schreiben …"}
                   className="min-w-0 flex-1"
                 />
                 <Button type="submit" size="sm" disabled={!draft.trim()}>Senden</Button>
@@ -361,6 +468,8 @@ export function PostCard({
         </div>
       </div>
       {lightbox !== null && <LazyLightbox ids={mediaIds} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />}
+
+      <LikersSheet postId={post.id} open={likers} onClose={() => setLikers(false)} />
 
       <Dialog
         open={panel === "less"}

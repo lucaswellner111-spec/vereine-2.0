@@ -125,6 +125,33 @@ export class ProfileAccess {
     return !!f;
   }
 
+  /** Wie `canView`, aber fuer viele Personen auf einmal: die Teilmenge von `ownerIds`, die `viewerId` sehen darf. */
+  async viewableOwners(viewerId: string, ownerIds: string[]): Promise<Set<string>> {
+    const ids = [...new Set(ownerIds)];
+    const profs = await this.ensureMany(ids);
+    const ok = new Set<string>();
+    const needFollow: string[] = [];
+    for (const id of ids) {
+      const p = profs.get(id);
+      if (id === viewerId || !p || p.visibility === "public") ok.add(id);
+      else needFollow.push(id);
+    }
+    if (needFollow.length) {
+      const rows = await this.db
+        .select({ id: userFollows.followedId })
+        .from(userFollows)
+        .where(and(eq(userFollows.followerId, viewerId), eq(userFollows.status, "active"), inArray(userFollows.followedId, needFollow)));
+      for (const r of rows) ok.add(r.id);
+    }
+    return ok;
+  }
+
+  /** Profile zu Benutzernamen (klein geschrieben); unbekannte fehlen. */
+  async byHandles(handles: string[]): Promise<ProfileRow[]> {
+    const list = [...new Set(handles.map((h) => h.toLowerCase()))];
+    return list.length ? this.db.select().from(profiles).where(inArray(profiles.handle, list)) : [];
+  }
+
   /** Autoren, deren (persoenliche) Beitraege `viewerId` sehen darf, weil er ihnen folgt. */
   async followedUserIds(viewerId: string): Promise<string[]> {
     const rows = await this.db

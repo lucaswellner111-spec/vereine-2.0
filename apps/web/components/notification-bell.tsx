@@ -8,13 +8,13 @@ import type { NotificationsResponse } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
 import { describeNotification, NOTIFICATION_ICONS, relativeTime } from "@/lib/notifications";
 import { useApi } from "@/lib/use-api";
+import { useNotificationHub } from "./notification-hub";
 import { Skeleton } from "./ui";
 import { useEscapeLayer } from "./ui-client";
 import { toast } from "./ui-hosts";
 
-// SKALIERUNG: Polling (30 s, pausiert bei verstecktem Tab) reicht fuer den Start. Der Chat-Socket liefert
-// bisher keine Benachrichtigungs-Ereignisse; spaeter ueber denselben Kanal (Redis Pub/Sub) live zustellen.
-const POLL_MS = 30_000;
+// Live: Der Zaehler kommt ueber den Socket (NotificationHub, Redis Pub/Sub -> chat-gateway); Polling gibt es nur als
+// Rueckfall im ChatProvider, wenn der Socket getrennt ist. Die Liste laedt beim Oeffnen und bei jedem Live-Ereignis still neu.
 
 /** Liste fuer Glocke und Seite: Icon je Art, relative Zeit, ungelesen fett. */
 export function NotificationRow({ n, onOpen }: { n: NotificationsResponse["items"][number]; onOpen?: () => void }) {
@@ -42,17 +42,15 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
   const state = useApi<NotificationsResponse>("/notifications?limit=20", { refreshOnFocus: true });
   const data = state.data;
   const refresh = state.refresh;
+  const hub = useNotificationHub();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Polling nur bei sichtbarem Tab; Rueckkehr laedt ueber refreshOnFocus
+  // Live-Ereignis (oder Rueckfall-Polling des ChatProviders): Liste still aktualisieren
   useEffect(() => {
-    const t = setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, POLL_MS);
-    return () => clearInterval(t);
-  }, [refresh]);
+    if (hub.version > 0) refresh();
+  }, [hub.version, refresh]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,13 +75,14 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
     state.setData({ ...before, unread: 0, items: before.items.map((n) => (n.readAt ? n : { ...n, readAt: now })) });
     try {
       await api("/notifications/read", { method: "POST", body: {} });
+      hub.refresh();
     } catch (e) {
       state.setData(before);
       toast.error(describeError(e));
     }
   }
 
-  const unread = data?.unread ?? 0;
+  const unread = hub.unread ?? data?.unread ?? 0;
 
   return (
     <div ref={ref} className="relative">
@@ -146,7 +145,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
             </ul>
           )}
           <div className="border-t border-border px-3 py-2 text-center">
-            <Link href="/benachrichtigungen" onClick={() => setOpen(false)} className="inline-flex min-h-9 items-center text-sm font-medium text-brand hover:underline">
+            <Link href="/aktivitaet" onClick={() => setOpen(false)} className="inline-flex min-h-9 items-center text-sm font-medium text-brand hover:underline">
               Alle anzeigen
             </Link>
           </div>
