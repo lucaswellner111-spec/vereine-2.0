@@ -2,6 +2,9 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, No
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import {
   MEMBER_IMPORT_LIMITS,
+  YOUTH_AGE_LIMIT,
+  YOUTH_AGE_MIN,
+  ageOn,
   memberImportRowSchema,
   type MemberImportField,
   type MemberImportPreview,
@@ -39,6 +42,8 @@ const FIELD_LABEL: Record<MemberImportField, string> = {
   memberNo: "Mitgliedsnummer",
   joinedOn: "Eintrittsdatum",
   feeClass: "Beitragsklasse",
+  birthDate: "Geburtsdatum",
+  guardianEmail: "E-Mail der Eltern",
 };
 /** Haengt ein Versand (Absturz des Workers), gibt der naechste Lauf die Zeile nach dieser Zeit wieder frei. */
 const STALE_MS = 15 * 60_000;
@@ -46,7 +51,20 @@ const STALE_MS = 15 * 60_000;
 export const IMPORT_PREVIEWS_PER_HOUR = 30;
 export const IMPORT_CONFIRMS_PER_HOUR = 20;
 
-type ValidRow = { line: number; firstName: string; lastName: string; email: string; memberNo: number | null; joinedOn: string | null; feeClassId: string | null };
+type ValidRow = {
+  line: number;
+  firstName: string;
+  lastName: string;
+  /** Bei Kindern unter 16 die Adresse der Eltern (dorthin geht die Einladung). */
+  email: string;
+  memberNo: number | null;
+  joinedOn: string | null;
+  feeClassId: string | null;
+  minor: boolean;
+  birthDate: string | null;
+};
+/** Je Kind eine Vormerkung, auch wenn Geschwister sich eine Elternadresse teilen. */
+const minorKey = (v: { email: string; firstName: string; lastName: string; birthDate: string | null }) => `${v.email}|${v.firstName.toLowerCase()}|${v.lastName.toLowerCase()}|${v.birthDate}`;
 
 /**
  * Mitglieder-Import per CSV (nur Vorstand). Zweistufig: Vorschau (parsen, pruefen, Dubletten) und Bestaetigung (gleiche
@@ -81,6 +99,15 @@ export class MemberImportService implements OnModuleInit {
     this.jobs.define(JOB, async (d: { orgId: string }) => {
       await this.sendInvites(d.orgId);
     });
+    // Persoenliche Einladung fuer ein Kind: nur ein Elternteil darf sie fuer das Jugendkonto annehmen (Geburtsdatum muss passen)
+    this.orgEvents.onInviteGate("member-import", async (orgId, inviteId) => {
+      const [row] = await this.db
+        .select({ isMinor: pendingMembers.isMinor, birthDate: pendingMembers.birthDate })
+        .from(pendingMembers)
+        .where(and(eq(pendingMembers.orgId, orgId), eq(pendingMembers.inviteId, inviteId)))
+        .limit(1);
+      return row?.isMinor ? { forChild: true, birthDate: row.birthDate } : null;
+    });
     this.orgEvents.onInviteAccepted("member-import", (orgId, userId, inviteId) => this.adopt(orgId, userId, inviteId));
   }
 
@@ -114,7 +141,8 @@ export class MemberImportService implements OnModuleInit {
     const header = records[0];
     if (!header) throw new BadRequestException("Die Datei ist leer.");
     const { index, ignored } = mapColumns(header.cells);
-    const missing = (["firstName", "lastName", "email"] as const).filter((f) => index[f] === undefined);
+    // E-Mail-Spalte darf fehlen, wenn es eine Spalte "E-Mail der Eltern" gibt (reine Kinderliste)
+    const missing = (["firstName", "lastName", "email"] as const).filter((f) => index[f] === undefined && !(f === "email" && index.guardianEmail !== undefined));
     if (missing.length) {
       throw new BadRequestException(`In der Kopfzeile fehlen Spalten: ${missing.map((f) => FIELD_LABEL[f]).join(", ")}. Die erste Zeile muss die Spaltennamen enthalten.`);
     }
@@ -126,12 +154,15 @@ export class MemberImportService implements OnModuleInit {
 
     const [classes, pending, active] = await Promise.all([
       this.db.select({ id: feeClasses.id, name: feeClasses.name }).from(feeClasses).where(eq(feeClasses.orgId, orgId)),
-      this.db.select({ email: pendingMembers.email, memberNo: pendingMembers.memberNo }).from(pendingMembers).where(eq(pendingMembers.orgId, orgId)),
+      this.db
+        .select({ email: pendingMembers.email, memberNo: pendingMembers.memberNo, isMinor: pendingMembers.isMinor, firstName: pendingMembers.firstName, lastName: pendingMembers.lastName, birthDate: pendingMembers.birthDate })
+        .from(pendingMembers).where(eq(pendingMembers.orgId, orgId)),
       this.orgs.allActiveMembersWithRole(orgId),
     ]);
     const classBy = new Map(classes.map((c) => [c.name.trim().toLowerCase(), c.id]));
     const memberEmails = new Set([...(await this.directory.mailContacts(active.map((a) => a.userId))).values()].map((c) => c.email.toLowerCase()));
-    const pendingEmails = new Set(pending.map((p) => p.email));
+    const pendingEmails = new Set(pending.filter((p) => !p.isMinor).map((p) => p.email));
+    const pendingMinors = new Set(pending.filter((p) => p.isMinor).map((p) => minorKey(p)));
     const pendingNos = new Set(pending.map((p) => p.memberNo).filter((n): n is number => n !== null));
 
     const cell = (cells: string[], f: MemberImportField) => (index[f] === undefined ? "" : (cells[index[f]!] ?? "").trim());
@@ -142,16 +173,32 @@ export class MemberImportService implements OnModuleInit {
       const rawNo = cell(r.cells, "memberNo");
       const rawDate = cell(r.cells, "joinedOn");
       const date = parseDate(rawDate);
+      // Alter pruefen: unter 16 = Kind, die Einladung geht an die Eltern (eine eigene Adresse des Kindes wird nicht uebernommen)
+      const rawBirth = cell(r.cells, "birthDate");
+      const birth = parseDate(rawBirth);
+      const birthProblems: string[] = [];
+      let minor = false;
+      if (rawBirth !== "") {
+        if (birth === "invalid" || birth === null) birthProblems.push("Geburtsdatum ist ungültig (TT.MM.JJJJ).");
+        else if (birth > today) birthProblems.push("Geburtsdatum liegt in der Zukunft.");
+        else {
+          const age = ageOn(birth, today);
+          if (age < YOUTH_AGE_MIN) birthProblems.push(`Kinder unter ${YOUTH_AGE_MIN} Jahren sind nicht möglich.`);
+          else minor = age < YOUTH_AGE_LIMIT;
+        }
+      }
+      const guardianMail = cell(r.cells, "guardianEmail");
+      if (minor && guardianMail === "") birthProblems.push(`Für Kinder unter ${YOUTH_AGE_LIMIT} braucht es die E-Mail der Eltern – die Einladung geht an sie.`);
       const input = {
         firstName: cell(r.cells, "firstName"),
         lastName: cell(r.cells, "lastName"),
-        email: cell(r.cells, "email"),
+        email: minor ? guardianMail : cell(r.cells, "email"),
         memberNo: rawNo === "" ? null : /^\d{1,9}$/.test(rawNo) ? Number(rawNo) : Number.NaN,
         joinedOn: date === "invalid" ? "ungueltig" : date,
         feeClassName: cell(r.cells, "feeClass") || null,
       };
       const parsed = memberImportRowSchema.safeParse(input);
-      const problems = parsed.success ? [] : [...new Set(parsed.error.issues.map((i) => i.message))];
+      const problems = [...(parsed.success ? [] : [...new Set(parsed.error.issues.map((i) => i.message))]), ...birthProblems];
       let feeClassId: string | null = null;
       if (parsed.success) {
         if (parsed.data.joinedOn && parsed.data.joinedOn > today) problems.push("Eintrittsdatum liegt in der Zukunft.");
@@ -169,30 +216,38 @@ export class MemberImportService implements OnModuleInit {
         memberNo: Number.isFinite(shown.memberNo) ? (shown.memberNo as number | null) : null,
         joinedOn: date === "invalid" ? null : date,
         feeClassName: input.feeClassName?.slice(0, 60) ?? null,
+        youth: minor,
+        birthDate: minor && typeof birth === "string" ? birth : null,
         status: problems.length ? "error" : "ok",
         problems,
       });
       if (parsed.success && problems.length === 0) {
-        candidates.push({ line: r.line, firstName: parsed.data.firstName, lastName: parsed.data.lastName, email: parsed.data.email, memberNo: parsed.data.memberNo, joinedOn: parsed.data.joinedOn, feeClassId });
+        candidates.push({ line: r.line, firstName: parsed.data.firstName, lastName: parsed.data.lastName, email: parsed.data.email, memberNo: parsed.data.memberNo, joinedOn: parsed.data.joinedOn, feeClassId, minor, birthDate: minor ? (birth as string) : null });
       }
     }
 
     // Dubletten: in der Datei, gegen Mitglieder, gegen offene Vormerkungen, gegen vergebene Nummern
     const usedNos = await this.members.usedMemberNos(orgId, candidates.map((c) => c.memberNo).filter((n): n is number => n !== null));
     const seenEmail = new Map<string, number>();
+    const seenMinor = new Map<string, number>();
     const seenNo = new Map<number, number>();
     const valid: ValidRow[] = [];
     const rowBy = new Map(rows.map((r) => [r.line, r]));
     for (const c of candidates) {
       const dup: string[] = [];
-      if (seenEmail.has(c.email)) dup.push(`E-Mail steht schon in Zeile ${seenEmail.get(c.email)}.`);
+      if (c.minor) {
+        const key = minorKey(c);
+        if (seenMinor.has(key)) dup.push(`Dieses Kind steht schon in Zeile ${seenMinor.get(key)}.`);
+        else if (pendingMinors.has(key)) dup.push("Dieses Kind wurde schon importiert, die Eltern sind eingeladen.");
+        if (!seenMinor.has(key)) seenMinor.set(key, c.line);
+      } else if (seenEmail.has(c.email)) dup.push(`E-Mail steht schon in Zeile ${seenEmail.get(c.email)}.`);
       else if (memberEmails.has(c.email)) dup.push("Diese Person ist schon Mitglied im Verein.");
       else if (pendingEmails.has(c.email)) dup.push("Diese Person wurde schon importiert und ist eingeladen.");
       if (c.memberNo !== null) {
         if (seenNo.has(c.memberNo)) dup.push(`Mitgliedsnummer ${c.memberNo} steht schon in Zeile ${seenNo.get(c.memberNo)}.`);
         else if (usedNos.has(c.memberNo) || pendingNos.has(c.memberNo)) dup.push(`Mitgliedsnummer ${c.memberNo} ist im Verein schon vergeben.`);
       }
-      if (!seenEmail.has(c.email)) seenEmail.set(c.email, c.line);
+      if (!c.minor && !seenEmail.has(c.email)) seenEmail.set(c.email, c.line);
       if (c.memberNo !== null && !seenNo.has(c.memberNo)) seenNo.set(c.memberNo, c.line);
       if (dup.length) {
         const row = rowBy.get(c.line)!;
@@ -213,6 +268,7 @@ export class MemberImportService implements OnModuleInit {
         valid: valid.length,
         errors: rows.filter((r) => r.status === "error").length,
         duplicates: rows.filter((r) => r.status === "duplicate").length,
+        youthRows: rows.filter((r) => r.youth).length,
         rows,
       },
       valid,
@@ -246,18 +302,20 @@ export class MemberImportService implements OnModuleInit {
     if (Number(open) + valid.length > MEMBER_IMPORT_LIMITS.maxPendingPerOrg) {
       throw new BadRequestException(`Es sind schon ${open} Personen eingeladen, aber noch nicht beigetreten. Mehr als ${MEMBER_IMPORT_LIMITS.maxPendingPerOrg} offene Einladungen sind nicht möglich.`);
     }
+    const minors = valid.filter((v) => v.minor).length;
+    if (minors > 0) await enforceLimit(this.cache, `import:minor:${org.id}`, 5, 86_400, limitMessage("Importe mit Kindern pro Tag"));
     const split = await this.mailSplit(org.id, valid.length);
     const inserted = await this.db.transaction(async (tx) => {
       const rows = await tx
         .insert(pendingMembers)
-        .values(valid.map((v) => ({ orgId: org.id, firstName: v.firstName, lastName: v.lastName, email: v.email, memberNo: v.memberNo, joinedOn: v.joinedOn, feeClassId: v.feeClassId, createdBy: user.id })))
+        .values(valid.map((v) => ({ orgId: org.id, firstName: v.firstName, lastName: v.lastName, email: v.email, memberNo: v.memberNo, joinedOn: v.joinedOn, feeClassId: v.feeClassId, isMinor: v.minor, birthDate: v.birthDate, createdBy: user.id })))
         .onConflictDoNothing() // paralleler Import derselben Datei: Dubletten still auslassen
         .returning({ id: pendingMembers.id, memberNo: pendingMembers.memberNo });
       const maxNo = Math.max(0, ...rows.map((r) => r.memberNo ?? 0));
       if (maxNo > 0) await this.members.reserveMemberNos(org.id, maxNo, tx as unknown as Database);
       return rows.length;
     });
-    await this.audit.record(user.id, "members.imported", { orgId: org.id, count: inserted, skipped: preview.total - inserted });
+    await this.audit.record(user.id, "members.imported", { orgId: org.id, count: inserted, skipped: preview.total - inserted, youth: minors });
     // Versand im Worker (BullMQ); lokal/Tests laeuft der Job sofort im selben Prozess.
     await this.jobs.enqueue(JOB, { orgId: org.id }, { attempts: 3, backoffMs: 60_000 });
     const mailToday = Math.min(split.today, inserted);
@@ -301,12 +359,12 @@ export class MemberImportService implements OnModuleInit {
       const invite = await this.invites.createImportInvite(orgId, row.createdBy, MEMBER_IMPORT_LIMITS.inviteValidDays);
       let result: Awaited<ReturnType<MailService["send"]>>;
       try {
-        result = await this.mail.send(
-          row.email,
-          "member-invite",
-          { orgName: org.name, firstName: row.firstName, link: appLink(`/einladung/${invite.token}`), validDays: MEMBER_IMPORT_LIMITS.inviteValidDays },
-          { orgId, unsubscribe: { k: "invite", h: addressHash(row.email) } },
-        );
+        const link = appLink(`/einladung/${invite.token}`);
+        const opts = { orgId, unsubscribe: { k: "invite" as const, h: addressHash(row.email) } };
+        const validDays = MEMBER_IMPORT_LIMITS.inviteValidDays;
+        result = row.isMinor
+          ? await this.mail.send(row.email, "member-invite-guardian", { orgName: org.name, childFirstName: row.firstName, link, validDays }, opts)
+          : await this.mail.send(row.email, "member-invite", { orgName: org.name, firstName: row.firstName, link, validDays }, opts);
       } catch (err) {
         await this.invites.revokeImportInvites(orgId, [invite.id], { delete: true });
         await this.db.update(pendingMembers).set({ status: "queued", sentAt: null }).where(eq(pendingMembers.id, row.id));
@@ -374,6 +432,7 @@ export class MemberImportService implements OnModuleInit {
       memberNo: r.memberNo,
       joinedOn: r.joinedOn,
       feeClassName: r.feeClassId ? classBy.get(r.feeClassId) ?? null : null,
+      youth: r.isMinor,
       status: r.status === "sent" ? (r.inviteExpiresAt && r.inviteExpiresAt.getTime() <= now ? "expired" : "sent") : "queued",
       sentAt: r.status === "sent" && r.sentAt ? r.sentAt.toISOString() : null,
       createdAt: r.createdAt.toISOString(),

@@ -49,6 +49,26 @@ export class YouthDirectory {
     return rows.map((r) => r.guardian);
   }
 
+  /** Alle aktiven Elternteile mehrerer Kinder auf einmal (Kind-ID -> Eltern-IDs). */
+  async guardiansOfMany(youthIds: string[]): Promise<Map<string, string[]>> {
+    const unique = [...new Set(youthIds)];
+    const out = new Map<string, string[]>();
+    if (unique.length === 0) return out;
+    const rows = await this.db
+      .select({ youth: guardianships.youthUserId, guardian: guardianships.guardianUserId })
+      .from(guardianships)
+      .innerJoin(users, and(eq(users.id, guardianships.guardianUserId), isNull(users.deletedAt)))
+      .where(and(inArray(guardianships.youthUserId, unique), eq(guardianships.status, "active")));
+    for (const r of rows) out.set(r.youth, [...(out.get(r.youth) ?? []), r.guardian]);
+    return out;
+  }
+
+  /** Geburtsdatum eines Jugendkontos (JJJJ-MM-TT); null bei Erwachsenen. Nur fuer die Pruefung von Einladungen des Mitglieder-Imports. */
+  async birthDate(youthId: string): Promise<string | null> {
+    const [row] = await this.db.select({ d: youthProfiles.birthDate }).from(youthProfiles).where(eq(youthProfiles.userId, youthId)).limit(1);
+    return row?.d ?? null;
+  }
+
   async isGuardianOf(guardianId: string, youthId: string): Promise<boolean> {
     const [row] = await this.db
       .select({ id: guardianships.id })

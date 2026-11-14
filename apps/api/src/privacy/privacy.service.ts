@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import {
   CONSENT_PURPOSES,
   LEGAL_VERSION,
+  type DeleteChildResult,
   type ConsentPurpose,
   type ConsentState,
   type PublicUser,
@@ -225,9 +226,12 @@ export class PrivacyService implements OnModuleInit {
   }
 
   /** Loeschung eines Jugendkontos durch einen Elternteil (Passwort des Elternteils); danach wie bei der Kontoloeschung. */
-  async deleteChild(guardian: PublicUser, childId: string, password: string): Promise<void> {
+  async deleteChild(guardian: PublicUser, childId: string, password: string): Promise<DeleteChildResult> {
     if (!(await this.auth.verifyPassword(guardian.id, password))) throw new ForbiddenException("Passwort ist falsch.");
     const child = await this.guardians.childForPrivacy(guardian.id, childId);
+    // Zwei Elternteile: 7 Tage Vorankuendigung an den anderen, der widersprechen kann; geloescht wird dann vom Job privacy.retention
+    const plan = await this.guardians.planDeletion(guardian.id, childId);
+    if (plan.status === "scheduled") return plan;
     await this.guardians.auditDeleted(guardian.id, childId);
     await this.auth.beginAccountDeletion(child.id);
     try {
@@ -235,12 +239,14 @@ export class PrivacyService implements OnModuleInit {
     } catch {
       this.log.error("Loeschung eines Jugendkontos unvollstaendig, wird vom Job privacy.erase-pending abgeschlossen.");
     }
+    return { status: "deleted" };
   }
 
   /** Loeschfrist: Jugendkonten ohne Elternteil seit 30 Tagen (Job privacy.retention). */
   async eraseOrphanedYouth(): Promise<number> {
-    const ids = await this.guardians.orphanedForDeletion();
+    const ids = [...new Set([...(await this.guardians.orphanedForDeletion()), ...(await this.guardians.deletionDue())])];
     for (const id of ids) {
+      await this.guardians.auditDeleted(null, id); // Loeschung nach Vorankuendigung bzw. ohne Elternteil (nur Kind-ID)
       await this.auth.beginAccountDeletion(id);
       await this.eraseEverything(id);
     }

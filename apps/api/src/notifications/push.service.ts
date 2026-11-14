@@ -49,6 +49,8 @@ export function pushMessage(type: Type, d: Record<string, string>): PushPayload 
       return { title: "Zu-/Absage für dein Kind", body: d.title ?? "", url: d.eventId ? `/kalender/${d.eventId}` : "/kinder" };
     case "child_graduation":
       return { title: "Dein Kind wird bald 16", body: "Es braucht dann ein eigenes Konto.", url: "/kinder" };
+    case "guardian_notice":
+      return { title: "Jugendkonto deines Kindes", body: d.kind === "deletion_requested" ? "Das Konto soll gelöscht werden. Du kannst widersprechen." : "Es gibt eine Änderung.", url: "/kinder" };
     case "like":
     case "comment_like":
       return { title: "Gefällt mir", body: "Jemand mag deinen Beitrag.", url: d.postId ? `/beitrag/${d.postId}` : "/feed" };

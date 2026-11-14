@@ -90,6 +90,8 @@ const ALIASES: Record<MemberImportField, string[]> = {
   email: ["email", "emailadresse", "mail", "mailadresse", "emailaddress", "epost"],
   memberNo: ["mitgliedsnummer", "mitgliedsnr", "mitgliedernummer", "mitgliednr", "mitgliedernr", "mitgliednummer", "nr", "nummer", "memberno", "membernumber"],
   joinedOn: ["eintrittsdatum", "eintritt", "eintrittam", "beitritt", "beitrittsdatum", "mitgliedseit", "seit", "joinedon", "joindate"],
+  birthDate: ["geburtsdatum", "geburtstag", "geboren", "geborenam", "geburtsdatumkind", "birthdate", "dateofbirth", "dob"],
+  guardianEmail: ["elternemail", "elternmail", "emaileltern", "maileltern", "eltern", "emailerziehungsberechtigte", "erziehungsberechtigte", "emailsorgeberechtigte", "sorgeberechtigte", "guardianemail", "parentemail"],
   feeClass: ["beitragsklasse", "beitragsgruppe", "beitragsart", "beitrag", "tarif", "feeclass"],
 };
 

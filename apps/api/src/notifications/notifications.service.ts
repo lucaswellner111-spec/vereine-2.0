@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
 import type { NotificationActor, NotificationItem, NotificationsResponse } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { REALTIME_BUS, type RealtimeBus } from "../chat/realtime-bus";
 import { decodeCursor, encodeCursor } from "../common/cursor";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
@@ -45,7 +46,12 @@ const EXPORT_KEYS: Record<Type, string[]> = {
   // Jugend: Name des Kindes steht NICHT in den Daten (nur im Klartext der Oberflaeche aus dem Kontext der Eltern)
   child_rsvp: [...EVENT_KEYS, "status"],
   child_graduation: ["days"],
+  // Zweiter Elternteil, Rechnungsempfaenger, Loeschung: nur die Art des Hinweises (kein Name des Kindes, kein Klartext)
+  guardian_notice: ["kind", "deleteAfter"],
 };
+
+/** Termin-Benachrichtigungen: Kinder (Jugendkonten) haben keinen eigenen Zugang, sie gehen an die Eltern. */
+const GUARDIAN_ROUTED: Type[] = ["event_created", "event_reminder", "event_canceled", "event_updated", "event_waitlist_promoted"];
 
 /** Gebuendelte Typen: je Empfaenger, Ziel und Tag eine Zeile mit hoechstens MAX_GROUP_ACTORS Personen plus Zaehler. */
 export const GROUPED_TYPES = ["like", "comment_like"] as const;
@@ -70,6 +76,7 @@ export class NotificationsService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(PushService) private readonly push: PushService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(REALTIME_BUS) private readonly bus: RealtimeBus,
   ) {}
@@ -104,7 +111,15 @@ export class NotificationsService implements OnModuleInit {
    */
   async notify(userIds: string[], type: Type, data: Record<string, string>, opts: { actorId?: string } = {}): Promise<void> {
     const actorId = opts.actorId ?? null;
-    const unique = [...new Set(userIds)];
+    let unique = [...new Set(userIds)];
+    if (GUARDIAN_ROUTED.includes(type) && unique.length > 0) {
+      // Jugendkonten ersetzen durch ihre Eltern (je Elternteil nur eine Benachrichtigung, auch bei Geschwistern)
+      const kids = await this.youth.youthIds(unique);
+      if (kids.size > 0) {
+        const parents = await this.youth.guardiansOfMany([...kids]);
+        unique = [...new Set([...unique.filter((u) => !kids.has(u)), ...[...parents.values()].flat()])];
+      }
+    }
     // SKALIERUNG: Kleine Mengen sofort; grosse Mengen (z. B. Termin an 5.000 Mitglieder) als Jobs in Bloecken,
     // die der Worker parallel abarbeitet. Ab ~50k Empfaengern zusaetzlich Rate begrenzen / eigene Queue.
     if (unique.length <= FANOUT_THRESHOLD) return this.insert(unique, type, data, actorId);

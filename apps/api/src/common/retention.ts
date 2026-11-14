@@ -30,6 +30,10 @@ export const RETENTION = {
   guardianConsents: "3 years",
   /** Letzter Elternteil hat sein Konto geloescht: das Jugendkonto wird nach dieser Frist geloescht. */
   orphanedYouth: "30 days",
+  /** Loeschung eines Jugendkontos mit zwei Eltern: Vorankuendigung an den anderen Elternteil (docs/welle2/JUGEND-KONZEPT.md, Abschnitt 7 Punkt 7). */
+  youthDeletionNotice: "7 days",
+  /** Einladungen an einen zweiten Elternteil: nach Ablauf, Annahme oder Widerruf. */
+  guardianInvites: "30 days",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */

@@ -1,5 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, UseGuards } from "@nestjs/common";
-import { createYouthSchema, joinOrgForChildSchema, rsvpSchema, type PublicUser, type YouthChild, type YouthChildDetail } from "@vereine/shared";
+import {
+  acceptGuardianInviteSchema,
+  createYouthSchema,
+  inviteGuardianSchema,
+  joinOrgForChildSchema,
+  rsvpSchema,
+  setBillingContactSchema,
+  type GuardianInviteInfo,
+  type PublicUser,
+  type YouthChild,
+  type YouthChildDetail,
+  type YouthGuardiansView,
+} from "@vereine/shared";
 import { parse } from "../common/parse";
 import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { GuardianService } from "./guardian.service";
@@ -40,6 +52,39 @@ export class GuardianController {
     return this.guardian.leave(user, id, slug);
   }
 
+  // --- Zweiter Elternteil und Rechnungsempfaenger (E2) ---
+
+  @Get(":id/guardians")
+  guardians(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<YouthGuardiansView> {
+    return this.guardian.guardiansView(user, id);
+  }
+
+  @Post(":id/guardians")
+  @HttpCode(204)
+  async invite(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    requireVerifiedEmail(user);
+    await this.guardian.inviteGuardian(user, id, parse(inviteGuardianSchema, body).email);
+  }
+
+  @Delete(":id/guardian-invites/:inviteId")
+  @HttpCode(204)
+  revokeInvite(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Param("inviteId", ParseUUIDPipe) inviteId: string): Promise<void> {
+    return this.guardian.revokeGuardianInvite(user, id, inviteId);
+  }
+
+  @Put(":id/billing-contact")
+  @HttpCode(204)
+  billingContact(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+    return this.guardian.setBillingContact(user, id, parse(setBillingContactSchema, body).guardianId);
+  }
+
+  /** Widerspruch gegen die geplante Loeschung (jeder Elternteil). */
+  @Delete(":id/deletion")
+  @HttpCode(204)
+  cancelDeletion(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
+    return this.guardian.cancelDeletion(user, id);
+  }
+
   @Put(":id/events/:eventId/rsvp")
   async rsvp(
     @CurrentUser() user: PublicUser,
@@ -60,5 +105,25 @@ export class GuardianController {
   @HttpCode(204)
   leaveShift(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Param("shiftId", ParseUUIDPipe) shiftId: string): Promise<void> {
     return this.guardian.shiftLeave(user, id, shiftId);
+  }
+}
+
+/** Einladung als zweiter Elternteil annehmen: eigenes, bestaetigtes Erwachsenenkonto mit der eingeladenen Adresse. */
+@Controller("guardian/invites")
+@UseGuards(SessionGuard)
+export class GuardianInviteController {
+  constructor(@Inject(GuardianService) private readonly guardian: GuardianService) {}
+
+  @Get(":token")
+  info(@CurrentUser() user: PublicUser, @Param("token") token: string): Promise<GuardianInviteInfo> {
+    return this.guardian.guardianInviteInfo(user, token);
+  }
+
+  @Post(":token/accept")
+  @HttpCode(200)
+  accept(@CurrentUser() user: PublicUser, @Param("token") token: string, @Body() body: unknown): Promise<{ childId: string }> {
+    requireVerifiedEmail(user);
+    parse(acceptGuardianInviteSchema, body);
+    return this.guardian.acceptGuardianInvite(user, token);
   }
 }

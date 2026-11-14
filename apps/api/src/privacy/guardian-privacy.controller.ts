@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Res, UseGuards } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
-import { deleteChildSchema, type PublicUser } from "@vereine/shared";
+import { deleteChildSchema, type DeleteChildResult, type PublicUser } from "@vereine/shared";
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { parse } from "../common/parse";
@@ -23,10 +23,11 @@ export class GuardianPrivacyController {
     return this.privacy.exportChild(user, id);
   }
 
+  /** Ein Elternteil: sofort geloescht. Zwei Elternteile: Vorankuendigung (7 Tage), der andere kann widersprechen. */
   @Delete(":id")
-  @HttpCode(204)
-  async remove(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
+  @HttpCode(200)
+  async remove(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<DeleteChildResult> {
     await enforceLimit(this.cache, `privacy:delete-child:${user.id}`, 10, 3600, "Zu viele Versuche. Bitte versuche es später erneut.");
-    await this.privacy.deleteChild(user, id, parse(deleteChildSchema, body).password);
+    return this.privacy.deleteChild(user, id, parse(deleteChildSchema, body).password);
   }
 }

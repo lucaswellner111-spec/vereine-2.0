@@ -15,6 +15,7 @@ import {
   TriangleAlert,
   UserCheck,
   UserPlus,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import type { NotificationActor, NotificationItem, NotificationsResponse } from "@vereine/shared";
@@ -83,10 +84,29 @@ export function describeNotification(n: NotificationItem): { text: string; href:
       return { text: `${d.status === "yes" ? "Zusage" : d.status === "no" ? "Absage" : "Rückmeldung"} für dein Kind: ${d.title} (${fmt(d.startsAt)})`, href: d.eventId ? `/kalender/${d.eventId}` : "/kinder" };
     case "child_graduation":
       return { text: `Dein Kind wird in ${d.days} Tagen 16 und braucht dann ein eigenes Konto.`, href: "/kinder" };
+    case "guardian_notice":
+      return { text: GUARDIAN_NOTICE_TEXT(d), href: "/kinder" };
     case "post_hidden":
       return { text: `Dein Beitrag „${d.excerpt}“ wurde ausgeblendet. Grund: ${d.reason}`, href: "/feed" };
   }
 }
+
+const GUARDIAN_NOTICE_TEXT = (d: Record<string, string>): string => {
+  switch (d.kind) {
+    case "invite_accepted":
+      return "Der zweite Elternteil hat die Einladung angenommen und verwaltet dein Kind jetzt mit.";
+    case "billing_changed":
+      return "Der Rechnungsempfänger für dein Kind wurde gewechselt.";
+    case "deletion_requested":
+      return `Das Jugendkonto deines Kindes soll gelöscht werden${d.deleteAfter ? ` (frühestens am ${new Date(d.deleteAfter).toLocaleDateString("de-DE")})` : ""}. Du kannst widersprechen.`;
+    case "deletion_canceled":
+      return "Die geplante Löschung des Jugendkontos wurde abgebrochen.";
+    case "org_left":
+      return "Dein Kind wurde aus einem Verein abgemeldet.";
+    default:
+      return "Es gibt eine Änderung am Jugendkonto deines Kindes.";
+  }
+};
 
 export const NOTIFICATION_ICONS: Record<NotificationItem["type"], LucideIcon> = {
   comment: MessageCircle,
@@ -106,6 +126,7 @@ export const NOTIFICATION_ICONS: Record<NotificationItem["type"], LucideIcon> = 
   post_hidden: EyeOff,
   child_rsvp: CalendarCheck,
   child_graduation: AlarmClock,
+  guardian_notice: Users,
   like: Heart,
   comment_like: Heart,
   comment_reply: CornerDownRight,

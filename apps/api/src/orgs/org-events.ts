@@ -6,6 +6,9 @@ type LeaveHandler = (orgId: string, userId: string) => Promise<void>;
 type OrgDeletedHandler = (orgId: string) => Promise<void>;
 /** Beitritt ueber einen Einladungslink (z. B. persoenliche Einladung aus dem Mitglieder-Import). */
 type InviteAcceptedHandler = (orgId: string, userId: string, inviteId: string) => Promise<void>;
+/** Auskunft zu einer persoenlichen Einladung vor der Annahme (Import fuer Kinder: nur ueber ein Elternkonto annehmbar). */
+export type InviteGateResult = { forChild: boolean; birthDate: string | null } | null;
+type InviteGate = (orgId: string, inviteId: string) => Promise<InviteGateResult>;
 /** Laeuft IN der Loesch-Transaktion (nur `tx` benutzen); optionaler Rueckgabewert laeuft nach dem Commit (z. B. Dateien). */
 type OrgDeletingHandler = (orgId: string, tx: Database) => Promise<(() => Promise<void>) | void>;
 
@@ -22,6 +25,7 @@ export class OrgEvents implements OnModuleInit {
   private readonly deletedHandlers = new Map<string, OrgDeletedHandler>();
   private readonly deletingHandlers: OrgDeletingHandler[] = [];
   private readonly acceptedHandlers = new Map<string, InviteAcceptedHandler>();
+  private readonly gates = new Map<string, InviteGate>();
 
   constructor(@Inject(JobsService) private readonly jobs: JobsService) {}
 
@@ -50,6 +54,19 @@ export class OrgEvents implements OnModuleInit {
 
   onInviteAccepted(name: string, handler: InviteAcceptedHandler) {
     this.acceptedHandlers.set(name, handler);
+  }
+
+  onInviteGate(name: string, handler: InviteGate) {
+    this.gates.set(name, handler);
+  }
+
+  /** Vor der Annahme: Hinweise der Bereiche zu dieser Einladung (erste Antwort gewinnt). */
+  async inviteGate(orgId: string, inviteId: string): Promise<InviteGateResult> {
+    for (const h of this.gates.values()) {
+      const r = await h(orgId, inviteId);
+      if (r) return r;
+    }
+    return null;
   }
 
   /** Nach dem Commit des Beitritts aufrufen. Wirft nie. */

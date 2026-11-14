@@ -491,7 +491,8 @@ export type NotificationItem = {
     | "comment_reply"
     | "mention"
     | "child_rsvp"
-    | "child_graduation";
+    | "child_graduation"
+    | "guardian_notice";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
@@ -791,7 +792,8 @@ export type InviteItem = {
 /** Der Klartext-Token wird bei der Erstellung geliefert und kann danach nur vom Vorstand erneut abgerufen werden (protokolliert). */
 export type CreatedInvite = InviteItem & { token: string };
 export type InviteLink = { token: string };
-export type InviteInfo = { orgName: string; orgSlug: string; alreadyMember: boolean };
+/** `forChild`: persoenliche Import-Einladung fuer ein Kind unter 16 (nur ueber ein Elternkonto annehmbar). */
+export type InviteInfo = { orgName: string; orgSlug: string; alreadyMember: boolean; forChild?: boolean };
 
 export const cancelEventSchema = z.object({ scope: z.enum(["single", "series"]).default("single") });
 export type CalendarFeedStatus = { enabled: boolean; createdAt: string | null };
@@ -981,7 +983,7 @@ export const memberImportRowSchema = z.object({
 });
 export type MemberImportRowInput = z.infer<typeof memberImportRowSchema>;
 
-export type MemberImportField = "firstName" | "lastName" | "email" | "memberNo" | "joinedOn" | "feeClass";
+export type MemberImportField = "firstName" | "lastName" | "email" | "memberNo" | "joinedOn" | "feeClass" | "birthDate" | "guardianEmail";
 export type MemberImportRow = {
   /** Zeilennummer in der Datei (Kopfzeile = 1). */
   line: number;
@@ -991,6 +993,9 @@ export type MemberImportRow = {
   memberNo: number | null;
   joinedOn: string | null;
   feeClassName: string | null;
+  /** Kind unter 16: `email` ist dann die Adresse der Eltern, die Einladung geht an sie. */
+  youth: boolean;
+  birthDate: string | null;
   status: "ok" | "error" | "duplicate";
   problems: string[];
 };
@@ -1006,6 +1011,8 @@ export type MemberImportPreview = {
   rows: MemberImportRow[];
   /** Einladungen: heute moeglich / folgen an den naechsten Tagen (Kostenbremse). */
   mail: { today: number; later: number };
+  /** Zeilen fuer Kinder unter 16 (Einladung an die Eltern). */
+  youthRows: number;
 };
 export type MemberImportResult = { imported: number; skipped: number; mailToday: number; mailLater: number };
 export type PendingMemberItem = {
@@ -1016,6 +1023,7 @@ export type PendingMemberItem = {
   memberNo: number | null;
   joinedOn: string | null;
   feeClassName: string | null;
+  youth: boolean;
   status: "queued" | "sent" | "expired";
   sentAt: string | null;
   createdAt: string;
