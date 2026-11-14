@@ -9,6 +9,7 @@ import { avvGraceUntil, avvHash } from "./avv.service";
  */
 const PINNED: Record<string, string> = {
   "2026-11-13-entwurf-1": "92ab91f5fa2330ed34f591a04db2e6801ae6488072124cbfcca9bfd2f7dd8e19",
+  "2026-11-14-entwurf-2": "27a0a3d694c1764f1f48ed621f58baf7fc3d3e02c2399ae1d506ed094a2118d8",
 };
 
 describe("AVV-Dokument", () => {
@@ -28,6 +29,15 @@ describe("AVV-Dokument", () => {
     for (const part of ["Gegenstand", "Art und Zweck", "Kategorien personenbezogener Daten", "betroffener Personen", "Pflichten", "TOM", "Unterauftragsverarbeiter", "Hetzner", "Scaleway", "Löschung"]) {
       expect(md, part).toContain(part);
     }
+  });
+
+  it("alte Fassung bleibt abrufbar und die neue hat TOM-Anhang und Unterauftragsverarbeiter-Liste", () => {
+    expect(AVV_VERSIONS.map((d) => d.version)).toEqual(["2026-11-13-entwurf-1", "2026-11-14-entwurf-2"]);
+    const md = avvToMarkdown(AVV_DOCUMENT);
+    for (const part of ["Anhang 1: Technische und organisatorische Maßnahmen", "Anhang 2: Unterauftragsverarbeiter", "Hetzner Online GmbH", "Scaleway SAS", "Art. 28", "Meldung von Datenschutzverletzungen"]) {
+      expect(md, part).toContain(part);
+    }
+    expect(AVV_DOCUMENT.status).toBe("draft");
   });
 
   it("Uebergangsfrist beginnt nach der Veroeffentlichung", () => {
