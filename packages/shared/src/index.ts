@@ -4,6 +4,7 @@ import { MAX_ORG_TAGS, MAX_POST_TAGS, TAG_IDS } from "./tags";
 export * from "./tags";
 export * from "./avv";
 export * from "./captcha";
+export * from "./youth";
 
 export const ROLES = [
   "platform_admin",
@@ -61,6 +62,8 @@ export const publicUserSchema = z.object({
   isPlatformAdmin: z.boolean().optional(),
   /** false = Adresse noch nicht bestaetigt (Banner; Verein gruenden und Einladungen gesperrt). */
   emailVerified: z.boolean().optional(),
+  /** "youth" = Jugendkonto unter einem Elternkonto (kein eigener Zugang in Etappe 1). Fehlt bei alten Antworten = adult. */
+  accountType: z.enum(["adult", "youth"]).optional(),
 });
 export type PublicUser = z.infer<typeof publicUserSchema>;
 
@@ -454,7 +457,7 @@ export const saveAttendanceSchema = z.object({
     .refine((list) => new Set(list.map((e) => e.userId)).size === list.length, { message: "Jede Person nur einmal." }),
 });
 export type SaveAttendanceInput = z.infer<typeof saveAttendanceSchema>;
-export type AttendanceEntry = { userId: string; name: string; handle: string | null; status: AttendanceStatus | null; rsvp: RsvpState | null };
+export type AttendanceEntry = { userId: string; name: string; handle: string | null; status: AttendanceStatus | null; rsvp: RsvpState | null; /** Jugendkonto (unter 16). */ youth?: boolean };
 export type AttendanceList = { entries: AttendanceEntry[] };
 /**
  * Zusagen fuer alle, die den Termin sehen: bei internen/Team-Terminen sehen Vereinsmitglieder Anzeigename
@@ -486,7 +489,9 @@ export type NotificationItem = {
     | "like"
     | "comment_like"
     | "comment_reply"
-    | "mention";
+    | "mention"
+    | "child_rsvp"
+    | "child_graduation";
   data: Record<string, string>;
   readAt: string | null;
   createdAt: string;
@@ -716,6 +721,8 @@ export type InvoiceSummary = {
   displayStatus: InvoiceStatus | "overdue";
   recipientName: string;
   recipientUserId: string | null;
+  /** Rechnung fuer ein Kind: Name des Kindes (Vorname + Initiale), sonst null. */
+  subjectName?: string | null;
   issueDate: string | null;
   dueDate: string;
   totalCents: number;
@@ -877,6 +884,8 @@ export type FeeRunPreview = {
   withoutClass: number;
   /** Fuer diesen Zeitraum gibt es schon einen Lauf (Anlegen ergaebe 409). */
   periodTaken: boolean;
+  /** Kinder (Jugendkonten) ohne Rechnungsempfaenger: bekommen keine Rechnung, bis ein Elternteil als Empfaenger hinterlegt ist. */
+  withoutRecipient: number;
 };
 export const FEE_RUN_STATUS = ["queued", "running", "done", "failed"] as const;
 export type FeeRunStatus = (typeof FEE_RUN_STATUS)[number];
@@ -888,6 +897,8 @@ export type FeeRunItem = {
   status: FeeRunStatus;
   createdCount: number;
   skippedCount: number;
+  /** Davon Kinder ohne Rechnungsempfaenger (uebersprungen, nie an das Kind adressiert). */
+  skippedNoRecipient: number;
   /** Ausfuehrungsversuche (ab 5 keine automatische Wiederholung). */
   attempts: number;
   createdAt: string;
@@ -926,6 +937,10 @@ export type MemberRegistryItem = {
   city: string;
   /** Null, solange kein Geburtsdatum hinterlegt ist. */
   minor: boolean | null;
+  /** Jugendkonto (unter 16, von den Eltern verwaltet); Rechnungen gehen an den Elternteil. */
+  youth: boolean;
+  /** Nur bei Jugendkonten: Name des Elternteils (Rechnungsempfaenger), ohne Adresse. */
+  guardianName: string | null;
 };
 export type MemberRegistryPage = { total: number; items: MemberRegistryItem[] };
 export type MemberRecord = Required<SelfMemberProfileInput> & {

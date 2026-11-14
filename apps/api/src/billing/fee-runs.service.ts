@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import type { FeeRunInput, FeeRunItem, FeeRunPreview, FeeRunStatus, OrgRole, PublicUser } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { AvvService } from "../avv/avv.service";
 import { berlinDate } from "../common/berlin-date";
 import { isUniqueViolation } from "../common/pg-errors";
@@ -46,6 +47,7 @@ export class FeeRunsService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(OrgEvents) private readonly orgEvents: OrgEvents,
     @Inject(AvvService) private readonly avv: AvvService,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   onModuleInit() {
@@ -79,7 +81,7 @@ export class FeeRunsService implements OnModuleInit {
   async preview(user: PublicUser, slug: string, input: FeeRunInput): Promise<FeeRunPreview> {
     const org = await this.requireBiller(user, slug);
     const classes = await this.classesFor(org.id, input.feeClassIds);
-    const { candidates, withoutClass } = await this.members.feeRunCandidates(org.id, input.feeClassIds);
+    const { candidates, withoutClass, withoutRecipient } = await this.members.feeRunCandidates(org.id, input.feeClassIds);
     const byClass = classes
       .map((c) => {
         const members = candidates.filter((m) => m.feeClassId === c.id).length;
@@ -87,7 +89,7 @@ export class FeeRunsService implements OnModuleInit {
       })
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
     const [taken] = await this.db.select({ id: feeRuns.id }).from(feeRuns).where(and(eq(feeRuns.orgId, org.id), eq(feeRuns.periodLabel, input.periodLabel))).limit(1);
-    return { count: candidates.length, totalCents: byClass.reduce((s, c) => s + c.totalCents, 0), byClass, withoutClass, periodTaken: !!taken };
+    return { count: candidates.length, totalCents: byClass.reduce((s, c) => s + c.totalCents, 0), byClass, withoutClass, withoutRecipient, periodTaken: !!taken };
   }
 
   async create(user: PublicUser, slug: string, input: FeeRunInput): Promise<FeeRunItem> {
@@ -210,12 +212,15 @@ export class FeeRunsService implements OnModuleInit {
 
   private async createDrafts(run: RunRow): Promise<number> {
     const classes = new Map((await this.members.feeClassesOf(run.orgId, run.feeClassIds)).map((c) => [c.id, c]));
-    const { candidates } = await this.members.feeRunCandidates(run.orgId, [...classes.keys()]);
+    const { candidates, withoutRecipient } = await this.members.feeRunCandidates(run.orgId, [...classes.keys()]);
     const issuer = await this.orgs.issuerData(run.orgId);
-    const names = await this.directory.names(candidates.map((c) => c.userId));
+    // Empfaengernamen (bei Kindern der Elternteil) und, fuer die Rechnungskopie, der volle Name des Kindes
+    const names = await this.directory.names(candidates.map((c) => c.recipientUserId));
+    const subjects = await this.youth.fullNames(candidates.flatMap((c) => (c.subjectUserId ? [c.subjectUserId] : [])));
+    const keyOf = (recipient: string, subject: string | null) => `${recipient}|${subject ?? ""}`;
 
     for (let i = 0; i < candidates.length; i += CHUNK) {
-      const block = candidates.slice(i, i + CHUNK).filter((c) => names.has(c.userId) && classes.has(c.feeClassId));
+      const block = candidates.slice(i, i + CHUNK).filter((c) => names.has(c.recipientUserId) && classes.has(c.feeClassId));
       if (block.length === 0) continue;
       await this.db.transaction(async (tx) => {
         const inserted = await tx
@@ -225,9 +230,11 @@ export class FeeRunsService implements OnModuleInit {
               const amount = classes.get(c.feeClassId)!.amountCents;
               return {
                 orgId: run.orgId,
-                recipientUserId: c.userId,
-                recipientName: names.get(c.userId)!,
+                recipientUserId: c.recipientUserId,
+                recipientName: names.get(c.recipientUserId)!,
                 recipientAddress: c.address,
+                subjectUserId: c.subjectUserId,
+                subjectName: c.subjectUserId ? (subjects.get(c.subjectUserId) ?? null) : null,
                 issuerName: issuer.name,
                 issuerCity: issuer.city,
                 issuerAddress: issuer.address,
@@ -242,14 +249,16 @@ export class FeeRunsService implements OnModuleInit {
               };
             }),
           )
-          .onConflictDoNothing({ target: [invoices.feeRunId, invoices.recipientUserId] })
-          .returning({ id: invoices.id, userId: invoices.recipientUserId });
+          // je Lauf, Empfaenger und Kind hoechstens ein Entwurf (Index invoices_fee_run_recipient_uq, Ausdrucksindex: ohne Ziel)
+          .onConflictDoNothing()
+          .returning({ id: invoices.id, userId: invoices.recipientUserId, subject: invoices.subjectUserId });
         if (inserted.length === 0) return;
-        const classOf = new Map(block.map((c) => [c.userId, classes.get(c.feeClassId)!]));
+        const classOf = new Map(block.map((c) => [keyOf(c.recipientUserId, c.subjectUserId), { cls: classes.get(c.feeClassId)!, child: c.subjectUserId ? (subjects.get(c.subjectUserId) ?? "") : "" }]));
         await tx.insert(invoiceItems).values(
           inserted.map((r) => {
-            const c = classOf.get(r.userId!)!;
-            return { invoiceId: r.id, position: 0, description: `${c.name} ${run.periodLabel}`.slice(0, 200), quantity: 1, unitCents: c.amountCents, vatRate: 0 };
+            const { cls, child } = classOf.get(keyOf(r.userId!, r.subject))!;
+            const text = child ? `${cls.name} ${run.periodLabel} für ${child}` : `${cls.name} ${run.periodLabel}`;
+            return { invoiceId: r.id, position: 0, description: text.slice(0, 200), quantity: 1, unitCents: cls.amountCents, vatRate: 0 };
           }),
         );
       });
@@ -261,7 +270,7 @@ export class FeeRunsService implements OnModuleInit {
     const [{ n }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(invoices).where(eq(invoices.feeRunId, run.id));
     await this.db
       .update(feeRuns)
-      .set({ status: "done", createdCount: n, skippedCount: Math.max(0, candidates.length - n), finishedAt: sql`now()` })
+      .set({ status: "done", createdCount: n, skippedCount: Math.max(0, candidates.length - n) + withoutRecipient, skippedNoRecipient: withoutRecipient, finishedAt: sql`now()` })
       .where(and(eq(feeRuns.id, run.id), eq(feeRuns.status, "running")));
     return n;
   }
@@ -287,6 +296,7 @@ export class FeeRunsService implements OnModuleInit {
       createdCount: r.createdCount,
       attempts: r.attempts,
       skippedCount: r.skippedCount,
+      skippedNoRecipient: r.skippedNoRecipient,
       createdAt: r.createdAt.toISOString(),
       finishedAt: r.finishedAt?.toISOString() ?? null,
     };

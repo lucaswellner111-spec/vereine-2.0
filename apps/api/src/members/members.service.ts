@@ -14,6 +14,7 @@ import type {
 } from "@vereine/shared";
 import { AuditService } from "../auth/audit.service";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { AvvService } from "../avv/avv.service";
 import { DB, type Database } from "../db/db.module";
 import { feeClasses, memberCounters, memberProfiles, pendingMembers } from "../db/schema";
@@ -55,6 +56,7 @@ export class MembersService implements OnModuleInit {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(AvvService) private readonly avv: AvvService,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   onModuleInit() {
@@ -115,7 +117,10 @@ export class MembersService implements OnModuleInit {
       this.db.select().from(memberProfiles).where(and(eq(memberProfiles.orgId, org.id), isNull(memberProfiles.leftOn))),
       this.db.select().from(feeClasses).where(eq(feeClasses.orgId, org.id)),
     ]);
-    const names = await this.directory.names(active.map((a) => a.userId));
+    // Vorstand/Kasse sehen den vollen Namen der Kinder (Vereinsdaten); Jugend-Kennzeichnung und Elternname fuer die Verwaltung
+    const activeIds = active.map((a) => a.userId);
+    const [names, youthIds] = await Promise.all([this.youth.fullNames(activeIds), this.youth.youthIds(activeIds)]);
+    const guardianNames = await this.youth.billingContactNames([...youthIds]);
     const roleBy = new Map(active.map((a) => [a.userId, a.role]));
     const classBy = new Map(classes.map((c) => [c.id, c.name]));
     const term = q.q?.trim().toLowerCase();
@@ -131,7 +136,9 @@ export class MembersService implements OnModuleInit {
         feeClassId: p.feeClassId,
         feeClassName: p.feeClassId ? classBy.get(p.feeClassId) ?? null : null,
         city: p.city,
-        minor: isMinor(p.birthDate),
+        minor: youthIds.has(p.userId) ? true : isMinor(p.birthDate),
+        youth: youthIds.has(p.userId),
+        guardianName: youthIds.has(p.userId) ? (guardianNames.get(p.userId) ?? null) : null,
       }));
     if (q.feeClassId) items = items.filter((i) => i.feeClassId === q.feeClassId);
     if (term) items = items.filter((i) => i.name.toLowerCase().includes(term) || String(i.memberNo) === term || i.city.toLowerCase().includes(term));
@@ -151,7 +158,7 @@ export class MembersService implements OnModuleInit {
       .limit(1);
     const role = await this.orgs.activeRole(orgId, userId);
     if (!p || !role) throw new NotFoundException("Mitglied nicht gefunden.");
-    const names = await this.directory.names([userId]);
+    const names = await this.youth.fullNames([userId]);
     return {
       userId,
       name: names.get(userId) ?? DELETED,
@@ -320,7 +327,15 @@ export class MembersService implements OnModuleInit {
    * Kandidaten eines Beitragslaufs: aktive Mitglieder (ohne leftOn, mit Rolle) einer der Klassen, mit Anschrift
    * als Text fuer die Rechnungskopie. Dazu die Zahl aktiver Mitglieder ohne Beitragsklasse.
    */
-  async feeRunCandidates(orgId: string, classIds: string[]): Promise<{ candidates: { userId: string; feeClassId: string; address: string }[]; withoutClass: number }> {
+  async feeRunCandidates(
+    orgId: string,
+    classIds: string[],
+  ): Promise<{
+    candidates: { userId: string; feeClassId: string; address: string; recipientUserId: string; subjectUserId: string | null }[];
+    withoutClass: number;
+    /** Kinder (Jugendkonten) ohne aktiven Rechnungsempfaenger: werden uebersprungen, nie an das Kind adressiert. */
+    withoutRecipient: number;
+  }> {
     await this.ensureProfiles(orgId);
     const [active, profiles] = await Promise.all([
       this.orgs.allActiveMembersWithRole(orgId),
@@ -329,14 +344,27 @@ export class MembersService implements OnModuleInit {
     const activeIds = new Set(active.map((a) => a.userId));
     const wanted = new Set(classIds);
     const current = profiles.filter((p) => activeIds.has(p.userId));
-    const candidates = current
-      .filter((p) => p.feeClassId && wanted.has(p.feeClassId))
-      .map((p) => ({
-        userId: p.userId,
-        feeClassId: p.feeClassId!,
-        address: [p.street, [p.zip, p.city].filter(Boolean).join(" ")].filter(Boolean).join("\n"),
-      }));
-    return { candidates, withoutClass: current.filter((p) => !p.feeClassId).length };
+    const inClass = current.filter((p) => p.feeClassId && wanted.has(p.feeClassId));
+    // Jugendkonten: Rechnung geht an den Rechnungsempfaenger (Elternteil), Anschrift aus dessen Mitgliedsdaten im Verein (falls vorhanden)
+    const youthIds = await this.youth.youthIds(inClass.map((p) => p.userId));
+    const contacts = await this.youth.billingContacts([...youthIds]);
+    const byUser = new Map(profiles.map((p) => [p.userId, p]));
+    const addressOf = (p?: ProfileRow) => (p ? [p.street, [p.zip, p.city].filter(Boolean).join(" ")].filter(Boolean).join("\n") : "");
+    const candidates: { userId: string; feeClassId: string; address: string; recipientUserId: string; subjectUserId: string | null }[] = [];
+    let withoutRecipient = 0;
+    for (const p of inClass) {
+      if (!youthIds.has(p.userId)) {
+        candidates.push({ userId: p.userId, feeClassId: p.feeClassId!, address: addressOf(p), recipientUserId: p.userId, subjectUserId: null });
+        continue;
+      }
+      const guardian = contacts.get(p.userId);
+      if (!guardian) {
+        withoutRecipient += 1;
+        continue;
+      }
+      candidates.push({ userId: p.userId, feeClassId: p.feeClassId!, address: addressOf(byUser.get(guardian)), recipientUserId: guardian, subjectUserId: p.userId });
+    }
+    return { candidates, withoutClass: current.filter((p) => !p.feeClassId).length, withoutRecipient };
   }
 
   // --- Export ---------------------------------------------------------------------------

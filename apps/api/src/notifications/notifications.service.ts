@@ -25,7 +25,7 @@ const EVENT_KEYS = ["eventId", "title", "orgSlug", "orgName", "startsAt", "serie
 const EXPORT_KEYS: Record<Type, string[]> = {
   comment: ["postId"],
   membership_request: ["orgSlug", "orgName"],
-  membership_decision: ["orgSlug", "orgName", "decision"],
+  membership_decision: ["orgSlug", "orgName", "decision", "child"],
   post_hidden: ["orgName", "reason"],
   event_created: EVENT_KEYS,
   event_reminder: EVENT_KEYS,
@@ -42,6 +42,9 @@ const EXPORT_KEYS: Record<Type, string[]> = {
   comment_like: ["postId", "commentId"],
   comment_reply: ["postId", "commentId"],
   mention: ["postId", "commentId"],
+  // Jugend: Name des Kindes steht NICHT in den Daten (nur im Klartext der Oberflaeche aus dem Kontext der Eltern)
+  child_rsvp: [...EVENT_KEYS, "status"],
+  child_graduation: ["days"],
 };
 
 /** Gebuendelte Typen: je Empfaenger, Ziel und Tag eine Zeile mit hoechstens MAX_GROUP_ACTORS Personen plus Zaehler. */

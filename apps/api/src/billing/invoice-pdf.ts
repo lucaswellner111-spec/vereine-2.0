@@ -51,6 +51,11 @@ export async function buildInvoicePdf(inv: InvoiceDetail): Promise<Uint8Array> {
     text(page, line, MARGIN, y, 10, regular);
     y -= 13;
   }
+  if (inv.subjectName) {
+    y -= 4;
+    text(page, `Für: ${inv.subjectName}`, MARGIN, y, 10, regular, grey);
+    y -= 13;
+  }
 
   // Titel und Metadaten
   y = Math.min(PAGE.h - MARGIN - 110, y - 30);

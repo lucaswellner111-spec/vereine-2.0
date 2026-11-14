@@ -40,7 +40,7 @@ export default function MyInvoicesPage() {
           {rows.map((i) => (
             <div key={i.id} className="flex flex-wrap items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{i.orgName} · <span className="font-mono text-xs">{i.number}</span></p>
+                <p className="truncate text-sm font-medium">{i.orgName} · <span className="font-mono text-xs">{i.number}</span>{i.subjectName ? ` · für ${i.subjectName}` : ""}</p>
                 <p className="text-xs text-muted">Fällig am {dateDe(i.dueDate)}</p>
               </div>
               <span className="text-sm font-medium">{eurCents(i.totalCents)}</span>

@@ -72,6 +72,8 @@ export class MailService implements OnModuleInit {
   }
 
   async send<T extends MailTemplate>(to: string, template: T, data: MailTemplates[T], opts: SendOptions = {}): Promise<SendResult> {
+    // Platzhalteradressen (Jugendkonten, reservierte TLD .invalid) haben keinen Postkorb: nie versenden
+    if (to.trim().toLowerCase().endsWith(".invalid")) return "suppressed";
     const token = opts.unsubscribe ? signUnsubscribe(opts.unsubscribe) : undefined;
     const fullData = token ? { ...data, unsubscribeLink: appLink(`/abmelden#t=${token}`) } : data;
     const job = jobSchema.parse({ to, template, data: fullData, ...(token ? { unsubscribe: token } : {}) });

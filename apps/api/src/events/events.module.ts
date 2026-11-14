@@ -15,6 +15,6 @@ import { TeamsService } from "./teams.service";
   imports: [AuthModule, OrgsModule, NotificationsModule, ProfilesModule],
   controllers: [EventsController, CalendarFeedController],
   providers: [EventsService, TeamsService, CalendarFeedService, ShiftsService, AttendanceService],
-  exports: [EventsService, CalendarFeedService],
+  exports: [EventsService, ShiftsService, CalendarFeedService],
 })
 export class EventsModule {}

@@ -6,6 +6,7 @@ import { CacheModule } from "./cache/cache.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { DbModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
+import { GuardianModule } from "./guardian/guardian.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { HealthController } from "./health.controller";
 import { MetricsController } from "./metrics/metrics.controller";
@@ -23,7 +24,7 @@ import { PublicModule } from "./public/public.module";
 import { WaitlistModule } from "./waitlist/waitlist.module";
 
 @Module({
-  imports: [DbModule, CacheModule, JobsModule, AuthModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule, WaitlistModule, OpsModule],
+  imports: [DbModule, CacheModule, JobsModule, AuthModule, GuardianModule, PrivacyModule, OrgsModule, PostsModule, NotificationsModule, EventsModule, ChatModule, PlatformModule, ProfilesModule, MediaModule, BillingModule, MembersModule, DashboardModule, PublicModule, MailModule, WaitlistModule, OpsModule],
   controllers: [HealthController, MetricsController],
 })
 export class AppModule {}

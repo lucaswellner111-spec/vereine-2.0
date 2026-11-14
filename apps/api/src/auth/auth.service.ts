@@ -143,9 +143,11 @@ export class AuthService implements OnModuleInit {
       .where(and(eq(users.email, input.email), isNull(users.deletedAt)))
       .limit(1);
 
-    const valid = await verify(user?.passwordHash ?? (await this.dummyHash), input.password);
+    // Jugendkonten haben keinen Zugang (Etappe 1): kein gueltiger Hash, immer dieselbe Antwort wie bei falschem Passwort.
+    const loginable = !!user && user.accountType === "adult";
+    const valid = await verify(loginable ? user!.passwordHash : await this.dummyHash, input.password);
     // Nie bestaetigte Registrierung: dieselbe Antwort wie bei falschem Passwort (siehe EmailFlowsService).
-    if (!user || !valid || user.pendingVerification) {
+    if (!user || !loginable || !valid || user.pendingVerification) {
       await this.cache.incr(ipKey, LOGIN_FAIL_WINDOW_S).catch(() => undefined);
       await this.cache.incr(emailKey, LOGIN_FAIL_EMAIL_WINDOW_S).catch(() => undefined);
       throw new UnauthorizedException("E-Mail oder Passwort ist falsch.");
@@ -167,6 +169,8 @@ export class AuthService implements OnModuleInit {
   }
 
   async startSession(user: typeof users.$inferSelect, userAgent?: string): Promise<{ user: PublicUser; token: string }> {
+    // Jugendkonten bekommen nie eine Sitzung (Etappe 1: Eltern verwalten, das Kind hat keinen eigenen Zugang)
+    if (user.accountType !== "adult") throw new UnauthorizedException("E-Mail oder Passwort ist falsch.");
     const token = randomBytes(32).toString("base64url");
     await this.db.insert(sessions).values({
       tokenHash: sha256(token),
@@ -269,7 +273,7 @@ export class AuthService implements OnModuleInit {
   /** Prueft das Passwort eines bereits eingeloggten Nutzers (fuer sensible Aktionen). */
   async verifyPassword(userId: string, password: string): Promise<boolean> {
     const [user] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
-    return verify(user?.passwordHash ?? (await this.dummyHash), password);
+    return verify(user && user.accountType === "adult" ? user.passwordHash : await this.dummyHash, password);
   }
 
   async logout(token: string): Promise<void> {
@@ -295,7 +299,7 @@ export class AuthService implements OnModuleInit {
         ),
       )
       .limit(1);
-    if (!row) return null;
+    if (!row || row.user.accountType !== "adult") return null; // Jugendkonten haben keine Sitzung
     const user = this.toPublic(row.user);
     await this.cache.set(sessionKey(tokenHash), JSON.stringify(user), SESSION_CACHE_TTL_S).catch(() => undefined);
     return user;
@@ -309,6 +313,7 @@ export class AuthService implements OnModuleInit {
       createdAt: user.createdAt.toISOString(),
       isPlatformAdmin: user.platformRole === "admin",
       emailVerified: !!user.emailVerifiedAt,
+      accountType: user.accountType === "youth" ? "youth" : "adult",
     };
   }
 }

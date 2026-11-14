@@ -28,6 +28,7 @@ import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retent
 import { DB, type Database } from "../db/db.module";
 import { pgCode } from "../common/pg-errors";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { JobsService } from "../jobs/jobs.service";
 import { eventAttendance, eventRsvps, eventShiftSignups, eventShifts, events, follows, orgMembers, organizations, teamMembers, teams } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -72,6 +73,7 @@ export class EventsService implements OnModuleInit {
     @Inject(JobsService) private readonly jobs: JobsService,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
     @Inject(CACHE) private readonly cache: Cache,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   onModuleInit() {
@@ -596,7 +598,11 @@ export class EventsService implements OnModuleInit {
       .where(eq(events.id, eventId))
       .limit(1);
     if (!e) return;
-    await this.notifications.notify(userIds, "event_waitlist_promoted", {
+    // Kinder (Jugendkonten) haben keinen eigenen Zugang: Nachruecken geht an die Eltern ("Zusage fuer dein Kind")
+    const youth = await this.youth.youthIds(userIds);
+    const recipients = new Set(userIds.filter((u) => !youth.has(u)));
+    for (const child of youth) for (const g of await this.youth.guardiansOf(child)) recipients.add(g);
+    await this.notifications.notify([...recipients], "event_waitlist_promoted", {
       eventId,
       title: e.title,
       orgSlug: e.orgSlug,

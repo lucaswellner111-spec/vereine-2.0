@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, inArray } from "drizzle-orm";
 import { handleSchema } from "@vereine/shared";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { DB, type Database } from "../db/db.module";
 import { profiles, userFollows } from "../db/schema";
 import { isUniqueViolation } from "../common/pg-errors";
@@ -26,7 +27,14 @@ export class ProfileAccess {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
+
+  /** Ohne Jugendkonten: sie sind nie auffindbar, nie ueber Profilseiten erreichbar und nie folgbar. */
+  async excludeYouth(ids: string[]): Promise<string[]> {
+    const youth = await this.youth.youthIds(ids);
+    return ids.filter((id) => !youth.has(id));
+  }
 
   /**
    * Datenauskunft (Art. 15): eigenes Profil und eigene Folge-Beziehungen; von der Gegenseite nur ID und Benutzername.
@@ -109,12 +117,14 @@ export class ProfileAccess {
 
   async byHandle(handle: string): Promise<ProfileRow | undefined> {
     const [row] = await this.db.select().from(profiles).where(eq(profiles.handle, handle.toLowerCase())).limit(1);
+    if (row && (await this.youth.isYouth(row.userId))) return undefined; // Jugendkonten haben keine oeffentliche Profilseite
     return row;
   }
 
   /** Ist der Nutzer `ownerId` fuer `viewerId` sichtbar (Beitraege, Listen)? Eigenes Profil, oeffentlich oder bestaetigter Follower. */
   async canView(viewerId: string, ownerId: string): Promise<boolean> {
     if (viewerId === ownerId) return true;
+    if (await this.youth.isYouth(ownerId)) return false; // Jugendkonten sind fuer Fremde nie sichtbar
     const profile = await this.ensure(ownerId);
     if (!profile || profile.visibility === "public") return true;
     const [f] = await this.db
@@ -127,7 +137,8 @@ export class ProfileAccess {
 
   /** Wie `canView`, aber fuer viele Personen auf einmal: die Teilmenge von `ownerIds`, die `viewerId` sehen darf. */
   async viewableOwners(viewerId: string, ownerIds: string[]): Promise<Set<string>> {
-    const ids = [...new Set(ownerIds)];
+    const youth = await this.youth.youthIds(ownerIds);
+    const ids = [...new Set(ownerIds)].filter((id) => !youth.has(id) || id === viewerId);
     const profs = await this.ensureMany(ids);
     const ok = new Set<string>();
     const needFollow: string[] = [];
@@ -149,7 +160,10 @@ export class ProfileAccess {
   /** Profile zu Benutzernamen (klein geschrieben); unbekannte fehlen. */
   async byHandles(handles: string[]): Promise<ProfileRow[]> {
     const list = [...new Set(handles.map((h) => h.toLowerCase()))];
-    return list.length ? this.db.select().from(profiles).where(inArray(profiles.handle, list)) : [];
+    if (!list.length) return [];
+    const rows = await this.db.select().from(profiles).where(inArray(profiles.handle, list));
+    const youth = await this.youth.youthIds(rows.map((r) => r.userId));
+    return rows.filter((r) => !youth.has(r.userId));
   }
 
   /** Autoren, deren (persoenliche) Beitraege `viewerId` sehen darf, weil er ihnen folgt. */

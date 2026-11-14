@@ -41,9 +41,11 @@ export const users = identity.table("users", {
   pendingVerification: boolean("pending_verification").notNull().default(false),
   /** Seit wann diese Person (Vorstand/Plattform-Admin) laut Richtlinie Zwei-Faktor braucht (Beginn der Uebergangsfrist). */
   twoFactorRequiredSince: timestamp("two_factor_required_since", { withTimezone: true }),
+  /** adult (Standard, auch Eltern) | youth (Jugendkonto unter 16, ohne eigenen Zugang; siehe youth_profiles). */
+  accountType: text("account_type").notNull().default("adult"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (t) => [index("users_account_type_idx").on(t.accountType), check("users_account_type_chk", sql`account_type IN ('adult', 'youth')`)]);
 
 /**
  * Einmal-Links fuer E-Mail-Bestaetigung (24 h), Passwort vergessen (1 h) und E-Mail-Wechsel (24 h, neue Adresse in
@@ -77,6 +79,77 @@ export const sessions = identity.table(
     device: text("device"),
   },
   (t) => [index("sessions_user_idx").on(t.userId)],
+);
+
+// --- Jugendkonten (docs/welle2/JUGEND-KONZEPT.md, Etappe E1) ---------------------------------------
+
+/** Zusatzdaten eines Jugendkontos (1:1 zu users mit account_type 'youth'). Wird mit dem Konto geloescht. */
+export const youthProfiles = identity.table(
+  "youth_profiles",
+  {
+    userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+    /** Voller Name: sehen nur Eltern und der Vorstand der Vereine des Kindes (Anzeigename auf der Plattform: Vorname + Initiale). */
+    fullName: text("full_name").notNull(),
+    birthDate: date("birth_date", { mode: "string" }).notNull(),
+    /** Geburtstag + 16 Jahre (Index fuer den taeglichen Job). */
+    graduationDueOn: date("graduation_due_on", { mode: "string" }).notNull(),
+    /** Gesetzt am 16. Geburtstag: das Jugendkonto ruht, Eltern koennen nichts mehr aendern (Uebernahme folgt in E5). */
+    graduationStartedAt: timestamp("graduation_started_at", { withTimezone: true }),
+    /** 30-/7-Tage-Hinweis an die Eltern wurde gesendet (je einmal). */
+    notified30At: timestamp("notified_30_at", { withTimezone: true }),
+    notified7At: timestamp("notified_7_at", { withTimezone: true }),
+    /** Letzter Elternteil hat sein Konto geloescht: nach 30 Tagen wird das Jugendkonto geloescht. */
+    orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
+    /** Elternteil, der das Konto angelegt hat (ohne Fremdschluessel, leer nach dessen Loeschung). */
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("youth_profiles_graduation_idx").on(t.graduationDueOn), index("youth_profiles_orphaned_idx").on(t.orphanedAt)],
+);
+
+/** Eltern-Kind-Beziehung. Je Kind genau ein aktiver Rechnungsempfaenger (partieller Unique-Index). */
+export const guardianships = identity.table(
+  "guardianships",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    guardianUserId: uuid("guardian_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    youthUserId: uuid("youth_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"), // active | ended
+    isBillingContact: boolean("is_billing_contact").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    endReason: text("end_reason"), // revoked | youth_deleted
+  },
+  (t) => [
+    unique("guardianships_pair_unique").on(t.guardianUserId, t.youthUserId),
+    uniqueIndex("guardianships_one_billing_uq").on(t.youthUserId).where(sql`status = 'active' AND is_billing_contact`),
+    index("guardianships_youth_idx").on(t.youthUserId),
+    check("guardianships_status_chk", sql`status IN ('active', 'ended')`),
+    check("guardianships_not_self_chk", sql`guardian_user_id <> youth_user_id`),
+  ],
+);
+
+/**
+ * Nachweis der Elternfreigaben, append-only (Muster avv.acceptances): nur INSERT; einzige erlaubten Aenderungen sind
+ * `guardian_user_id` auf NULL (Kontoloeschung des Elternteils) und `retain_until` (einmal setzen, Loeschung des Kindes). Kein Fremdschluessel, keine IP-Adresse. Widerruf = neuer
+ * Eintrag mit granted=false. Aufbewahrung nach Loeschung des Kindes: pseudonym (nur IDs) bis `retain_until`.
+ */
+export const guardianConsents = identity.table(
+  "guardian_consents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    youthUserId: uuid("youth_user_id").notNull(),
+    guardianUserId: uuid("guardian_user_id"),
+    purpose: text("purpose").notNull(), // account | org_membership
+    orgId: uuid("org_id"),
+    granted: boolean("granted").notNull(),
+    textVersion: text("text_version").notNull(),
+    textHash: text("text_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Gesetzt, wenn das Jugendkonto geloescht wurde (dann Aufbewahrung 3 Jahre, danach Loeschung per purgeExpired). */
+    retainUntil: timestamp("retain_until", { withTimezone: true }),
+  },
+  (t) => [index("guardian_consents_youth_idx").on(t.youthUserId, t.purpose, t.createdAt), index("guardian_consents_guardian_idx").on(t.guardianUserId)],
 );
 
 // Append-only: jede Erteilung/Widerruf ist ein neuer Eintrag (Nachweispflicht Art. 7 DSGVO).
@@ -689,6 +762,8 @@ export const feeRuns = billing.table(
     status: text("status").notNull().default("queued"), // queued | running | done | failed
     createdCount: integer("created_count").notNull().default(0),
     skippedCount: integer("skipped_count").notNull().default(0),
+    /** Davon Kinder (Jugendkonten) ohne Rechnungsempfaenger. */
+    skippedNoRecipient: integer("skipped_no_recipient").notNull().default(0),
     createdBy: uuid("created_by").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     /** Lebenszeichen des laufenden Jobs (Claim und nach jedem Block); aelter als 15 Min. = haengend, darf neu geclaimt werden. */
@@ -718,6 +793,9 @@ export const invoices = billing.table(
     recipientUserId: uuid("recipient_user_id"),
     recipientName: text("recipient_name").notNull(),
     recipientAddress: text("recipient_address").notNull().default(""),
+    /** Rechnung fuer ein Kind (Jugendkonto): ID ohne Fremdschluessel; der Name bleibt als Kopie (GoBD). */
+    subjectUserId: uuid("subject_user_id"),
+    subjectName: text("subject_name"),
     issuerName: text("issuer_name").notNull(),
     issuerCity: text("issuer_city").notNull().default(""),
     issuerAddress: text("issuer_address").notNull().default(""),
@@ -743,7 +821,8 @@ export const invoices = billing.table(
   },
   (t) => [
     unique("invoices_org_number_unique").on(t.orgId, t.number),
-    unique("invoices_fee_run_recipient_unique").on(t.feeRunId, t.recipientUserId),
+    // je Lauf, Empfaenger UND Kind hoechstens ein Entwurf (Geschwister: ein Elternteil, mehrere Rechnungen)
+    uniqueIndex("invoices_fee_run_recipient_uq").on(t.feeRunId, t.recipientUserId, sql`coalesce(${t.subjectUserId}, '00000000-0000-0000-0000-000000000000'::uuid)`),
     index("invoices_org_created_idx").on(t.orgId, t.createdAt),
     index("invoices_recipient_idx").on(t.recipientUserId),
     index("invoices_open_due_idx").on(t.status, t.dueDate),

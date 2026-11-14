@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  */
 const root = join(__dirname, "..");
 const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications", "profiles", "media", "public"];
-const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog"];
+const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog", "youthProfiles", "guardianships", "guardianConsents"];
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -156,4 +156,23 @@ describe("AVV-Bereich", () => {
       expect(foreign, `${file} importiert fremde Tabellen: ${foreign.join(", ")}`).toEqual([]);
     }
   });
+});
+
+/**
+ * Jugendkonten (Bereich identity): Die Tabellen youth_profiles/guardianships/guardian_consents kennen nur auth und guardian.
+ * Alle anderen Bereiche lesen ueber YouthDirectory bzw. rufen den GuardianService (privacy: exportFor/eraseUser/purgeExpired).
+ */
+describe("Jugend-Tabellen (Bereich identity)", () => {
+  const YOUTH_TABLES = ["youthProfiles", "guardianships", "guardianConsents"];
+  const ALLOWED = ["auth", "guardian"];
+  const modules = readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory() && !ALLOWED.includes(e.name) && e.name !== "db" && e.name !== "testing");
+  for (const mod of modules) {
+    it(`${mod.name}: kein direkter Zugriff auf Jugend-Tabellen`, () => {
+      for (const file of sources(join(root, mod.name))) {
+        const src = readFileSync(file, "utf8");
+        const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\.\/db\/schema"/g)].flatMap((m) => m[1].split(",").map((s) => s.trim().split(/\s+as\s+/)[0]));
+        expect(imports.filter((i) => YOUTH_TABLES.includes(i)), `${file} importiert Jugend-Tabellen`).toEqual([]);
+      }
+    });
+  }
 });

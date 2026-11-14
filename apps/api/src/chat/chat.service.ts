@@ -146,7 +146,7 @@ export class ChatService implements OnModuleInit {
     const role = await this.orgs.activeRole(org.id, user.id);
     if (role !== "admin" && role !== "moderator") throw new ForbiddenException("Nur Vorstand und Moderation duerfen Gruppen-Chats anlegen.");
     const wanted = [...new Set(input.memberIds)].filter((id) => id !== user.id);
-    const valid = await this.orgs.activeMemberIds(org.id, wanted);
+    const valid = await this.orgs.chatEligibleMemberIds(org.id, wanted); // ohne Jugendkonten (Chat fuer sie aus)
     if (valid.length !== wanted.length) throw new BadRequestException("Alle Mitglieder muessen aktive Mitglieder des Vereins sein.");
 
     const { wrapped, version } = this.crypto.wrap(this.crypto.newDataKey());
@@ -378,7 +378,7 @@ export class ChatService implements OnModuleInit {
     if (conv.kind !== "group" || !conv.orgId) throw new ForbiddenException("Nur in Gruppen moeglich.");
     await this.requireOwner(id, user.id);
     const wanted = [...new Set(userIds)];
-    const valid = await this.orgs.activeMemberIds(conv.orgId, wanted);
+    const valid = await this.orgs.chatEligibleMemberIds(conv.orgId, wanted);
     // Blockierung (egal wer wen) wie bei candidates ausschliessen; generische Meldung verraet nicht, wer blockiert ist
     const blocked = await this.blockedBetween(user.id, valid);
     if (valid.length !== wanted.length || blocked.size > 0) throw new BadRequestException(ADD_MEMBERS_REJECTED);
@@ -396,7 +396,7 @@ export class ChatService implements OnModuleInit {
     if (conv.kind !== "group" || !conv.orgId) throw new ForbiddenException("Nur in Gruppen moeglich.");
     await this.requireOwner(id, user.id);
     const [all, current] = await Promise.all([
-      this.orgs.allActiveMemberIds(conv.orgId),
+      this.orgs.allActiveMemberIds(conv.orgId).then((ids) => this.orgs.chatEligibleMemberIds(conv.orgId!, ids)),
       this.db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, id)),
     ]);
     const inGroup = new Set(current.map((m) => m.userId));

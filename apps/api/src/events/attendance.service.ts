@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AttendanceList, AttendanceStatus, PublicUser, RsvpState, SaveAttendanceInput } from "@vereine/shared";
 import { DB, type Database } from "../db/db.module";
 import { UsersDirectory } from "../auth/users-directory.service";
+import { YouthDirectory } from "../auth/youth-directory.service";
 import { eventAttendance, eventRsvps, orgMembers, teamMembers } from "../db/schema";
 import { ProfileAccess } from "../profiles/profile-access.service";
 import { EventsService, type EventRow } from "./events.service";
@@ -23,6 +24,7 @@ export class AttendanceService {
     @Inject(EventsService) private readonly events: EventsService,
     @Inject(UsersDirectory) private readonly directory: UsersDirectory,
     @Inject(ProfileAccess) private readonly access: ProfileAccess,
+    @Inject(YouthDirectory) private readonly youth: YouthDirectory,
   ) {}
 
   /**
@@ -41,11 +43,12 @@ export class AttendanceService {
     const rsvpBy = new Map(rsvps.map((r) => [r.userId, r.status as RsvpState]));
     const statusBy = new Map(marked.map((m) => [m.userId, m.status as AttendanceStatus]));
     const ids = [...new Set([...candidates, ...statusBy.keys()])];
-    const [names, handles] = await Promise.all([this.directory.names(ids), this.access.handles(ids)]);
+    // Vorstand/Moderation sehen den vollen Namen der Kinder und die Jugend-Kennzeichnung (Vereinsdaten)
+    const [names, handles, youthIds] = await Promise.all([this.youth.fullNames(ids), this.access.handles(ids), this.youth.youthIds(ids)]);
     return {
       entries: ids
         .filter((u) => names.has(u))
-        .map((u) => ({ userId: u, name: names.get(u)!, handle: handles.get(u) ?? null, status: statusBy.get(u) ?? null, rsvp: rsvpBy.get(u) ?? null }))
+        .map((u) => ({ userId: u, name: names.get(u)!, handle: youthIds.has(u) ? null : (handles.get(u) ?? null), status: statusBy.get(u) ?? null, rsvp: rsvpBy.get(u) ?? null, youth: youthIds.has(u) }))
         .sort((a, b) => a.name.localeCompare(b.name, "de")),
     };
   }

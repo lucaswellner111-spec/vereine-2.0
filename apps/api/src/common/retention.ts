@@ -26,6 +26,10 @@ export const RETENTION = {
   pendingMembersUnsent: "60 days",
   /** Warteliste: Anmeldungen ohne Bestaetigung (Double-Opt-in) nach der letzten Anfrage. */
   waitlistPending: "7 days",
+  /** Nachweis der Elternfreigaben (pseudonym, nur IDs) nach Loeschung des Jugendkontos: Verjaehrung, Rechtsfrage offen. */
+  guardianConsents: "3 years",
+  /** Letzter Elternteil hat sein Konto geloescht: das Jugendkonto wird nach dieser Frist geloescht. */
+  orphanedYouth: "30 days",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */
