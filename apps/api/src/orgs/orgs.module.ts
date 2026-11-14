@@ -10,11 +10,14 @@ import { OrgEvents } from "./org-events";
 import { OrgAdminService } from "./org-admin.service";
 import { OrgsController } from "./orgs.controller";
 import { OrgsService } from "./orgs.service";
+import { SecurityController } from "./security.controller";
+import { TwoFactorGuard } from "./two-factor.guard";
+import { CaptchaModule } from "../captcha/captcha.module";
 
 @Module({
-  imports: [AuthModule, AvvModule, MailModule, NotificationsModule, ProfileAccessModule],
-  controllers: [OrgsController, OrgAdminController, AvvController],
-  providers: [OrgsService, OrgAdminService, OrgEvents],
-  exports: [OrgsService, OrgEvents, OrgAdminService],
+  imports: [CaptchaModule, AuthModule, AvvModule, MailModule, NotificationsModule, ProfileAccessModule],
+  controllers: [OrgsController, OrgAdminController, AvvController, SecurityController],
+  providers: [OrgsService, OrgAdminService, OrgEvents, TwoFactorGuard],
+  exports: [OrgsService, OrgEvents, OrgAdminService, TwoFactorGuard],
 })
 export class OrgsModule {}

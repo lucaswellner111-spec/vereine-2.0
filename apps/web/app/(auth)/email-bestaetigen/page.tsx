@@ -31,7 +31,12 @@ export default function ConfirmEmailPage() {
       .then((res) => {
         if (res.loggedIn) {
           setUser(res.user);
-          router.replace(takeRememberedNext("/feed"));
+          const target = takeRememberedNext("/feed");
+          router.replace(target);
+          // Haengt der Seitenwechsel im Router (z. B. langsamer RSC-Abruf unter Last), nach 4 s hart weiterleiten
+          window.setTimeout(() => {
+            if (window.location.pathname === "/email-bestaetigen") window.location.replace(target);
+          }, 4000);
           return;
         }
         setState({ kind: "done", changed: res.changed, loggedIn: false });

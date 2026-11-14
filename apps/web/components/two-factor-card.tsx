@@ -82,7 +82,7 @@ export function TwoFactorCard({ onError }: { onError: (m: string | null) => void
       </h2>
       <Card className="mb-6 space-y-4">
         <p className="text-sm text-muted">
-          Zusätzlich zum Passwort braucht die Anmeldung einen Code aus einer Authenticator-App (z. B. Aegis, 2FAS, Google Authenticator). Das schützt dein Konto, auch wenn dein Passwort bekannt wird. Empfohlen für Vorstände und Kassenwarte.
+          Zusätzlich zum Passwort braucht die Anmeldung einen Code aus einer Authenticator-App (z. B. Aegis, 2FAS, Google Authenticator). Das schützt dein Konto, auch wenn dein Passwort bekannt wird. Für Vorstände ist sie Pflicht (Mitgliederdaten, Rechnungen, Einladungen, Moderation); Kassenwarten empfehlen wir sie. Beim Einrichten bekommst du 10 Notfallcodes für den Fall, dass dein Handy fehlt.
         </p>
 
         {status === null ? (

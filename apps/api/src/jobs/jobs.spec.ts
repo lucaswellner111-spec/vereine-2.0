@@ -26,6 +26,26 @@ describe("JobsService (inline-Modus ohne Redis)", () => {
     await jobs.onModuleDestroy();
   });
 
+  it("failedSummary: je Jobname Anzahl und gekuerzte Fehlerart, ohne Jobdaten und ohne Adressen", async () => {
+    const jobs = new JobsService();
+    expect(await jobs.failedSummary()).toEqual([]); // inline: keine Queue
+    (jobs as unknown as { queue: unknown }).queue = {
+      getFailed: async () => [
+        { name: "mail.send", data: { to: "geheim@example.de" }, failedReason: "SMTP-Versand fehlgeschlagen fuer geheim@example.de (Code 550)" },
+        { name: "mail.send", data: {}, failedReason: "anderer Fehler" },
+        { name: "privacy.retention", data: {}, failedReason: "x".repeat(500) },
+      ],
+    };
+    const sum = await jobs.failedSummary();
+    expect(sum).toHaveLength(2);
+    expect(sum[0]).toMatchObject({ name: "mail.send", count: 2 });
+    expect(sum[0].lastError).toBe("SMTP-Versand fehlgeschlagen fuer <adresse> (Code 550)");
+    expect(JSON.stringify(sum)).not.toContain("geheim@");
+    expect(sum[1].lastError).toHaveLength(160);
+    (jobs as unknown as { queue: unknown }).queue = undefined;
+    await jobs.onModuleDestroy();
+  });
+
   it("wiederkehrende Jobs laufen per Timer", async () => {
     vi.useFakeTimers();
     try {

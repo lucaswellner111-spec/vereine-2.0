@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_ORG_TAGS, MAX_POST_TAGS, TAG_IDS } from "./tags";
 export * from "./tags";
 export * from "./avv";
+export * from "./captcha";
 
 export const ROLES = [
   "platform_admin",
@@ -283,6 +284,8 @@ export type ProfileMediaPage = { posts: FeedPost[]; nextCursor: string | null; l
 
 export const decisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
 export const setRoleSchema = z.object({ role: z.enum(ORG_ROLES) });
+/** Plattform-Werkzeug: Vorstand fuer einen Verein ohne Vorstand setzen (per E-Mail-Adresse eines vorhandenen Kontos). */
+export const platformSetOrgAdminSchema = z.object({ email: z.string().trim().toLowerCase().email().max(254) });
 
 export type MemberItem = {
   userId: string;
@@ -446,7 +449,7 @@ export const saveAttendanceSchema = z.object({
     .refine((list) => new Set(list.map((e) => e.userId)).size === list.length, { message: "Jede Person nur einmal." }),
 });
 export type SaveAttendanceInput = z.infer<typeof saveAttendanceSchema>;
-export type AttendanceEntry = { userId: string; name: string; status: AttendanceStatus | null; rsvp: RsvpState | null };
+export type AttendanceEntry = { userId: string; name: string; handle: string | null; status: AttendanceStatus | null; rsvp: RsvpState | null };
 export type AttendanceList = { entries: AttendanceEntry[] };
 /**
  * Zusagen fuer alle, die den Termin sehen: bei internen/Team-Terminen sehen Vereinsmitglieder Anzeigename
@@ -754,6 +757,20 @@ export const twoFactorCodeSchema = z.object({ code: twoFactorCode });
 export const twoFactorLoginSchema = z.object({ challenge: z.string().min(10).max(500), code: twoFactorCode });
 export const twoFactorConfirmSchema = z.object({ password: z.string().min(1).max(128), code: twoFactorCode });
 export type TwoFactorStatus = { enabled: boolean; recoveryCodesLeft: number };
+
+/** Zwei-Faktor-Pflicht fuer Vorstaende und Plattform-Admins (GET /security/two-factor). */
+export const TWO_FACTOR_REQUIRED_CODE = "TWO_FACTOR_REQUIRED";
+export const TWO_FACTOR_REQUIRED_MESSAGE = "Für diese Aktion brauchst du Zwei-Faktor-Anmeldung. Richte sie in den Einstellungen unter Sicherheit ein.";
+export type TwoFactorPolicy = {
+  /** Gilt die Pflicht fuer dich (Vorstand eines Vereins oder Plattform-Admin) und ist sie auf dem Server aktiv? */
+  required: boolean;
+  enabled: boolean;
+  reason: "platform" | "org-admin" | null;
+  /** Ende der Uebergangsfrist (ISO); null = keine Pflicht oder schon eingerichtet. */
+  deadline: string | null;
+  /** true = sensible Aktionen (Mitgliederdaten, Rechnungen, Einladungen, Moderation) sind gesperrt, bis Zwei-Faktor aktiv ist. */
+  blocked: boolean;
+};
 export type TwoFactorSetup = { secret: string; otpauthUrl: string; qrSvg: string };
 /** Antwort auf /auth/login: Nutzer (angemeldet) oder Herausforderung fuer den zweiten Faktor. */
 export type LoginResult = PublicUser | { twoFactorRequired: true; challenge: string };

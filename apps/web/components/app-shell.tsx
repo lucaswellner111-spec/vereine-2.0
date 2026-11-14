@@ -18,6 +18,7 @@ import { MobileMoreSheet } from "./mobile-more-sheet";
 import { NotificationBell } from "./notification-bell";
 import { OfflineBanner } from "./offline-banner";
 import { EmailVerifyBanner } from "./email-verify-banner";
+import { TwoFactorBanner } from "./two-factor-banner";
 import { ThemeToggle } from "./theme-toggle";
 import { Logo } from "./site";
 import { Avatar, Button, Select, Skeleton } from "./ui";
@@ -301,6 +302,7 @@ function Shell({ children, user }: { children: ReactNode; user: PublicUser }) {
       >
         <div className="mx-auto max-w-3xl">
           {!immersive && <EmailVerifyBanner user={user} />}
+          {!immersive && <TwoFactorBanner />}
           {/* Neu einblenden je Seite (sanftes Aufsteigen); bei reduzierter Bewegung aus */}
           <div key={pathname} className="animate-rise">
             {children}

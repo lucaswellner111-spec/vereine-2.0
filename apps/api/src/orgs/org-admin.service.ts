@@ -84,6 +84,19 @@ export class OrgAdminService {
     await this.db.update(orgInvites).set({ createdBy: null }).where(eq(orgInvites.createdBy, userId));
   }
 
+  /**
+   * Alle noch offenen Einladungen (Link und Import) eines Vereins widerrufen. Kontoloeschung des einzigen Vorstands:
+   * der Verein wird mitgeloescht, bis dahin (Sperrfrist/abgebrochene Loeschung) soll niemand mehr beitreten koennen.
+   */
+  async revokeOpenInvites(orgId: string): Promise<number> {
+    const rows = await this.db
+      .update(orgInvites)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(orgInvites.orgId, orgId), isNull(orgInvites.revokedAt)))
+      .returning({ id: orgInvites.id });
+    return rows.length;
+  }
+
   /** Loeschfrist: 30 Tage nach Ablauf oder Widerruf (Job privacy.retention), blockweise. */
   purgeExpiredInvites(): Promise<number> {
     return purgeInRounds(async () => {

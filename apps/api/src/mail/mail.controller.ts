@@ -1,6 +1,8 @@
-import { BadRequestException, Body, Controller, HttpCode, Inject, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Headers, HttpCode, Inject, Post, Query, Req } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { unsubscribeSchema } from "@vereine/shared";
 import { parse } from "../common/parse";
+import { BounceWebhookService, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from "./bounce-webhook.service";
 import { MailService } from "./mail.service";
 
 /**
@@ -11,7 +13,24 @@ import { MailService } from "./mail.service";
  */
 @Controller("mail")
 export class MailController {
-  constructor(@Inject(MailService) private readonly mail: MailService) {}
+  constructor(
+    @Inject(MailService) private readonly mail: MailService,
+    @Inject(BounceWebhookService) private readonly webhook: BounceWebhookService,
+  ) {}
+
+  /**
+   * Bounces/Beschwerden von Scaleway TEM (signiert, siehe BounceWebhookService). Der Rohkoerper kommt aus dem preParsing-Hook
+   * in app.setup (nur fuer diese Route). Antwort ohne Details.
+   */
+  @Post("webhook/scaleway")
+  @HttpCode(202)
+  bounces(
+    @Req() req: FastifyRequest & { rawBody?: Buffer },
+    @Headers(WEBHOOK_TIMESTAMP_HEADER) timestamp?: string,
+    @Headers(WEBHOOK_SIGNATURE_HEADER) signature?: string,
+  ): Promise<{ accepted: number; ignored: number }> {
+    return this.webhook.handle(req.rawBody, timestamp, signature);
+  }
 
   @Post("unsubscribe")
   @HttpCode(200)

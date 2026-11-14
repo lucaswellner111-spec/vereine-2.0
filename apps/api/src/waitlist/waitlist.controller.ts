@@ -3,6 +3,7 @@ import { WAITLIST_CHECK_INBOX, waitlistSignupSchema, waitlistTokenSchema } from 
 import { parse } from "../common/parse";
 import { WaitlistLinkRateLimitGuard, WaitlistSignupRateLimitGuard } from "./waitlist-rate-limit.guard";
 import { WaitlistService } from "./waitlist.service";
+import { CaptchaGuard } from "../captcha/captcha.guard";
 
 /** Warteliste ohne Login (Startseite). Die Antwort auf die Anmeldung ist immer gleich. */
 @Controller("waitlist")
@@ -11,7 +12,7 @@ export class WaitlistController {
 
   @Post()
   @HttpCode(202)
-  @UseGuards(WaitlistSignupRateLimitGuard)
+  @UseGuards(WaitlistSignupRateLimitGuard, CaptchaGuard)
   async signup(@Body() body: unknown): Promise<{ message: string }> {
     await this.waitlist.signup(parse(waitlistSignupSchema, body));
     return { message: WAITLIST_CHECK_INBOX };

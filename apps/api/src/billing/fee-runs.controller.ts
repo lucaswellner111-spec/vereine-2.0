@@ -1,12 +1,13 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
 import { feeRunSchema, type FeeRunItem, type FeeRunPreview, type PublicUser } from "@vereine/shared";
-import { CurrentUser, SessionGuard } from "../auth/session.guard";
+import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { FeeRunsService } from "./fee-runs.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 /** Beitragslauf (Vorstand/Kassenwart): Vorschau, Anlegen (Job), Liste, fehlgeschlagenen Lauf neu starten. */
 @Controller("orgs/:slug/fee-runs")
-@UseGuards(SessionGuard)
+@UseGuards(SessionGuard, TwoFactorGuard)
 export class FeeRunsController {
   constructor(@Inject(FeeRunsService) private readonly runs: FeeRunsService) {}
 
@@ -18,6 +19,7 @@ export class FeeRunsController {
 
   @Post()
   create(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<FeeRunItem> {
+    requireVerifiedEmail(user); // erzeugt Rechnungen mit Mail an Mitglieder
     return this.runs.create(user, slug, parse(feeRunSchema, body));
   }
 

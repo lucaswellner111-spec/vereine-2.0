@@ -111,6 +111,16 @@ export class OrgsService {
     return this.summaries(rows);
   }
 
+  /** Ist die Person Vorstand (Rolle admin) in mindestens einem Verein? (Zwei-Faktor-Pflicht) */
+  async isAnyAdmin(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")))
+      .limit(1);
+    return !!row;
+  }
+
   /** Vereine, fuer die der Nutzer Beitraege veroeffentlichen darf (Vorstand/Moderation). */
   async publishable(userId: string): Promise<OrgSummary[]> {
     const rows = await this.db
@@ -336,6 +346,23 @@ export class OrgsService {
         .set({ role })
         .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.userId, targetId)));
     });
+  }
+
+  /**
+   * Plattform-Werkzeug (Grenzfall Vereinsloeschung/Austritt): setzt eine Person als Vorstand, aber NUR wenn der Verein
+   * keinen aktiven Vorstand mehr hat. Legt die Mitgliedschaft an oder hebt sie auf (aktiv, Rolle admin).
+   */
+  async assignAdminIfOrphaned(slug: string, targetId: string): Promise<{ orgId: string; orgName: string }> {
+    const org = await this.requireBySlug(slug);
+    await this.db.transaction(async (tx) => {
+      await this.lockOrg(tx, org.id);
+      if ((await this.adminCount(org.id, tx)) > 0) throw new ConflictException("Der Verein hat bereits einen Vorstand.");
+      await tx
+        .insert(orgMembers)
+        .values({ orgId: org.id, userId: targetId, role: "admin", status: "active" })
+        .onConflictDoUpdate({ target: [orgMembers.orgId, orgMembers.userId], set: { role: "admin", status: "active" } });
+    });
+    return { orgId: org.id, orgName: org.name };
   }
 
   /** Austritt (selbst) oder Entfernen (Vorstand). */

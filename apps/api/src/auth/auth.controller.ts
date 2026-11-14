@@ -40,6 +40,7 @@ import { parse } from "../common/parse";
 import { AuthService, SESSION_TTL_MS } from "./auth.service";
 import { EmailFlowsService } from "./email-flows.service";
 import { CurrentUser, SESSION_COOKIE, SessionGuard } from "./session.guard";
+import { CaptchaGuard } from "../captcha/captcha.guard";
 
 @Controller("auth")
 export class AuthController {
@@ -50,6 +51,7 @@ export class AuthController {
 
   /** Immer dieselbe Antwort (202), auch fuer vorhandene Adressen; angemeldet wird erst ueber den Link in der Mail. */
   @Post("register")
+  @UseGuards(CaptchaGuard)
   @HttpCode(202)
   async register(@Body() body: unknown, @Req() req: FastifyRequest): Promise<CheckInboxResponse> {
     await this.flows.register(parse(registerSchema, body), req.ip);
@@ -84,6 +86,7 @@ export class AuthController {
 
   /** Immer 202, egal ob es das Konto gibt. */
   @Post("password/forgot")
+  @UseGuards(CaptchaGuard)
   @HttpCode(202)
   async forgotPassword(@Body() body: unknown, @Req() req: FastifyRequest): Promise<CheckInboxResponse> {
     await this.flows.forgotPassword(parse(forgotPasswordSchema, body).email, req.ip);

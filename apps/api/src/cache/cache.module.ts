@@ -7,6 +7,8 @@ export interface Cache {
   del(...keys: string[]): Promise<void>;
   /** Atomarer Zaehler mit Ablauf ab dem ersten Aufruf (fuer Rate-Limits). */
   incr(key: string, ttlSec: number): Promise<number>;
+  /** Setzt den Schluessel nur, wenn er noch fehlt (Einmalverwendung); true = gesetzt. */
+  setNx(key: string, value: string, ttlSec: number): Promise<boolean>;
   /** true = Backend erreichbar. */
   ping(): Promise<boolean>;
   readonly kind: "redis" | "memory";
@@ -28,6 +30,9 @@ export class RedisCache implements Cache {
   }
   async del(...keys: string[]) {
     if (keys.length) await this.redis.del(...keys);
+  }
+  async setNx(key: string, value: string, ttlSec: number) {
+    return (await this.redis.set(key, value, "EX", ttlSec, "NX")) === "OK";
   }
   async incr(key: string, ttlSec: number) {
     const n = await this.redis.incr(key);
@@ -62,6 +67,11 @@ export class MemoryCache implements Cache {
   }
   async del(...keys: string[]) {
     keys.forEach((k) => this.store.delete(k));
+  }
+  async setNx(key: string, value: string, ttlSec: number) {
+    if (await this.get(key)) return false;
+    this.store.set(key, { value, expires: Date.now() + ttlSec * 1000 });
+    return true;
   }
   async incr(key: string, ttlSec: number) {
     const hit = this.store.get(key);

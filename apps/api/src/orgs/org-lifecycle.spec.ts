@@ -183,5 +183,24 @@ describe("Vereins-Lebenszyklus", () => {
       expect(await app.get(PrivacyService).erasePending(0)).toBeGreaterThanOrEqual(1);
       expect(await db.select().from(schema.users).where(eq(schema.users.id, gina.id))).toHaveLength(0);
     });
+
+    it("einziger Vorstand loescht das Konto -> offene Einladungen sind sofort widerrufen, auch wenn die Loeschung mittendrin abbricht", async () => {
+      const hugo = await signup("hugo");
+      const slug = await makeOrg(hugo, "Einladungs Verein", []);
+      const invite = await req(hugo, "POST", `/orgs/${slug}/invites`, {});
+      expect(invite.statusCode).toBe(201);
+      const spy = vi.spyOn(app.get(ChatService), "eraseUser").mockRejectedValueOnce(new Error("Chat-DB weg"));
+      expect((await req(hugo, "DELETE", "/privacy/account", { password })).statusCode).toBe(204);
+      spy.mockRestore();
+      // Verein existiert noch (Nachlauf offen), die Einladung aber ist weg
+      const orgId = (await db.select().from(schema.organizations).where(eq(schema.organizations.slug, slug)))[0].id;
+      const rows = await db.select().from(schema.orgInvites).where(eq(schema.orgInvites.orgId, orgId));
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.revokedAt !== null)).toBe(true);
+      const joiner = await signup("ida");
+      const accept = await req(joiner, "POST", `/invites/${invite.json().token}/accept`);
+      expect(accept.statusCode).toBeGreaterThanOrEqual(400);
+      await app.get(PrivacyService).erasePending(0);
+    });
   });
 });

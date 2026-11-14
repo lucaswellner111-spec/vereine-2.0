@@ -38,6 +38,16 @@ export class UsersDirectory {
     return new Map(rows.map((r) => [r.id, { email: r.email, name: r.name }]));
   }
 
+  /** Konto-ID zur Adresse (nur aktive Konten; fuer Plattform-Werkzeuge, nie fuer Nutzer-Suchfelder). */
+  async idByEmail(email: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.email, email.trim().toLowerCase()), isNull(users.deletedAt)))
+      .limit(1);
+    return row?.id ?? null;
+  }
+
   /** Nutzersuche nach Anzeigename (Teiltreffer, ohne geloeschte Konten). */
   async search(term: string, limit = 20): Promise<string[]> {
     const rows = await this.db

@@ -12,12 +12,14 @@ import {
 import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { MembersService } from "./members.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 @Controller()
 @UseGuards(SessionGuard)
 export class MembersController {
   constructor(@Inject(MembersService) private readonly members: MembersService) {}
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/member-registry")
   list(
     @CurrentUser() user: PublicUser,
@@ -35,6 +37,7 @@ export class MembersController {
     });
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/member-registry.csv")
   @Header("Content-Type", "text/csv; charset=utf-8")
   @Header("Content-Disposition", 'attachment; filename="mitglieder.csv"')
@@ -44,11 +47,13 @@ export class MembersController {
     return this.members.exportCsv(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/member-registry/:userId")
   one(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("userId", ParseUUIDPipe) userId: string): Promise<MemberRecord> {
     return this.members.get(user, slug, userId);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Put("orgs/:slug/member-registry/:userId")
   update(
     @CurrentUser() user: PublicUser,
@@ -59,16 +64,19 @@ export class MembersController {
     return this.members.update(user, slug, userId, parse(adminMemberProfileSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/fee-classes")
   classes(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<FeeClassItem[]> {
     return this.members.listClasses(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("orgs/:slug/fee-classes")
   createClass(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<FeeClassItem[]> {
     return this.members.createClass(user, slug, parse(feeClassSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Put("orgs/:slug/fee-classes/:id")
   updateClass(
     @CurrentUser() user: PublicUser,
@@ -79,6 +87,7 @@ export class MembersController {
     return this.members.updateClass(user, slug, id, parse(feeClassSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Delete("orgs/:slug/fee-classes/:id")
   @HttpCode(204)
   deleteClass(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<void> {

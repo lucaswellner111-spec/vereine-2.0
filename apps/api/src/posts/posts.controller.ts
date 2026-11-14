@@ -25,6 +25,7 @@ import { CurrentUser, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
 import { ModerationService } from "./moderation.service";
 import { PostsService } from "./posts.service";
+import { TwoFactorGuard } from "../orgs/two-factor.guard";
 
 @Controller()
 @UseGuards(SessionGuard)
@@ -53,6 +54,7 @@ export class PostsController {
     return this.posts.orgFeed(user, slug, cursor);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/reports")
   reports(
     @CurrentUser() user: PublicUser,
@@ -62,6 +64,7 @@ export class PostsController {
     return this.moderation.list(user, slug, status === "dismissed" || status === "actioned" ? status : "open");
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/moderation/posts")
   moderationPosts(
     @CurrentUser() user: PublicUser,
@@ -72,17 +75,20 @@ export class PostsController {
     return this.moderation.posts(user, slug, filter === "hidden" || filter === "reported" ? filter : "all", Number(offset) || 0);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("posts/:id/moderation")
   @HttpCode(204)
   moderatePost(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
     return this.moderation.moderatePost(user, id, parse(moderatePostSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("orgs/:slug/moderation/comments")
   moderationComments(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<ModerationCommentItem[]> {
     return this.moderation.comments(user, slug);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Delete("moderation/comments/:id")
   @HttpCode(204)
   deleteComment(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string, @Body() body: unknown): Promise<void> {
@@ -90,6 +96,7 @@ export class PostsController {
     return this.moderation.deleteComment(user, id);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post("reports/:id/resolve")
   @HttpCode(204)
   resolve(

@@ -6,6 +6,7 @@ import { WAITLIST_REGION_LABELS, WAITLIST_ROLE_LABELS, type ChatReportItem, type
 import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, LinkButton, PageHeader, stackTable, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
+import { PlatformOrgAdmin } from "@/components/platform-org-admin";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { reportReasonLabel } from "@/lib/labels";
@@ -39,6 +40,7 @@ export default function PlatformPage() {
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
       <OpsCard />
       <MailQuotaCard />
+      <PlatformOrgAdmin />
       <SegmentedControl
         aria-label="Meldungsart"
         mode="tabs"

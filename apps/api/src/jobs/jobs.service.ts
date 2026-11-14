@@ -5,7 +5,7 @@ import Redis from "ioredis";
 export type JobHandler = (data: any) => Promise<void>;
 
 /** Abweichende Zustell-Optionen je Job (z. B. Mail: mehr Versuche, Daten nach Erfolg sofort aus Redis entfernen). */
-export type EnqueueOptions = { attempts?: number; backoffMs?: number; removeOnComplete?: boolean | number; removeOnFail?: boolean | number; delayMs?: number };
+export type EnqueueOptions = { attempts?: number; backoffMs?: number; removeOnComplete?: boolean | number; removeOnFail?: boolean | number | { age: number; count?: number }; delayMs?: number };
 
 const QUEUE = "jobs";
 
@@ -77,7 +77,8 @@ export class JobsService implements OnModuleDestroy {
       attempts: opts.attempts ?? 3,
       backoff: { type: "exponential", delay: opts.backoffMs ?? 5_000 },
       removeOnComplete: opts.removeOnComplete ?? 1_000,
-      removeOnFail: opts.removeOnFail ?? 5_000,
+      // Fehlgeschlagene Jobs 7 Tage zur Diagnose behalten (health/ready zeigt Name und Fehlerart), dann verschwinden sie
+      removeOnFail: opts.removeOnFail ?? { age: 7 * 24 * 3600, count: 5_000 },
     });
   }
 
@@ -105,6 +106,23 @@ export class JobsService implements OnModuleDestroy {
   /** Fuer Health/Monitoring: Warteschlangen-Zaehler (nur BullMQ). */
   async stats() {
     return this.queue ? this.queue.getJobCounts("waiting", "active", "delayed", "failed") : null;
+  }
+
+  /**
+   * Diagnose fehlgeschlagener Jobs fuer /health/ready: je Jobname Anzahl und letzte Fehlermeldung (gekuerzt), OHNE Jobdaten
+   * (die enthalten Adressen/Links). Nur BullMQ.
+   */
+  async failedSummary(limit = 20): Promise<{ name: string; count: number; lastError: string }[]> {
+    if (!this.queue) return [];
+    const jobs = await this.queue.getFailed(0, limit - 1);
+    const byName = new Map<string, { name: string; count: number; lastError: string }>();
+    for (const j of jobs) {
+      const cur = byName.get(j.name) ?? { name: j.name, count: 0, lastError: "" };
+      cur.count += 1;
+      cur.lastError ||= (j.failedReason ?? "").replace(/[\w.+-]+@[\w.-]+/g, "<adresse>").slice(0, 160);
+      byName.set(j.name, cur);
+    }
+    return [...byName.values()];
   }
 
   async onModuleDestroy() {

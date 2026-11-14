@@ -3,6 +3,7 @@ import fastifyMultipart from "@fastify/multipart";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { HttpException } from "@nestjs/common";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import { Readable } from "node:stream";
 import type Redis from "ioredis";
 import { REDIS } from "./cache/cache.module";
 import { AppErrorFilter } from "./common/error.filter";
@@ -31,6 +32,7 @@ const STRICT_ROUTES = new Set([
 export const isStrictRoute = (req: { method: string; routeOptions?: { url?: string } }) =>
   STRICT_ROUTES.has(`${req.method} ${req.routeOptions?.url ?? ""}`);
 
+const WEBHOOK_ROUTE = "/mail/webhook/scaleway";
 const DEFAULT_TRUST_PROXY = "loopback,linklocal,uniquelocal";
 const TRUST_TOKEN = /^(loopback|linklocal|uniquelocal|[0-9a-f.:]+(\/\d{1,3})?)$/i;
 
@@ -90,6 +92,23 @@ export async function configureApp(
       keyGenerator: (req) => `${req.ip}:${isStrictRoute(req) ? "auth" : "gen"}`,
     });
   }
+
+  // Webhook-Signatur: HMAC ueber den unveraenderten Rohkoerper, daher nur fuer diese eine Route lesen und aufbewahren (max. 256 KB).
+  fastify.addHook("preParsing", async (req, _reply, payload) => {
+    if (req.routeOptions?.url !== WEBHOOK_ROUTE) return payload;
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of payload) {
+      size += (chunk as Buffer).length;
+      if (size > 256 * 1024) throw new HttpException({ message: "Anfrage zu gross.", statusCode: 413 }, 413);
+      chunks.push(chunk as Buffer);
+    }
+    const raw = Buffer.concat(chunks);
+    (req as { rawBody?: Buffer }).rawBody = raw;
+    const stream = Readable.from(raw) as Readable & { receivedEncodedLength?: number };
+    stream.receivedEncodedLength = raw.length;
+    return stream;
+  });
 
   // Messwerte (Anzahl und Dauer je Statusklasse), siehe /metrics
   fastify.addHook("onResponse", async (req, reply) => {

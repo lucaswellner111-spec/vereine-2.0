@@ -87,10 +87,25 @@ describe("Mail: Konfiguration", () => {
     });
     const compile = () => Test.createTestingModule({ imports: [DbModule, CacheModule, JobsModule, MailModule] }).overrideProvider(DB).useValue(db).compile();
 
-    it("MAIL_DRIVER=smtp ohne SMTP-Variablen: Modul startet nicht", async () => {
+    it("MAIL_DRIVER=smtp ohne SMTP-Variablen: API startet (lazy), der Worker-Check scheitert", async () => {
       process.env.MAIL_DRIVER = "smtp";
       for (const k of ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_FROM"]) delete process.env[k];
-      await expect(compile()).rejects.toThrow(/MAIL_DRIVER=smtp, aber es fehlen/);
+      const ref = await compile();
+      expect(ref.get(MailService).driverName).toBe("smtp");
+      expect(() => ref.get(MailService).assertDriverReady()).toThrow(/MAIL_DRIVER=smtp, aber es fehlen/);
+      await ref.close();
+    });
+
+    it("MAIL_DRIVER=smtp mit vollstaendiger Konfiguration: Worker-Check besteht, Treiber wird nur einmal angelegt", async () => {
+      Object.assign(process.env, smtpEnv);
+      const ref = await compile();
+      expect(() => ref.get(MailService).assertDriverReady()).not.toThrow();
+      await ref.close();
+    });
+
+    it("unbekannter MAIL_DRIVER: Start bricht ab", async () => {
+      process.env.MAIL_DRIVER = "sendgrid";
+      await expect(compile()).rejects.toThrow(/unbekannt/);
     });
 
     it("ohne MAIL_DRIVER: Log-Treiber", async () => {

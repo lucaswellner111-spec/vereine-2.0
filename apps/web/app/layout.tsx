@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { RegisterServiceWorker } from "@/components/pwa";
 import { UiHosts } from "@/components/ui-hosts";
@@ -37,11 +38,13 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Nonce der CSP (middleware.ts); das Lesen der Header macht die Seiten dynamisch, noetig damit Next seine Skripte mit Nonce ausliefert
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="de" suppressHydrationWarning className={`${inter.variable} ${interExt.variable}`}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-dvh antialiased">
         <RegisterServiceWorker />

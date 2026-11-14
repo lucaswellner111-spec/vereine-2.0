@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
-    const res = await api<LoginResult>("/auth/login", { method: "POST", body: input });
+    const res = await api<LoginResult>("/auth/login", { method: "POST", body: input, captcha: true });
     if ("twoFactorRequired" in res) return { challenge: res.challenge };
     setUser(res);
     return null;
