@@ -5,8 +5,9 @@ import { derivedKey } from "../common/secret-key";
  * Abmeldelink ohne Login: signierter Token (HMAC-SHA256, Teilschluessel "mail-unsubscribe"), ohne Ablauf, ohne Adresse.
  * - digest: Sammelmail eines Kontos abbestellen (u = Nutzer-ID)
  * - invite: keine Einladungs-Mails mehr an diese Adresse (h = Adress-Hash)
+ * - waitlist: Eintrag auf der Warteliste loeschen und Adresse fuer Newsletter sperren (w = Eintrags-ID)
  */
-export type UnsubscribePayload = { k: "digest"; u: string } | { k: "invite"; h: string };
+export type UnsubscribePayload = { k: "digest"; u: string } | { k: "invite"; h: string } | { k: "waitlist"; w: string };
 
 const key = () => derivedKey("mail-unsubscribe", "Abmeldelinks sind auf diesem Server nicht konfiguriert.");
 const sign = (body: string) => createHmac("sha256", key()).update(body).digest("base64url");
@@ -27,6 +28,7 @@ export function verifyUnsubscribe(token: string): UnsubscribePayload | null {
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Record<string, unknown>;
     if (p.k === "digest" && typeof p.u === "string" && /^[0-9a-f-]{36}$/.test(p.u)) return { k: "digest", u: p.u };
+    if (p.k === "waitlist" && typeof p.w === "string" && /^[0-9a-f-]{36}$/.test(p.w)) return { k: "waitlist", w: p.w };
     if (p.k === "invite" && typeof p.h === "string" && /^[0-9a-f]{64}$/.test(p.h)) return { k: "invite", h: p.h };
   } catch {
     /* ungueltig */

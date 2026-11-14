@@ -1,7 +1,17 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { BadRequestException, Inject, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { and, asc, count, eq, gt, inArray, lt } from "drizzle-orm";
-import { WAITLIST_CONSENT_VERSION, type WaitlistEntry, type WaitlistOverview, type WaitlistRole, type WaitlistSignupInput } from "@vereine/shared";
+import {
+  WAITLIST_CONSENT_VERSION,
+  WAITLIST_MIN_FILL_MS,
+  type WaitlistCounts,
+  type WaitlistEntry,
+  type WaitlistOverview,
+  type WaitlistRegion,
+  type WaitlistRole,
+  type WaitlistSignupInput,
+  type WaitlistSource,
+} from "@vereine/shared";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { appLink } from "../common/app-url";
 import { isUniqueViolation } from "../common/pg-errors";
@@ -11,6 +21,7 @@ import { DB, type Database } from "../db/db.module";
 import { waitlistEntries } from "../db/schema";
 import { addressHash } from "../mail/mail-limits";
 import { MailService } from "../mail/mail.service";
+import { SuppressionsService } from "../mail/suppressions.service";
 
 export const WAITLIST_TOKEN_TTL_MS = 48 * 60 * 60 * 1000;
 /** Bestaetigungs-/Hinweismails je Adresse: hoechstens 1 je 10 Minuten und 3 je Tag (danach still keine Mail). */
@@ -43,17 +54,25 @@ export function csvCell(v: string): string {
 /**
  * Warteliste fuer Vereine (Bereich `waitlist`, nur eigene Tabelle). Double-Opt-in: Anmeldung -> Mail mit Einmal-Link
  * (#t=…, nur SHA-256 gespeichert, 48 h) -> Bestaetigung. Die Antwort auf die Anmeldung ist immer gleich; bei bekannter,
- * bestaetigter Adresse geht nur ein Hinweis mit Austragelink raus. Logs nennen nie Adressen.
+ * bestaetigter Adresse geht nur ein Hinweis mit Austragelink raus. Bot-Schutz ohne Drittanbieter: Honeypot und Zeitpruefung
+ * (beide verwerfen still, Antwort bleibt gleich). Austragen loescht den Eintrag und legt nur einen Sperr-Hash (Scope waitlist)
+ * in `mail.suppressions` ab; eine neue bestaetigte Anmeldung hebt ihn wieder auf. Logs nennen nie Adressen.
  */
 @Injectable()
-export class WaitlistService {
+export class WaitlistService implements OnModuleInit {
   private readonly log = new Logger("Waitlist");
 
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(CACHE) private readonly cache: Cache,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(SuppressionsService) private readonly suppressions: SuppressionsService,
   ) {}
+
+  /** One-Click-Abmeldung aus dem Mailprogramm (List-Unsubscribe-Post) laeuft ueber MailService.unsubscribe. */
+  onModuleInit() {
+    this.mail.onUnsubscribe("waitlist", (id) => this.removeById(id));
+  }
 
   /** Je Adresse 1 Mail/10 Min., 3/Tag (Zaehler im Cache, Adresse nur als HMAC). Cache-Fehler: zulassen (MailService bremst weiter). */
   private async mailAllowed(email: string): Promise<boolean> {
@@ -72,12 +91,16 @@ export class WaitlistService {
       this.log.log("Warteliste: Honeypot ausgeloest, ignoriert.");
       return;
     }
+    if (input.elapsedMs === undefined || input.elapsedMs < WAITLIST_MIN_FILL_MS) {
+      this.log.log("Warteliste: Formular zu schnell abgeschickt, ignoriert.");
+      return;
+    }
     const [existing] = await this.db.select().from(waitlistEntries).where(eq(waitlistEntries.email, input.email)).limit(1);
 
     if (existing?.status === "confirmed") {
       // Bekannt: nichts aendern (es gelten die bestaetigten Angaben), nur ein Hinweis mit Austragelink.
       if (await this.mailAllowed(input.email)) {
-        await this.mail.send(input.email, "waitlist-exists", { link: appLink("/"), removeLink: this.removeLink(existing.id) });
+        await this.mail.send(input.email, "waitlist-exists", { link: appLink("/"), removeLink: this.removeLink(existing.id) }, { unsubscribe: { k: "waitlist", w: existing.id } });
       }
       return;
     }
@@ -89,6 +112,8 @@ export class WaitlistService {
       city: input.city ?? "",
       orgType: input.orgType ?? "",
       role: input.role ?? null,
+      region: input.region ?? null,
+      source: input.source ?? null,
       tokenHash: sha256(token),
       tokenExpiresAt: new Date(Date.now() + WAITLIST_TOKEN_TTL_MS),
       consentVersion: WAITLIST_CONSENT_VERSION,
@@ -108,12 +133,17 @@ export class WaitlistService {
         throw err;
       }
     }
-    await this.mail.send(input.email, "waitlist-confirm", {
-      orgName: input.orgName,
-      link: appLink(`/warteliste/bestaetigen#t=${token}`),
-      validHours: WAITLIST_TOKEN_TTL_MS / 3600_000,
-      removeLink: this.removeLink(id),
-    });
+    await this.mail.send(
+      input.email,
+      "waitlist-confirm",
+      {
+        orgName: input.orgName || undefined,
+        link: appLink(`/warteliste/bestaetigen#t=${token}`),
+        validHours: WAITLIST_TOKEN_TTL_MS / 3600_000,
+        removeLink: this.removeLink(id),
+      },
+      { unsubscribe: { k: "waitlist", w: id } },
+    );
   }
 
   private removeLink(id: string) {
@@ -126,8 +156,10 @@ export class WaitlistService {
       .update(waitlistEntries)
       .set({ status: "confirmed", confirmedAt: new Date(), tokenHash: null, tokenExpiresAt: null })
       .where(and(eq(waitlistEntries.tokenHash, sha256(token)), eq(waitlistEntries.status, "pending"), gt(waitlistEntries.tokenExpiresAt, new Date())))
-      .returning({ id: waitlistEntries.id });
+      .returning({ id: waitlistEntries.id, email: waitlistEntries.email });
     if (!row) throw new BadRequestException(INVALID_LINK);
+    // Neue, bestaetigte Einwilligung: eine fruehere Abmeldung (Sperr-Hash) gilt nicht mehr.
+    await this.suppressions.remove(addressHash(row.email), "waitlist");
     this.log.log("Warteliste: Eintrag bestaetigt.");
   }
 
@@ -135,7 +167,14 @@ export class WaitlistService {
   async remove(token: string): Promise<void> {
     const id = verifyRemoveToken(token);
     if (!id) throw new BadRequestException(INVALID_LINK);
-    await this.db.delete(waitlistEntries).where(eq(waitlistEntries.id, id));
+    await this.removeById(id);
+  }
+
+  /** Eintrag loeschen und nur den Sperr-Hash behalten (kein Newsletter ohne neue Einwilligung). */
+  async removeById(id: string): Promise<void> {
+    const [row] = await this.db.delete(waitlistEntries).where(eq(waitlistEntries.id, id)).returning({ email: waitlistEntries.email });
+    if (!row) return;
+    await this.suppressions.add(addressHash(row.email), "waitlist", "unsubscribe");
     this.log.log("Warteliste: Eintrag ausgetragen.");
   }
 
@@ -146,7 +185,19 @@ export class WaitlistService {
       this.confirmedRows(),
     ]);
     const n = (s: string) => Number(counts.find((c) => c.status === s)?.n ?? 0);
-    return { confirmed: n("confirmed"), pending: n("pending"), entries };
+    const tally = (pick: (e: WaitlistEntry) => string | null): WaitlistCounts => {
+      const out: WaitlistCounts = {};
+      for (const e of entries) out[pick(e) ?? "-"] = (out[pick(e) ?? "-"] ?? 0) + 1;
+      return out;
+    };
+    return {
+      confirmed: n("confirmed"),
+      pending: n("pending"),
+      byRole: tally((e) => e.role),
+      byRegion: tally((e) => e.region),
+      bySource: tally((e) => e.source),
+      entries,
+    };
   }
 
   private async confirmedRows(): Promise<WaitlistEntry[]> {
@@ -163,6 +214,8 @@ export class WaitlistService {
       city: r.city,
       orgType: r.orgType,
       role: (r.role as WaitlistRole | null) ?? null,
+      region: (r.region as WaitlistRegion | null) ?? null,
+      source: (r.source as WaitlistSource | null) ?? null,
       confirmedAt: r.confirmedAt!.toISOString(),
       consentVersion: r.consentVersion,
     }));
@@ -170,8 +223,8 @@ export class WaitlistService {
 
   async exportCsv(): Promise<{ csv: string; count: number }> {
     const rows = await this.confirmedRows();
-    const lines = [["E-Mail", "Verein", "Ort", "Vereinsart", "Rolle", "Bestaetigt am", "Einwilligung (Version)"].join(";")];
-    for (const r of rows) lines.push([r.email, r.orgName, r.city, r.orgType, r.role ?? "", r.confirmedAt, r.consentVersion].map(csvCell).join(";"));
+    const lines = [["E-Mail", "Verein", "Ort", "Vereinsart", "Rolle", "Region", "Quelle", "Bestaetigt am", "Einwilligung (Version)"].join(";")];
+    for (const r of rows) lines.push([r.email, r.orgName, r.city, r.orgType, r.role ?? "", r.region ?? "", r.source ?? "", r.confirmedAt, r.consentVersion].map(csvCell).join(";"));
     return { csv: "﻿" + lines.join("\r\n") + "\r\n", count: rows.length };
   }
 
@@ -195,6 +248,8 @@ export class WaitlistService {
       city: r.city,
       orgType: r.orgType,
       role: r.role,
+      region: r.region,
+      source: r.source,
       status: r.status,
       consentVersion: r.consentVersion,
       consentAt: r.consentAt.toISOString(),

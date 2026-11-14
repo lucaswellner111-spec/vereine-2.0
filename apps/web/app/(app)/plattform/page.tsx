@@ -2,7 +2,7 @@
 
 import { ShieldOff } from "lucide-react";
 import { useState } from "react";
-import { WAITLIST_ROLE_LABELS, type ChatReportItem, type MailQuota, type WaitlistOverview } from "@vereine/shared";
+import { WAITLIST_REGION_LABELS, WAITLIST_ROLE_LABELS, type ChatReportItem, type MailQuota, type WaitlistOverview } from "@vereine/shared";
 import { Alert, ArrowLink, Badge, Button, Card, CardSkeletons, CellLabel, EmptyState, ErrorState, LinkButton, PageHeader, stackTable, UserNameLink } from "@/components/ui";
 import { BackButton, SegmentedControl, tabPanelProps } from "@/components/ui-client";
 import { ReportQueue } from "@/components/moderation-queue";
@@ -147,7 +147,9 @@ function WaitlistPanel() {
   const list = useApi<WaitlistOverview>("/platform/waitlist");
   if (list.error && !list.data) return <ErrorState message={list.error} onRetry={list.reload} />;
   if (!list.data) return <CardSkeletons count={1} />;
-  const { confirmed, pending, entries } = list.data;
+  const { confirmed, pending, entries, byRole, byRegion, bySource } = list.data;
+  const tally = (c: Record<string, number>, label: (k: string) => string) =>
+    Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${label(k)} ${n}`).join(" · ") || "–";
   return (
     <>
       <Card className="mb-4">
@@ -158,10 +160,15 @@ function WaitlistPanel() {
           </p>
           <LinkButton native size="sm" variant="secondary" href="/api/platform/waitlist.csv" className="max-sm:w-full">CSV-Export</LinkButton>
         </div>
+        <dl className="mt-2 space-y-0.5 text-xs text-muted">
+          <div><dt className="inline font-medium">Rollen: </dt><dd className="inline">{tally(byRole, (k) => WAITLIST_ROLE_LABELS[k as keyof typeof WAITLIST_ROLE_LABELS] ?? "Keine Angabe")}</dd></div>
+          <div><dt className="inline font-medium">Regionen: </dt><dd className="inline">{tally(byRegion, (k) => WAITLIST_REGION_LABELS[k as keyof typeof WAITLIST_REGION_LABELS] ?? "Keine Angabe")}</dd></div>
+          <div><dt className="inline font-medium">Quellen: </dt><dd className="inline">{tally(bySource, (k) => (k === "-" ? "Keine Angabe" : k))}</dd></div>
+        </dl>
         <p className="mt-1 text-xs text-muted">Unbestätigte Anmeldungen werden nach 7 Tagen gelöscht. Abruf und Export werden protokolliert.</p>
       </Card>
       {entries.length === 0 ? (
-        <EmptyState emoji="📝" title="Noch niemand auf der Warteliste.">Bestätigte Anmeldungen von der Startseite erscheinen hier.</EmptyState>
+        <EmptyState emoji="📝" title="Noch niemand auf der Warteliste.">Bestätigte Anmeldungen von der Startseite und von /warteliste erscheinen hier.</EmptyState>
       ) : (
         <Card flush>
           <table className={stackTable.table}>
@@ -170,17 +177,17 @@ function WaitlistPanel() {
                 <th className="p-3">Verein</th>
                 <th className="p-3">E-Mail</th>
                 <th className="p-3">Ort / Art</th>
-                <th className="p-3">Rolle</th>
+                <th className="p-3">Rolle / Region</th>
                 <th className="p-3">Bestätigt</th>
               </tr>
             </thead>
             <tbody className={stackTable.tbody}>
               {entries.map((e) => (
                 <tr key={e.id} className={stackTable.tr}>
-                  <td className={stackTable.tdMain}>{e.orgName}</td>
+                  <td className={stackTable.tdMain}>{e.orgName || "–"}</td>
                   <td className={`${stackTable.td} break-all`}><CellLabel>E-Mail</CellLabel>{e.email}</td>
                   <td className={stackTable.td}><CellLabel>Ort / Art</CellLabel>{[e.city, e.orgType].filter(Boolean).join(" · ") || "–"}</td>
-                  <td className={stackTable.td}><CellLabel>Rolle</CellLabel>{e.role ? WAITLIST_ROLE_LABELS[e.role] : "–"}</td>
+                  <td className={stackTable.td}><CellLabel>Rolle / Region</CellLabel>{[e.role ? WAITLIST_ROLE_LABELS[e.role] : null, e.region ? WAITLIST_REGION_LABELS[e.region] : null].filter(Boolean).join(" · ") || "–"}</td>
                   <td className={`${stackTable.td} tabular-nums`}><CellLabel>Bestätigt</CellLabel>{new Date(e.confirmedAt).toLocaleDateString("de-DE")}</td>
                 </tr>
               ))}

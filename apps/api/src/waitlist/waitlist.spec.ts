@@ -13,6 +13,7 @@ import * as schema from "../db/schema";
 import { addressHash } from "../mail/mail-limits";
 import { MemoryMailDriver } from "../mail/mail.drivers";
 import { MAIL_DRIVER } from "../mail/mail.service";
+import { SuppressionsService } from "../mail/suppressions.service";
 import { RetentionService } from "../privacy/retention.service";
 import { confirmEmailForTest } from "../testing/auth";
 import { createTestDb, type TestDb } from "../testing/test-db";
@@ -45,7 +46,7 @@ describe("Warteliste", () => {
 
   /** Je Aufruf eine eigene IP (sonst greift das IP-Limit testuebergreifend), ausser sie wird vorgegeben. */
   const post = (url: string, payload: object, ip = `10.0.0.${++ipCounter % 250}`) => app.inject({ method: "POST", url, payload, remoteAddress: ip });
-  const form = (email: string, extra: object = {}) => ({ email, orgName: "SV Grün", city: "Musterstadt", orgType: "Sport", role: "vorstand", consent: true, ...extra });
+  const form = (email: string, extra: object = {}) => ({ email, orgName: "SV Grün", city: "Musterstadt", orgType: "Sport", role: "vorstand", consent: true, elapsedMs: 5000, ...extra });
   const resetAddressLimit = (email: string) => cache.del(`lim:wl:addr:10m:${addressHash(email)}`);
   const entry = async (email: string) => (await db.select().from(schema.waitlistEntries).where(eq(schema.waitlistEntries.email, email)))[0];
 
@@ -101,6 +102,71 @@ describe("Warteliste", () => {
     expect(mails.sent).toHaveLength(0);
   });
 
+  it("Zeitpruefung: zu schnell oder ohne Zeitangabe wie Honeypot (gleiche Antwort, kein Eintrag, keine Mail)", async () => {
+    for (const extra of [{ elapsedMs: 300 }, { elapsedMs: undefined }]) {
+      const res = await post("/waitlist", form("schnell@example.de", extra));
+      expect(res.statusCode).toBe(202);
+      expect(res.json()).toEqual({ message: WAITLIST_CHECK_INBOX });
+    }
+    expect(await entry("schnell@example.de")).toBeUndefined();
+    expect(mails.sent).toHaveLength(0);
+    expect((await post("/waitlist", form("schnell@example.de", { elapsedMs: -5 }))).statusCode).toBe(400);
+  });
+
+  it("Segmente: Rolle, Region und feste Quelle werden gespeichert; Verein ist optional; unbekannte Quelle wird verworfen", async () => {
+    expect((await post("/waitlist", { email: "Fan@Example.de", role: "fan", region: "lk-leipzig", source: "flyer", consent: true, elapsedMs: 4000 })).statusCode).toBe(202);
+    expect(await entry("fan@example.de")).toMatchObject({ role: "fan", region: "lk-leipzig", source: "flyer", orgName: "", status: "pending" });
+    const mail = mails.last("fan@example.de", "waitlist-confirm")!;
+    expect(mail.text).toContain("dass du bei Klubnest dabei sein möchtest");
+    expect(mail.text).not.toMatch(/track|pixel|<img/i);
+    expect(mail.html).not.toMatch(/<img/i);
+
+    expect((await post("/waitlist", form("quelle@example.de", { source: "https://evil.example/?x=1", region: "leipzig", role: "kasse" }))).statusCode).toBe(202);
+    expect(await entry("quelle@example.de")).toMatchObject({ source: null, region: "leipzig", role: "kasse" });
+    for (const role of ["trainer", "mitglied", "multiplikator"]) {
+      expect((await post("/waitlist", form(`r-${role}@example.de`, { role }))).statusCode).toBe(202);
+    }
+    expect((await post("/waitlist", form("x@example.de", { region: "mars" }))).statusCode).toBe(400);
+    expect((await post("/waitlist", form("x@example.de", { role: "sonstiges" }))).statusCode).toBe(400);
+  });
+
+  it("Mail traegt den One-Click-Abmeldelink (List-Unsubscribe); POST loescht den Eintrag und legt nur einen Sperr-Hash an", async () => {
+    await post("/waitlist", form("klick@example.de"));
+    const mail = mails.last("klick@example.de", "waitlist-confirm")!;
+    expect(mail.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    const t = /unsubscribe\?t=([A-Za-z0-9_.-]+)/.exec(mail.headers?.["List-Unsubscribe"] ?? "")?.[1];
+    expect(t).toBeTruthy();
+    expect(await entry("klick@example.de")).toBeTruthy();
+
+    const res = await app.inject({ method: "POST", url: `/mail/unsubscribe?t=${t}`, payload: "List-Unsubscribe=One-Click", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ kind: "waitlist" });
+    expect(await entry("klick@example.de")).toBeUndefined();
+    const hash = addressHash("klick@example.de");
+    const sup = await db.select().from(schema.mailSuppressions).where(eq(schema.mailSuppressions.addressHash, hash));
+    expect(sup).toEqual([expect.objectContaining({ scope: "waitlist", reason: "unsubscribe" })]);
+    expect(JSON.stringify(sup)).not.toContain("klick@");
+    // wiederholbar
+    expect((await app.inject({ method: "POST", url: `/mail/unsubscribe?t=${t}` })).statusCode).toBe(200);
+  });
+
+  it("Austragen per Seite sperrt fuer Newsletter (Scope waitlist), blockt aber keine Bestaetigungsmail; neue Bestaetigung hebt die Sperre auf", async () => {
+    const email = "zurueck@example.de";
+    await post("/waitlist", form(email));
+    await post("/waitlist/remove", { token: removeTokenOf(mails.last(email, "waitlist-confirm")!.text) });
+    const suppressions = app.get(SuppressionsService);
+    expect(await suppressions.isSuppressed(addressHash(email), ["waitlist"])).toBe(true);
+    expect(await suppressions.isSuppressed(addressHash(email), ["all"])).toBe(false);
+
+    await resetAddressLimit(email);
+    await post("/waitlist", form(email));
+    const confirm = mails.sent.filter((m) => m.to === email && m.template === "waitlist-confirm");
+    expect(confirm).toHaveLength(2); // neue Einwilligung ist moeglich
+    expect(await suppressions.isSuppressed(addressHash(email), ["waitlist"])).toBe(true); // erst die Bestaetigung hebt auf
+    await post("/waitlist/confirm", { token: confirmTokenOf(confirm[1].text) });
+    expect(await suppressions.isSuppressed(addressHash(email), ["waitlist"])).toBe(false);
+  });
+
   it("abgelaufener Link (48 h) gilt nicht; erneutes Anmelden ersetzt den Link", async () => {
     await post("/waitlist", form("alt@example.de"));
     const first = confirmTokenOf(mails.last("alt@example.de", "waitlist-confirm")!.text);
@@ -153,7 +219,7 @@ describe("Warteliste", () => {
     expect(mails.sent.filter((m) => m.to === email)).toHaveLength(3);
   });
 
-  it("Rate-Limit je IP: nach 10 Anmeldungen pro Stunde 429", async () => {
+  it("Rate-Limit je IP: nach 30 Anmeldungen pro Stunde 429", async () => {
     const ip = "203.0.113.9";
     for (let i = 0; i < WAITLIST_SIGNUPS_PER_IP_HOUR; i++) expect((await post("/waitlist", form(`ip${i}@example.de`), ip)).statusCode).toBe(202);
     const blocked = await post("/waitlist", form("ip-x@example.de"), ip);
@@ -205,6 +271,9 @@ describe("Warteliste", () => {
       const body = res.json();
       expect(body.confirmed).toBe(body.entries.length);
       expect(body.pending).toBeGreaterThanOrEqual(1);
+      expect(body.byRole.vorstand).toBeGreaterThanOrEqual(1);
+      expect(Object.values(body.byRegion as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(body.confirmed);
+      expect(body.bySource["-"]).toBeGreaterThanOrEqual(1);
       expect(body.entries.map((e: { email: string }) => e.email)).toContain("formel@example.de");
       expect(body.entries.map((e: { email: string }) => e.email)).not.toContain("limit@example.de");
       expect(JSON.stringify(body)).not.toMatch(/token/i);

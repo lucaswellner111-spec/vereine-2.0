@@ -993,17 +993,39 @@ export type PublicOrg = PublicOrgSummary & {
   posts: PublicPost[];
 };
 
-// --- Warteliste fuer Vereine (Vorab-Anmeldung ohne Login, Double-Opt-in) -----------------------
+// --- Warteliste (Vorab-Anmeldung ohne Login, Double-Opt-in) ------------------------------------
 // Eigener Bereich `waitlist`. Antwort auf die Anmeldung ist immer gleich (keine Enumeration).
 
 /** Version des Einwilligungstexts unter dem Formular; bei Textaenderung hochzaehlen (wird je Eintrag gespeichert). */
-export const WAITLIST_CONSENT_VERSION = "2026-11-10";
+export const WAITLIST_CONSENT_VERSION = "2026-11-13";
 export const WAITLIST_CONSENT_TEXT =
-  "Ich bin einverstanden, dass Klubnest meine Angaben speichert, um mich per E-Mail zum Start für meinen Verein zu informieren. Widerruf jederzeit über den Link in jeder Mail.";
-export const WAITLIST_ROLES = ["vorstand", "mitglied", "sonstiges"] as const;
-export type WaitlistRole = (typeof WAITLIST_ROLES)[number];
-export const WAITLIST_ROLE_LABELS: Record<WaitlistRole, string> = { vorstand: "Vorstand", mitglied: "Mitglied", sonstiges: "Sonstiges" };
-/** Einheitliche Antwort (auch bei bekannter Adresse oder Limit). */
+  "Ich bin einverstanden, dass Klubnest meine E-Mail-Adresse und meine Angaben speichert, um mich per E-Mail über den Start und Neuigkeiten von Klubnest zu informieren. Ich kann das jederzeit mit einem Klick über den Link in jeder Mail widerrufen.";
+/** Segmente (Tags) laut Marketing: wer bekommt welche Mails. "sonstiges" kommt nur noch in alten Eintraegen vor. */
+export const WAITLIST_ROLES = ["vorstand", "kasse", "trainer", "mitglied", "fan", "multiplikator"] as const;
+export type WaitlistRole = (typeof WAITLIST_ROLES)[number] | "sonstiges";
+export const WAITLIST_ROLE_LABELS: Record<WaitlistRole, string> = {
+  vorstand: "Vorstand",
+  kasse: "Kasse",
+  trainer: "Trainer:in / Übungsleitung",
+  mitglied: "Mitglied",
+  fan: "Fan",
+  multiplikator: "Verband / Multiplikator:in",
+  sonstiges: "Sonstiges",
+};
+export const WAITLIST_REGIONS = ["lk-leipzig", "leipzig", "andere"] as const;
+export type WaitlistRegion = (typeof WAITLIST_REGIONS)[number];
+export const WAITLIST_REGION_LABELS: Record<WaitlistRegion, string> = { "lk-leipzig": "Landkreis Leipzig", leipzig: "Stadt Leipzig", andere: "Andere Region" };
+/** Festes Vokabular fuer `?q=` (Flyer, QR-Code, Link in Bio …); alles andere wird verworfen. */
+export const WAITLIST_SOURCES = ["startseite", "warteliste", "flyer", "bio", "infoabend", "gespraech", "kreissportbund"] as const;
+export type WaitlistSource = (typeof WAITLIST_SOURCES)[number];
+/** Quelle aus `?q=…` pruefen: nur Werte aus dem Vokabular. */
+export function parseWaitlistSource(q: unknown): WaitlistSource | undefined {
+  const v = typeof q === "string" ? q.trim().toLowerCase() : "";
+  return (WAITLIST_SOURCES as readonly string[]).includes(v) ? (v as WaitlistSource) : undefined;
+}
+/** Mindestzeit zwischen Anzeige des Formulars und Absenden (Bot-Schutz ohne Drittanbieter). */
+export const WAITLIST_MIN_FILL_MS = 2000;
+/** Einheitliche Antwort (auch bei bekannter Adresse, Limit oder Bot-Verdacht). */
 export const WAITLIST_CHECK_INBOX = "Fast geschafft – schau in dein Postfach und bestätige deine Anmeldung.";
 
 // eslint-disable-next-line no-control-regex
@@ -1011,13 +1033,19 @@ const plainText = (max: number) => z.string().trim().max(max).refine((v) => !/[\
 
 export const waitlistSignupSchema = z.object({
   email: emailField,
-  orgName: plainText(120).pipe(z.string().min(2, "Bitte gib den Namen deines Vereins an.")),
+  /** Optional (Fans und Mitglieder haben oft keinen "eigenen" Verein). */
+  orgName: plainText(120).optional().default(""),
   city: plainText(80).optional().default(""),
   orgType: plainText(60).optional().default(""),
   role: z.enum(WAITLIST_ROLES).optional(),
+  region: z.enum(WAITLIST_REGIONS).optional(),
+  /** Unbekannte Werte werden verworfen statt abzulehnen (Quelle ist nur Statistik). */
+  source: z.enum(WAITLIST_SOURCES).optional().catch(undefined),
   consent: z.literal(true, { error: "Bitte bestätige die Einwilligung." }),
   /** Honeypot: fuer Menschen unsichtbar, muss leer bleiben. */
   website: z.string().max(200).optional(),
+  /** Zeitpruefung: Millisekunden seit Anzeige des Formulars (fehlt oder zu klein = Bot-Verdacht, still verworfen). */
+  elapsedMs: z.number().int().min(0).max(7 * 24 * 3600_000).optional(),
 });
 export type WaitlistSignupInput = z.infer<typeof waitlistSignupSchema>;
 export const waitlistTokenSchema = z.object({ token: z.string().trim().min(20).max(300).regex(/^[A-Za-z0-9_.-]+$/) });
@@ -1029,7 +1057,18 @@ export type WaitlistEntry = {
   city: string;
   orgType: string;
   role: WaitlistRole | null;
+  region: WaitlistRegion | null;
+  source: WaitlistSource | null;
   confirmedAt: string;
   consentVersion: string;
 };
-export type WaitlistOverview = { confirmed: number; pending: number; entries: WaitlistEntry[] };
+/** Zaehlung nach Merkmal (nur bestaetigte Eintraege); Schluessel "-" = keine Angabe. */
+export type WaitlistCounts = Record<string, number>;
+export type WaitlistOverview = {
+  confirmed: number;
+  pending: number;
+  byRole: WaitlistCounts;
+  byRegion: WaitlistCounts;
+  bySource: WaitlistCounts;
+  entries: WaitlistEntry[];
+};

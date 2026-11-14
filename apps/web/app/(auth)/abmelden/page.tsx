@@ -15,7 +15,7 @@ export default function UnsubscribePage() {
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<"digest" | "invite" | null>(null);
+  const [done, setDone] = useState<"digest" | "invite" | "waitlist" | null>(null);
 
   useEffect(() => {
     if (tokenRef.current === null) tokenRef.current = takeHashToken();
@@ -26,7 +26,7 @@ export default function UnsubscribePage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ kind: "digest" | "invite" }>("/mail/unsubscribe", { method: "POST", body: { token } });
+      const res = await api<{ kind: "digest" | "invite" | "waitlist" }>("/mail/unsubscribe", { method: "POST", body: { token } });
       setDone(res.kind);
     } catch (e) {
       setError(describeError(e));
@@ -42,7 +42,9 @@ export default function UnsubscribePage() {
         <Alert tone="success">
           {done === "digest"
             ? "Erledigt: Du bekommst keine Sammelmail mehr. In den Einstellungen unter „Mitteilungen“ kannst du sie wieder einschalten."
-            : "Erledigt: An diese Adresse schicken wir keine Einladungen mehr."}
+            : done === "waitlist"
+              ? "Erledigt: Du bist von der Warteliste ausgetragen, deine Angaben sind gelöscht. Wir schreiben dir dazu nicht mehr."
+              : "Erledigt: An diese Adresse schicken wir keine Einladungen mehr."}
         </Alert>
       ) : token === "" ? (
         <Alert>Dieser Abmeldelink ist ungültig.</Alert>

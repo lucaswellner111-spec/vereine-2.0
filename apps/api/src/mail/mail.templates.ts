@@ -18,7 +18,7 @@ export type MailTemplates = {
   "invoice-new": { name: string; orgName: string; number: string; amount: string; dueDate: string; link: string };
   "notification-digest": { name: string; lines: string[]; link: string; unsubscribeLink?: string };
   /** Warteliste: Double-Opt-in (ohne Konto, daher ohne Namen). Austragelink in jeder Mail. */
-  "waitlist-confirm": { orgName: string; link: string; validHours: number; removeLink: string };
+  "waitlist-confirm": { orgName?: string; link: string; validHours: number; removeLink: string };
   /** Warteliste: erneute Anmeldung einer schon bestaetigten Adresse (statt Fehlermeldung, gegen Enumeration). */
   "waitlist-exists": { link: string; removeLink: string };
 };
@@ -247,8 +247,8 @@ export function renderMail<T extends MailTemplate>(template: T, data: MailTempla
         `Bitte bestätige deine Anmeldung zur Warteliste`,
         hello(),
         [
-          `schön, dass „${d.orgName}“ bei ${BRAND} dabei sein möchte! Bitte bestätige noch kurz deine Anmeldung zur Warteliste. Der Link ist ${d.validHours} Stunden gültig.`,
-          `Danach melden wir uns zum Start bei dir – sonst schicken wir dir nichts.`,
+          `schön, dass ${d.orgName ? `„${d.orgName}“ bei ${BRAND} dabei sein möchte` : `du bei ${BRAND} dabei sein möchtest`}! Bitte bestätige noch kurz deine Anmeldung zur Warteliste. Der Link ist ${d.validHours} Stunden gültig.`,
+          `Danach informieren wir dich per E-Mail über den Start und Neuigkeiten von ${BRAND}. Wir messen nicht, ob du unsere Mails öffnest.`,
         ],
         { label: "Anmeldung bestätigen", link: d.link },
         `Du hast dich nicht angemeldet? Dann ignoriere diese E-Mail – ohne Bestätigung löschen wir die Angaben nach 7 Tagen.`,

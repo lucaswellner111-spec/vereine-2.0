@@ -49,7 +49,7 @@ export function msUntilNextMorning(now = new Date()): number {
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly log = new Logger("Mail");
-  private readonly unsubscribeHandlers = new Map<"digest", (userId: string) => Promise<void>>();
+  private readonly unsubscribeHandlers = new Map<"digest" | "waitlist", (id: string) => Promise<void>>();
 
   constructor(
     @Inject(MAIL_DRIVER) private readonly driver: MailDriver,
@@ -118,7 +118,7 @@ export class MailService implements OnModuleInit {
   }
 
   /** Bereiche melden sich fuer Abmeldungen an (z. B. Benachrichtigungen: Sammelmail aus). */
-  onUnsubscribe(kind: "digest", handler: (userId: string) => Promise<void>): void {
+  onUnsubscribe(kind: "digest" | "waitlist", handler: (id: string) => Promise<void>): void {
     this.unsubscribeHandlers.set(kind, handler);
   }
 
@@ -127,6 +127,7 @@ export class MailService implements OnModuleInit {
     const payload = verifyUnsubscribe(token);
     if (!payload) return null;
     if (payload.k === "invite") await this.suppressions.add(payload.h, "invite", "unsubscribe");
+    else if (payload.k === "waitlist") await this.unsubscribeHandlers.get("waitlist")?.(payload.w);
     else await this.unsubscribeHandlers.get("digest")?.(payload.u);
     this.log.log(`Abmeldung eingeloest: ${payload.k}`);
     return { kind: payload.k };

@@ -5,8 +5,8 @@ import { DB, type Database } from "../db/db.module";
 import { mailSuppressions } from "../db/schema";
 import { addressHash } from "./mail-limits";
 
-/** all = harter Bounce/Beschwerde (blockt alles), invite = Abmeldung von Einladungs-Mails. */
-export type SuppressionScope = "all" | "invite";
+/** all = harter Bounce/Beschwerde (blockt alles), invite = Abmeldung von Einladungs-Mails, waitlist = Abmeldung von Warteliste/Newsletter. */
+export type SuppressionScope = "all" | "invite" | "waitlist";
 export type SuppressionReason = "unsubscribe" | "bounce" | "complaint";
 
 /**
@@ -19,6 +19,11 @@ export class SuppressionsService {
 
   async add(hash: string, scope: SuppressionScope, reason: SuppressionReason): Promise<void> {
     await this.db.insert(mailSuppressions).values({ addressHash: hash, scope, reason }).onConflictDoNothing();
+  }
+
+  /** Sperre aufheben (z. B. neue Einwilligung per Double-Opt-in auf der Warteliste). */
+  async remove(hash: string, scope: SuppressionScope): Promise<void> {
+    await this.db.delete(mailSuppressions).where(and(eq(mailSuppressions.addressHash, hash), eq(mailSuppressions.scope, scope)));
   }
 
   /** Fuer einen spaeteren Bounce-/Beschwerde-Webhook: Adresse fuer alle Mails sperren. */
