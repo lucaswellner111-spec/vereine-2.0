@@ -1,6 +1,6 @@
 # Nachtlauf-Plan (ab 2026-11-15 abends): Optimieren, Testen, Härten
 
-Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbeitet ist. Stand vorher: Gegencheck P1–P4 (`docs/GEGENCHECK-2026-11-15.md`) erledigt, committet, gepusht, deployt.
+Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbeitet ist. Stand vorher: Gegencheck P1–P4 (`docs/GEGENCHECK-2026-11-15.md`) erledigt, committet, gepusht und am 15.11. deployt (Commit 73b56a5, 35 Migrationen, Smoke ok, Log-Schwärzung live geprüft). E2E lokal 33/34 grün, `activity.spec.ts` (Desktop) scheiterte nur unter Last und lief einzeln grün.
 
 ## Arbeitsweise (gilt für jedes Paket)
 - Leitung: Opus 5.5. Unteragenten immer `model: "sonnet"`, bis zu 3 parallel, jeder mit Spar-Auftrag (gezielt lesen, nur betroffene Tests, Bericht max. 12 Zeilen). Agenten bekommen getrennte Dateibereiche, kein Commit/stash/Branchwechsel durch Agenten.
@@ -13,7 +13,7 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 
 ## N1: Absicherung des Deploys
 - [ ] GitHub-CI für den gepushten Stand prüfen (`gh run list --branch vor-gruendung`), insbesondere `api-postgres` (echtes Postgres) und `e2e`. Fehler beheben.
-- [ ] Live-Check klubnest.de (nur lesen, keine Konten anlegen): Startseite, `/datenschutz`, `/eltern-hinweise`, `/agb`, `/api/health/ready` zeigt nur `status`/`worker`, Sicherheits-Header. Server: Migrationen 0033/0034 angewandt, Caddy-Log schwärzt `/einladung/…` (eine eigene Test-URL aufrufen, Log ansehen).
+- [x] (15.11. erledigt: Seiten 200, health nur status/worker, 35 Migrationen, `/einladung/GESCHWAERZT` im Log) Live-Check klubnest.de (nur lesen, keine Konten anlegen): Startseite, `/datenschutz`, `/eltern-hinweise`, `/agb`, `/api/health/ready` zeigt nur `status`/`worker`, Sicherheits-Header. Server: Migrationen 0033/0034 angewandt, Caddy-Log schwärzt `/einladung/…` (eine eigene Test-URL aufrufen, Log ansehen).
 
 ## N2: Opus-Gegencheck der Pakete P1–P4
 - [ ] Ein Opus-Prüfer liest `git diff 9d78730..HEAD` (ohne Snapshots) auf Fehler, Sicherheits- und Datenschutzlücken, Text-Widersprüche (Datenschutzerklärung ↔ Code-Fristen ↔ AVV). Befunde mit Sonnet beheben, Tests.
@@ -39,6 +39,7 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 ## Nicht ohne Entscheidung des Nutzers
 - Jugend E3/E4 (Login für Kinder, Kommentare/Chats): laut `docs/welle2/JUGEND-KONZEPT.md` erst nach Rückmeldung zu den Rechtsfragen. E5 (Übernahme mit 16) nur nach Rücksprache.
 - Zahlungen/Spenden (bleiben „Kommt später“), Mailversand aktivieren, Backup-Cron (braucht Freigabe des Nutzers), native Apps (Nutzer: später).
+- **Sicherung auf dem Server:** `infra/deploy/backup.sh` ruft seit dem Deploy vom 14.11. `infra/ops/backup.sh` auf, das `age` und einen Schlüssel braucht und daher abbricht. Bis der Nutzer `age` + Schlüssel (Sicherung des privaten Schlüssels!) einrichtet: vor jedem Deploy von Hand `pg_dump` in `/opt/vereine/backups/` (wie am 15.11.: `docker compose … exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > backups/vereine-<zeit>.sql.gz`, `chmod 600`). Kein Schlüssel ohne den Nutzer erzeugen.
 
 ## Abschluss
 Am Ende kurzer deutscher Bericht an den Nutzer: was live ist, was offen bleibt, welche Entscheidungen er treffen muss.
