@@ -78,6 +78,11 @@ const pages = [
   ["chat", "/chat", true],
   ["kalender", "/kalender", true],
   ["einstellungen", "/einstellungen", true],
+  ["verwaltung", "/verwaltung", true],
+  ["verw-mitglieder", "/verwaltung/mitglieder", true],
+  ["verw-termine", "/verwaltung/termine", true],
+  ["kinder", "/kinder", true],
+  ["vereine", "/vereine", true],
 ];
 const sizes = [
   ["375", { width: 375, height: 812 }, true],

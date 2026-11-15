@@ -115,7 +115,7 @@ function Orgs() {
         </Select>
         <label htmlFor="ort" className="sr-only">Ort</label>
         <Input id="ort" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ort" autoComplete="address-level2" maxLength={60} className="w-full sm:w-44" />
-        <SearchField id="q" label="Vereine suchen" value={q} onChange={setQ} placeholder="Name, Ort oder Kategorie suchen …" className="min-w-0 flex-1" />
+        <SearchField id="q" label="Vereine suchen" value={q} onChange={setQ} placeholder="Name, Ort, Sportart …" className="min-w-0 flex-1" />
       </div>
       {content}
     </>

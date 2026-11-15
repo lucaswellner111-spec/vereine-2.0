@@ -210,7 +210,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <TagChips tags={o.tags} to="/tags" />
             {viewer.role === "admin" && (
-              <button type="button" onClick={() => setEditTags(o.tags)} className="text-xs font-medium text-brand hover:underline">
+              <button type="button" onClick={() => setEditTags(o.tags)} className="inline-flex min-h-9 items-center text-xs font-medium text-brand hover:underline pointer-coarse:min-h-11">
                 {o.tags.length ? "Tags bearbeiten" : "Sportarten und Themen festlegen"}
               </button>
             )}

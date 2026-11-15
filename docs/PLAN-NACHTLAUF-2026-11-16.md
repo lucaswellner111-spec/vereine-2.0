@@ -11,6 +11,8 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 - Verboten: Geheimnisse ausgeben/committen (auch nicht `CHAT_MASTER_KEYS`), auf dem Server nur Variablennamen ansehen; Testkonten nur lokal; nie „anwaltlich geprüft“, „DSGVO-konform“ als Garantie, „Ende-zu-Ende-verschlüsselt“.
 - Ergebnis jedes Pakets hier abhaken und kurz notieren. Verlauf groß → Folgesession mit kompaktem Brief starten (Rest dieser Liste).
 
+**Deploy 15.11. (Nachtlauf):** Commit 9504a4b live (Handsicherung `backups/vereine-20261115-111210-vor-nachtlauf.sql.gz`, Images `:prev-20261115-nacht`, Caddy validiert und neu gestartet, 36 Migrationen, Seiten 200, health ok, Log schwärzt `/einladung/`, `?next=` und `/api/guardian/invites/` live geprüft, Build-Cache 2,5 GB geleert, Platte 28 %).
+
 ## N1: Absicherung des Deploys
 - [x] (15.11.: CI lief nur auf main/PR; `vor-gruendung` in ci.yml aufgenommen, Lauf auf b7d9ef6: build, infra, api-postgres, e2e grün) GitHub-CI für den gepushten Stand prüfen (`gh run list --branch vor-gruendung`), insbesondere `api-postgres` (echtes Postgres) und `e2e`. Fehler beheben.
 - [x] (15.11. erledigt: Seiten 200, health nur status/worker, 35 Migrationen, `/einladung/GESCHWAERZT` im Log) Live-Check klubnest.de (nur lesen, keine Konten anlegen): Startseite, `/datenschutz`, `/eltern-hinweise`, `/agb`, `/api/health/ready` zeigt nur `status`/`worker`, Sicherheits-Header. Server: Migrationen 0033/0034 angewandt, Caddy-Log schwärzt `/einladung/…` (eine eigene Test-URL aufrufen, Log ansehen).
@@ -29,8 +31,8 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 - [ ] (offen: k6 lokal nicht installiert, kein Download ohne Nutzer) Lasttest lokal mit `infra/loadtest/k6-smoke.js`, falls k6 vorhanden (nicht gegen klubnest.de).
 
 ## N5: UX-Politur
-- [ ] Screenshots per `node e2e/design-shots.mjs <ordner>` (lokal) für Handy und Desktop: Feed, Verein, Kalender, Chat, Verwaltung, Kinder, Einstellungen. Auffälligkeiten (Abstände, leere Zustände, Touch-Ziele, Kontrast) gesammelt beheben. Design „Frisch“ (`docs/design/RICHTUNG.md`) einhalten.
-- [ ] Barrierefreiheit: axe ohne serious/critical auf allen Hauptseiten, Tastaturbedienung der Dialoge.
+- [x] (15.11.: `docs/design/nachtlauf-2026-11-15/`, 24 Aufnahmen; behoben: Touch-Ziel Tag-Link Vereinsseite, Mitglieds-Nr. am Handy, Suchtext /vereine gekürzt; Skript um Verwaltung/Kinder/Vereine erweitert; offen Kleinkram: „Abmelden“ leicht eingerückt in der Nutzerkarte) Screenshots per `node e2e/design-shots.mjs <ordner>` (lokal) für Handy und Desktop: Feed, Verein, Kalender, Chat, Verwaltung, Kinder, Einstellungen. Auffälligkeiten (Abstände, leere Zustände, Touch-Ziele, Kontrast) gesammelt beheben. Design „Frisch“ (`docs/design/RICHTUNG.md`) einhalten.
+- [x] (15.11.: neu `e2e/tests/a11y-seiten.spec.ts`: Chat, Profil, Verwaltung übersicht/mitglieder/rechnungen/moderation + Tastatur-Fokusfalle im Dialog + Befehlspalette; Fix Chat-Liste `li role=status`) Barrierefreiheit: axe ohne serious/critical auf allen Hauptseiten, Tastaturbedienung der Dialoge.
 
 ## N6: Betrieb
 - [x] (15.11.: Handsicherung in Wegwerf-DB `restore_probe` eingespielt, 1 s, Zahlen gleich live, wieder gelöscht; `restore-test.sh` selbst braucht age → offen beim Nutzer; Protokoll in BETRIEB.md 5.1a) Wiederherstellungstest lokal/Server nach `infra/deploy/restore-test.sh` (ohne Live-Daten zu verändern), Ergebnis in `docs/BETRIEB.md`.
@@ -43,7 +45,7 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 - [x] (Endpunkt `…/member-imports/pending/:id/resend`, Sperre + Limit 50/h, Knopf in der Liste) Import-Einladung „Erneut senden“ (neues Token, alte ungültig) (`OFFENE-PUNKTE.md` S5).
 - [x] (`recipientLeft`, bei Kinder-Rechnungen zählt das Kind) Hinweis in der Rechnungsliste auf Entwürfe ausgetretener Mitglieder (`OFFENE-PUNKTE.md` P4c).
 - [x] E2E für 2FA einrichten/anmelden, Kontolöschung, Moderation (Meldung → erledigt), Beitragslauf (`OFFENE-PUNKTE.md` Qualität).
-- [ ] axe auf weiteren Seiten: Verwaltung, Chat, Profil, Kinder (gehört zu N5).
+- [x] axe auf weiteren Seiten: Verwaltung, Chat, Profil, Kinder (gehört zu N5).
 - [x] (`BillingService.purgeExpired`, Schritt `invoices`; bestehende Vereine offen, siehe OFFENE-PUNKTE) Löschjob für finalisierte Rechnungen gelöschter Vereine nach Ablauf der Aufbewahrungsfrist (`PLAN-VOR-GRUENDUNG.md` 19), Frist aus `common/retention.ts`.
 - [x] (war schon umgesetzt: `LazyMailDriver`, Compose gibt SMTP_* nur dem worker; OFFENE-PUNKTE nachgezogen) SMTP-Zugang nur im Worker: Treiber in der API erst beim Versand anlegen (`OFFENE-PUNKTE.md` S2, Secrets-Trennung), Compose anpassen.
 
@@ -54,3 +56,13 @@ Auftrag des Nutzers: ohne Zwischenfragen weiterarbeiten, bis die Liste abgearbei
 
 ## Abschluss
 Am Ende kurzer deutscher Bericht an den Nutzer: was live ist, was offen bleibt, welche Entscheidungen er treffen muss.
+
+## Übergabe (15.11., Pause auf Wunsch des Nutzers)
+Weiter mit „Jo, mach weiter“ in dieser Session oder einer neuen: diese Datei lesen, dann hier weiter.
+- **Live:** 9504a4b (N1–N4, N6, N7). **Committet und gepusht, NICHT deployt:** der N5-Commit (Screenshots, axe-Spec, Chat-/Vereine-/Mitglieder-Fixes, E2E-Stabilisierung).
+- **Nächste Schritte:**
+  1. GitHub-CI für den N5-Commit prüfen (`gh run list --branch vor-gruendung`; gh ist installiert, der Nutzer muss einmal `gh auth login` machen, sonst öffentliche API: `curl https://api.github.com/repos/lucaswellner111-spec/vereine-2.0/actions/runs?branch=vor-gruendung`).
+  2. Wenn grün: deployen wie oben (Handsicherung pg_dump VOR Upload, Images `:prev-…` taggen, `git archive`, Caddy validieren, `up -d --build`, Smoke, `docker builder prune -f`). Keine Migration im N5-Commit.
+  3. Lokal flackerte zuletzt `beitragslauf.spec.ts` (desktop): Der Trace zeigt API-Antworten von 5–8 s statt < 0,3 s, also war der Rechner überlastet (auf Port 3000 lief ein fremder Server, PID 8960). Bei ruhigem Rechner einzeln wiederholen; bleibt es rot, `GET /api/orgs/:slug` auf Hänger untersuchen. Vorher 44/44 grün (4,0 min).
+- **Offen ohne Nutzer:** k6-Lasttest (k6 nicht installiert), Interessen-Tags im Export (Tabelle gibt es noch nicht).
+- **Entscheidungen des Nutzers:** siehe „Blocker beim Nutzer“ oben in `docs/OFFENE-PUNKTE.md`.

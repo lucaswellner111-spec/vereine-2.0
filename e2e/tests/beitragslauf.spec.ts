@@ -15,8 +15,8 @@ test("Beitragsklasse anlegen, Mitglied zuordnen, Beitragslauf erzeugt Entwurf", 
   await expect(async () => {
     const existing = await (await page.request.get(`/api/orgs/${slug}/fee-classes`)).json();
     if (existing.length === 0) {
-      await page.getByLabel("Name", { exact: true }).fill("Erwachsene");
-      await page.getByLabel("Betrag (€)").fill("48,00");
+      await page.getByLabel("Name", { exact: true }).fill("Erwachsene", { timeout: 3_000 });
+      await page.getByLabel("Betrag (€)").fill("48,00", { timeout: 3_000 });
       await page.getByRole("button", { name: "Anlegen" }).click({ timeout: 2_000 });
     }
     await expect(page.getByRole("button", { name: "Erwachsene bearbeiten" })).toBeVisible({ timeout: 3_000 });
@@ -49,5 +49,5 @@ test("Beitragsklasse anlegen, Mitglied zuordnen, Beitragslauf erzeugt Entwurf", 
   // Entwurf erscheint in der Rechnungsliste
   await page.goto("/verwaltung/rechnungen");
   const row = page.getByRole("row").filter({ hasText: mia.name });
-  await expect(row.getByText("Entwurf", { exact: true }).first()).toBeVisible();
+  await expect(row.getByText("Entwurf", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 });
