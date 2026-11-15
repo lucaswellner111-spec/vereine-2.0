@@ -63,6 +63,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     const connect = () => {
       if (stopped) return;
+      // Die CSP erlaubt WebSockets nur verschluesselt (wss:); lokal ueber HTTP gleich Polling statt eines blockierten Versuchs
+      if (!process.env.NEXT_PUBLIC_WS_URL && location.protocol !== "https:") return startPolling();
       try {
         ws = new WebSocket(socketUrl());
       } catch {

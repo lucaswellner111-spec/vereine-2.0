@@ -16,6 +16,9 @@ test("Mitglieder per CSV importieren: Vorschau, Bestaetigen, Einladungsmail", as
   await expect(page.getByText("Meyer; jun.", { exact: false }).first()).toBeVisible();
   await expectAccessible(page, "Mitglieder-Import: Vorschau");
 
+  // Pflicht-Haken (F1): Mitglieder wurden ueber die Einladung informiert
+  await expect(page.getByRole("button", { name: "1 Person einladen" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: /Personen informiert/ }).check();
   await page.getByRole("button", { name: "1 Person einladen" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Einladungen verschicken" }).click();
   await expect(page.getByRole("heading", { name: /Eingeladen, noch nicht beigetreten \(1\)/ })).toBeVisible();
