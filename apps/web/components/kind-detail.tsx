@@ -123,7 +123,7 @@ export function KindDetail({ id }: { id: string }) {
       {c.paused && (
         <div className="mb-4">
           <Alert tone="info">
-            Dein Kind ist {YOUTH_AGE_LIMIT} geworden. Das Jugendkonto ruht: Du kannst nichts mehr ändern, aber Daten ansehen, herunterladen, die Mitgliedschaft beenden und das Konto löschen. Ein eigenes Konto für dein Kind folgt später („Kommt später“).
+            Dein Kind ist {YOUTH_AGE_LIMIT} geworden. Das Jugendkonto ruht: Du kannst nichts mehr ändern und die Daten nicht mehr herunterladen (sie gehören jetzt deinem Kind), aber die Mitgliedschaft beenden und das Konto löschen. Ein eigenes Konto für dein Kind folgt später („Kommt später“).
           </Alert>
         </div>
       )}
@@ -251,9 +251,11 @@ export function KindDetail({ id }: { id: string }) {
       <SectionTitle>Daten</SectionTitle>
       <StoredAboutChild />
       <div className="mb-10 flex flex-wrap gap-3">
-        <Button variant="secondary" className="relative hit-area" onClick={() => void download()}>
-          <Download size={16} aria-hidden /> Daten ansehen und herunterladen
-        </Button>
+        {!c.paused && (
+          <Button variant="secondary" className="relative hit-area" onClick={() => void download()}>
+            <Download size={16} aria-hidden /> Daten ansehen und herunterladen
+          </Button>
+        )}
         <Button variant="danger" className="relative hit-area" onClick={() => setDeleteOpen(true)}>
           <Trash2 size={16} aria-hidden /> Jugendkonto löschen
         </Button>

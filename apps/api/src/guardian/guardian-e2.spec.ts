@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import { configureApp } from "../app.setup";
 import { YouthDirectory } from "../auth/youth-directory.service";
 import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
+import { addressHash } from "../mail/mail-limits";
 import { MemoryMailDriver } from "../mail/mail.drivers";
 import { MAIL_DRIVER } from "../mail/mail.service";
 import { PrivacyService } from "../privacy/privacy.service";
@@ -276,7 +278,7 @@ describe("Jugendkonten Etappe E2: zweiter Elternteil, Rechnungsempfaenger, Loesc
 
   it("P2: Kind-Export ohne Platzhalter-Adresse, Entwuerfe weg, ab 16 keine Eltern-Auskunft/-Loeschung, ruhende Konten nach 12 Monaten, Fehler je Konto", async () => {
     const paul = await signup("e2-paul", "Paul Elternteil");
-    const [a, b, c] = [await newChild(paul, "Ana", "Eins"), await newChild(paul, "Ben", "Zwei"), await newChild(paul, "Cem", "Drei")];
+    const [a, b, c, d] = [await newChild(paul, "Ana", "Eins"), await newChild(paul, "Ben", "Zwei"), await newChild(paul, "Cem", "Drei"), await newChild(paul, "Dora", "Vier")];
 
     // Export: keine *.invalid-Adresse, keine E-Mail-/Sperr-/Wartelisten-Bereiche; 2FA-Fristbeginn im normalen Export
     const exp = await req(paul, "GET", `/guardian/children/${a.id}/export`);
@@ -296,10 +298,11 @@ describe("Jugendkonten Etappe E2: zweiter Elternteil, Rechnungsempfaenger, Loesc
     expect(left.map((r) => r.status)).toEqual(["open"]);
     expect(left[0].subjectUserId).toBeNull();
 
-    // Ab dem 16. Geburtstag: Eltern koennen weder Auskunft noch Loeschung ausloesen
-    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(16), graduationStartedAt: new Date() }).where(eq(schema.youthProfiles.userId, b.id));
+    // Ab dem 16. Geburtstag: keine Eltern-Auskunft; Loeschung bleibt bis E5 erlaubt (Art. 17, Kind hat noch keinen Login)
+    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(16), graduationStartedAt: new Date() }).where(inArray(schema.youthProfiles.userId, [b.id, d.id]));
     expect((await req(paul, "GET", `/guardian/children/${b.id}/export`)).statusCode).toBe(409);
-    expect((await req(paul, "DELETE", `/guardian/children/${b.id}`, { password })).statusCode).toBe(409);
+    expect((await req(paul, "DELETE", `/guardian/children/${d.id}`, { password })).json()).toEqual({ status: "deleted" });
+    expect(await db.select().from(schema.users).where(eq(schema.users.id, d.id))).toHaveLength(0);
 
     // Ruhend seit 11 Monaten: bleibt; seit 13 Monaten: wird geloescht. Ein Fehler bei einem Konto stoppt die anderen nicht.
     const privacy = app.get(PrivacyService);
@@ -314,6 +317,46 @@ describe("Jugendkonten Etappe E2: zweiter Elternteil, Rechnungsempfaenger, Loesc
     spy.mockRestore();
     expect(await privacy.eraseOrphanedYouth()).toBeGreaterThanOrEqual(0); // naechster Lauf holt das gescheiterte nach
     expect(await db.select().from(schema.users).where(inArray(schema.users.id, [b.id, c.id]))).toHaveLength(0);
+  });
+
+  it("Einladung: parallele Annahmen ergeben nie drei Elternteile; ruhendes Kind/geplante Loeschung lehnen ab; Export enthaelt angenommene", async () => {
+    const [host, p1, p2] = [await signup("e2-race-host", "Host Eltern"), await signup("e2-race-p1", "Race Eins"), await signup("e2-race-p2", "Race Zwei")];
+    const kid = await newChild(host, "Rene", "Rennen");
+    // zwei offene Einladungen direkt anlegen (die API laesst bei einem Elternteil nur eine zu)
+    const tokens = ["race-token-1-" + "a".repeat(30), "race-token-2-" + "b".repeat(30)];
+    const sha = (v: string) => createHash("sha256").update(v).digest("hex");
+    const future = new Date(Date.now() + 3600_000);
+    await db.insert(schema.guardianInvites).values([
+      { youthUserId: kid.id, inviterUserId: host.id, tokenHash: sha(tokens[0]), emailHash: addressHash(p1.email), expiresAt: future },
+      { youthUserId: kid.id, inviterUserId: host.id, tokenHash: sha(tokens[1]), emailHash: addressHash(p2.email), expiresAt: future },
+    ]);
+    const results = await Promise.all([
+      req(p1, "POST", `/guardian/invites/${tokens[0]}/accept`, { confirmGuardian: true }),
+      req(p2, "POST", `/guardian/invites/${tokens[1]}/accept`, { confirmGuardian: true }),
+    ]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    const active = await db.select().from(schema.guardianships).where(and(eq(schema.guardianships.youthUserId, kid.id), eq(schema.guardianships.status, "active")));
+    expect(active).toHaveLength(2);
+
+    // Export des Annehmenden enthaelt die angenommene Einladung
+    const accepter = results[0].statusCode === 200 ? p1 : p2;
+    const exp = (await req(accepter, "GET", "/privacy/export")).json();
+    expect(exp.guardianship.guardianInvitesAccepted).toContainEqual(expect.objectContaining({ childId: kid.id }));
+
+    // Ruhendes Kind und geplante Loeschung: Annahme wie bei ungueltigem Link abgelehnt
+    const solo = await newChild(host, "Sina", "Solo");
+    const late = await signup("e2-race-late", "Race Spaet");
+    const mk = async (name: string) => {
+      const t = name + "x".repeat(40);
+      await db.insert(schema.guardianInvites).values({ youthUserId: solo.id, inviterUserId: host.id, tokenHash: sha(t), emailHash: addressHash(late.email), expiresAt: future });
+      return t;
+    };
+    const t1 = await mk("ruht-");
+    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(16), graduationStartedAt: new Date() }).where(eq(schema.youthProfiles.userId, solo.id));
+    expect((await req(late, "POST", `/guardian/invites/${t1}/accept`, { confirmGuardian: true })).statusCode).toBe(404);
+    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(10), graduationStartedAt: null, deletionRequestedAt: new Date() }).where(eq(schema.youthProfiles.userId, solo.id));
+    expect((await req(late, "POST", `/guardian/invites/${t1}/accept`, { confirmGuardian: true })).statusCode).toBe(404);
+    expect((await req(late, "GET", `/guardian/invites/${t1}`)).statusCode).toBe(404);
   });
 
   it("P2: Graduierungsjob arbeitet unerledigte Faelle nach Faelligkeit ab und ist idempotent", async () => {

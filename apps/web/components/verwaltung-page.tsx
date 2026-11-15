@@ -3,8 +3,11 @@
 import type { ReactNode } from "react";
 import type { OrgRole } from "@vereine/shared";
 import { itemsForRole, VERWALTUNG_ITEMS, useVerwaltung } from "@/lib/verwaltung";
-import { AvvBanner } from "./avv-admin";
+import dynamic from "next/dynamic";
 import { Alert, ArrowLink, BackLink, CardSkeletons, EmptyState, ErrorState, PageHeader, Select, Skeleton } from "./ui";
+
+// Banner braucht keinen ersten Render: Code erst nachladen
+const AvvBanner = dynamic(() => import("./avv-admin").then((m) => m.AvvBanner));
 
 export type VerwaltungCtx = { slug: string; role: OrgRole; refresh: () => void; onError: (m: string | null) => void };
 

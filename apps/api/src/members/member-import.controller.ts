@@ -44,6 +44,14 @@ export class MemberImportController {
     return this.imports.listPending(user, slug, { limit: limit ? Number(limit) || undefined : undefined, offset: offset ? Number(offset) || undefined : undefined });
   }
 
+  /** Einladung erneut senden (neuer Link, neue Frist; der alte Link wird ungueltig). */
+  @Post("pending/:id/resend")
+  @HttpCode(204)
+  resend(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<void> {
+    requireVerifiedEmail(user);
+    return this.imports.resendPending(user, slug, id);
+  }
+
   @Delete("pending/:id")
   @HttpCode(204)
   remove(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string): Promise<void> {

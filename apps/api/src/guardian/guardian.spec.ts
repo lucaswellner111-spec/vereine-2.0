@@ -265,6 +265,8 @@ describe("Jugendkonten: Eltern verwalten Kinder (Etappe E1)", () => {
     expect(drafts).toHaveLength(2);
     expect(drafts.every((d) => d.recipientUserId === pia.id && d.recipientName === "Pia Elternteil")).toBe(true);
     expect(drafts.map((d) => d.subjectName).sort()).toEqual(["Lena Kowalski", "Max Mustermann"]);
+    // Kinder-Entwurf: Mitglied ist das Kind, nicht der Elternteil (kein Hinweis "nicht mehr Mitglied")
+    expect(drafts.some((d) => d.subjectName === "Lena Kowalski" && d.recipientLeft)).toBe(false);
     const lenaInv = drafts.find((d) => d.subjectName === "Lena Kowalski")!;
     const detail = (await req(vera, "GET", `/invoices/${lenaInv.id}`)).json() as InvoiceDetail;
     expect(detail.items[0].description).toBe("Jugend 2027 für Lena Kowalski");

@@ -22,7 +22,7 @@ const webCommand = process.env.E2E_WEB_DEV
 export default defineConfig({
   testDir: "./tests",
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 15_000 }, // lokal 3 Worker ohne Wiederholung: unter Last brauchte der erste Seitenaufbau > 10 s
   fullyParallel: false,
   forbidOnly: CI,
   retries: CI ? 1 : 0,

@@ -261,4 +261,12 @@ describe("Rechnungen (Verein -> Mitglied)", () => {
     expect(row.issuerIban).toBe("DE02120300000000202051"); // PDF wird aus dieser Kopie erzeugt
     expect((await req(vera, "GET", `/invoices/${draft.id}/pdf`)).statusCode).toBe(200);
   });
+
+  it("Entwurf an ausgetretenes Mitglied: Hinweis in der Vereinsliste", async () => {
+    const draft = (await create(vera, ben)).json();
+    const flag = async () => ((await req(vera, "GET", `/orgs/${org}/invoices?status=draft`)).json() as { id: string; recipientLeft?: boolean }[]).find((i) => i.id === draft.id)?.recipientLeft;
+    expect(await flag()).toBeFalsy();
+    expect((await req(ben, "DELETE", `/orgs/${org}/members/${ben.id}`)).statusCode).toBe(204);
+    expect(await flag()).toBe(true);
+  });
 });

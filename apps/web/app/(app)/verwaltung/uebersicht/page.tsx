@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardPanel } from "@/components/members-admin";
+import { DashboardPanel } from "@/components/dashboard-panel";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { VerwaltungPage } from "@/components/verwaltung-page";
 

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { BillingService } from "../billing/billing.service";
 import { AuditService } from "../auth/audit.service";
 import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
@@ -14,7 +15,7 @@ import { PrivacyService } from "./privacy.service";
 
 export { RETENTION, RETENTION_BATCH } from "../common/retention";
 
-type Step = "notifications" | "deletedPosts" | "auditLog" | "attendance" | "invites" | "authTokens" | "pendingAccounts" | "mailSuppressions" | "pendingMembers" | "waitlist" | "orphanedYouth" | "guardianConsents";
+type Step = "notifications" | "deletedPosts" | "auditLog" | "attendance" | "invites" | "authTokens" | "pendingAccounts" | "mailSuppressions" | "pendingMembers" | "waitlist" | "orphanedYouth" | "guardianConsents" | "invoices";
 
 /**
  * Taeglicher Aufraeumjob `privacy.retention`. Kennt keine Tabellen: jeder Bereich loescht seine eigenen Daten
@@ -37,6 +38,7 @@ export class RetentionService implements OnModuleInit {
     @Inject(MemberImportService) private readonly memberImports: MemberImportService,
     @Inject(WaitlistService) private readonly waitlist: WaitlistService,
     @Inject(GuardianService) private readonly guardians: GuardianService,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   onModuleInit() {
@@ -58,6 +60,7 @@ export class RetentionService implements OnModuleInit {
       ["waitlist", () => this.waitlist.purgeExpired()],
       ["orphanedYouth", () => this.privacy.eraseOrphanedYouth()],
       ["guardianConsents", () => this.guardians.purgeExpired()],
+      ["invoices", () => this.billing.purgeExpired()],
     ];
   }
 

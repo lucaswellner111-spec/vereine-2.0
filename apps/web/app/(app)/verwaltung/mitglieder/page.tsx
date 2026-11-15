@@ -1,6 +1,6 @@
 "use client";
 
-import { MemberRegistry } from "@/components/members-admin";
+import { MemberRegistry } from "@/components/members-registry";
 import { VerwaltungPage } from "@/components/verwaltung-page";
 
 export default function MitgliederPage() {

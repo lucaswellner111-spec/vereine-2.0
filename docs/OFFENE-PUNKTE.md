@@ -1,12 +1,24 @@
 # Offene Punkte (Backlog)
 
-Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert durch" nennt, was zuerst passieren muss.
+Stand: 2026-11-15 (Abschnitte teils älter, jeweils mit eigenem Stand). Reihenfolge innerhalb einer Gruppe = Empfehlung, offene Punkte zuerst, Erledigtes am Ende. "Blockiert durch" nennt, was zuerst passieren muss.
+
+## Blocker beim Nutzer (Stand 2026-11-15)
+Nur du kannst diese Punkte entscheiden oder ausführen (Quellen: diese Datei, `docs/PLAN-NACHTLAUF-2026-11-16.md` „Nicht ohne Entscheidung des Nutzers“):
+- **Firma/UG-Gründung** (Betreiber, Verträge, Zahlungsanbieter-Konto hängen daran).
+- **Rechts- und Datenschutzfragen gebündelt an Anwalt/DSB:** Texte (Datenschutzerklärung, Impressum, AGB, Elternhinweise sind Entwürfe), Fristen, AVV-Vorlage, DSFA, DSA-Fragen, Jugendkonten (siehe Abschnitte „Rechtliches“, „Jugendkonten und Texte, Paket P2“, P1, P4a–P4c, P5, S2, S5, S7).
+- **Zahlungsanbieter wählen** (Mollie/Stripe Connect) und Testschlüssel liefern; Zahlungen/Spenden bleiben bis dahin „Kommt später“.
+- **Mailversand aktivieren** (`MAIL_DRIVER=smtp`, Scaleway-AVV, SPF/DKIM/DMARC, Zugangsdaten nur als Server-Secret).
+- **Backup:** `age`-Schlüssel, Backup-Cron installieren (braucht deine ausdrückliche Freigabe), verschlüsselte Kopie auf Storage Box.
+- **Hetzner-Cloud-Firewall** setzen (22 nur eigene IP, 80/443 offen); ebenso Server-Rescale und Webhosting-Paket prüfen.
+- **Jugend E3–E5** (Login für Kinder, Kommentare/Chats, Übernahme mit 16): erst nach Rückmeldung zu den Rechtsfragen (`docs/welle2/JUGEND-KONZEPT.md`).
+- **Native Apps:** später, Entscheidung beim Nutzer.
+- **k6 installieren** für den Lasttest auf Staging (Lasttest-Ausführung offen, siehe Abschnitt „Produkt“).
 
 ## Sicherheit
 | Punkt | Warum | Blockiert durch |
 |---|---|---|
 | E-Mail-Bestätigung + Passwort-Reset | **Gebaut in S2** (Registrierung antwortet immer 202, kein 409 mehr); aktiv erst mit `MAIL_DRIVER=smtp` | Scaleway-AVV + SPF/DKIM/DMARC |
-| Passkeys (WebAuthn); 2FA-Pflicht für Vorstände/Plattform-Admins | TOTP ist gebaut (freiwillig); Pflicht und Passkeys fehlen | – |
+| Passkeys (WebAuthn); 2FA-Pflicht für Vorstände/Plattform-Admins | TOTP ist gebaut, Pflicht für Vorstand und Kasse mit Frist ebenfalls (`two_factor_required_since`); Passkeys und Pflicht für Plattform-Admins fehlen | – |
 | Datenbank-Rollen je Bereich (identity/social/chat/billing) | Least Privilege: ein SQL-Fehler im Chat soll keine Nutzerdaten lesen können | Refactor auf mehrere DB-Verbindungen; sinnvoll beim DB-Server-Umzug |
 | CSP mit Nonces statt 'unsafe-inline' | Härtung gegen XSS | Next.js-Middleware |
 | Monitoring + Alarme (Prometheus/Grafana/Loki) | Auslöser der Server-Aufteilung sichtbar machen, Worker-Ausfall erkennen | – |
@@ -75,16 +87,16 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 
 ## Härtung Paket P1: offen (Stand 2026-11-07)
 - **Art. 20 DSA:** erledigte Chat-Meldungen werden 30 Tage nach der Prüfung gelöscht; das interne Beschwerdeverfahren verlangt, Entscheidungen 6 Monate anfechtbar zu halten → Frist mit Anwalt/DSB klären (z. B. Entscheidung + Begründung 6 Monate, Beweiskopie 30 Tage).
-- **Finalisierte Rechnungen gelöschter Vereine** bleiben bis zum Ende der Aufbewahrungsfrist (8–10 Jahre) in `billing.invoices` (Empfänger sieht sie weiter unter „Meine Rechnungen“); ein Löschjob nach Fristablauf fehlt noch. `billing.invoice_counters` bleibt ebenfalls erhalten.
+- **Finalisierte Rechnungen gelöschter Vereine** bleiben bis zum Ende der Aufbewahrungsfrist (8–10 Jahre) in `billing.invoices` (Empfänger sieht sie weiter unter „Meine Rechnungen“); ~~Löschjob nach Fristablauf~~ erledigt: `BillingService.purgeExpired` (Schritt `invoices` in `privacy.retention`, 10 Jahre ab Ende des Finalisierungsjahres, `RETENTION.invoices`); `invoice_counters` gelöschter Vereine verschwinden, sobald keine Rechnung mehr übrig ist. Offen: Rechnungen **bestehender** Vereine älter als 10 Jahre bleiben (Verein ist Verantwortlicher; automatisch löschen oder Hinweis an den Verein? mit DSB/Steuerberatung klären, ob 8 oder 10 Jahre je Belegart).
 - Grenzfall Vereinslöschung: tritt zwischen Vorprüfung und Löschung jemand bei, bleibt der Verein ohne Vorstand bestehen – Plattform-Werkzeug „Vorstand setzen“ fehlt.
 - Meldungen aus der Zeit vor Migration 0016 haben keinen eigenen Schlüssel; wurde ihre Unterhaltung gelöscht, ist die Beweiskopie nicht mehr lesbar (0016 löscht leere Gruppen mit offenen Meldungen deshalb nicht).
 - Aufräumen nach Austritt/Vereinslöschung läuft nach dem Commit; stürzt der Prozess genau dazwischen ab, unterbleibt es → später Outbox-Zeile in derselben Transaktion.
-- Während der Lösch-Sperrfrist des einzigen Vorstands sind offene Einladungen des Vereins noch gültig → beim Löschen widerrufen.
 - Push: wer den (geheimen) Endpunkt eines fremden Geräts kennt, kann dessen Abo durch eigenes Anmelden entfernen; geringes Risiko, akzeptiert.
+- ~~Während der Lösch-Sperrfrist des einzigen Vorstands sind offene Einladungen des Vereins noch gültig~~ → erledigt: `OrgAdminService.revokeOpenInvites` beim Löschantrag (Test in `org-lifecycle.spec.ts`).
 
 ## Oberfläche Paket Q2: offen (Stand 2026-11-07)
 - **Zusagen-Anzeige:** aktive Mitglieder sehen bei internen/Team-Terminen Namen und Profilbilder der Zusagen (ohne eigene Einwilligung). Mit DSB klären, ob Vereinszweck (Art. 6 Abs. 1 lit. b/f) reicht oder ein Opt-out („Meine Zusage nur als Zahl zeigen“) nötig ist.
-- Benachrichtigungen kommen per Polling (30 s, pausiert im Hintergrund); Live-Zustellung über den Socket fehlt noch.
+- ~~Benachrichtigungen kommen per Polling (30 s); Live-Zustellung über den Socket fehlt noch.~~ erledigt: `notification-bell.tsx` bekommt den Zähler live über den Socket (NotificationHub, Redis Pub/Sub, chat-gateway); Polling nur noch als Rückfall bei getrenntem Socket.
 
 ## Paket P4a: offen (Stand 2026-11-08)
 - **DSA-Beweissicherung bei gelöschten Kommentaren:** „Entfernen“ einer Kommentarmeldung löscht den Kommentar endgültig, die Meldung verschwindet per Kaskade; das Audit-Log enthält nur IDs. Mit DSB/Anwalt klären: Beweiskopie (verschlüsselt, befristet wie bei Chat-Meldungen) und Begründung an den Kommentarautor (Art. 17 DSA; bisher keine Benachrichtigung, da keine neue Art vorgesehen).
@@ -115,12 +127,11 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **Frist für `billing.fee_runs`** festlegen (Vorschlag: mit den Rechnungen); `created_by` bleibt nach Kontolöschung stehen (wie bei Rechnungen) – mit DSB klären.
 - Beitragslauf rechnet je Lauf **einen** Betrag je Klasse (Betrag je Intervall); anteilige Beiträge (Eintritt im Jahr), Intervall-Umrechnung (z. B. 12 × monatlich) und Mehrfachpositionen sind nicht gebaut. Klassen mit 0 € erzeugen Entwürfe über 0 €.
 - Finalisieren der Entwürfe eines Laufs geht nur einzeln; „Alle Entwürfe dieses Laufs finalisieren“ (Sammelaktion, ggf. als Job) nachrüsten. PDF weiter je Anfrage (kein Serien-PDF/Versand).
-- Robustheit (umgesetzt): Versuchszähler am Lauf (ab 5 keine automatische Wiederholung), Lebenszeichen nach jedem 200er-Block, Sweep-Job `billing.fee-run-sweep` alle 5 Min. (queued > 1 Min., running ohne Lebenszeichen > 15 Min.), Knopf „Erneut versuchen“ bei fehlgeschlagenen Läufen. Offen: Entwürfe ausgetretener Mitglieder werden nicht automatisch entfernt (bewusst, Kassenwart entscheidet); ggf. Hinweis in der Rechnungsliste.
+- Robustheit (umgesetzt): Versuchszähler am Lauf (ab 5 keine automatische Wiederholung), Lebenszeichen nach jedem 200er-Block, Sweep-Job `billing.fee-run-sweep` alle 5 Min. (queued > 1 Min., running ohne Lebenszeichen > 15 Min.), Knopf „Erneut versuchen“ bei fehlgeschlagenen Läufen. Entwürfe ausgetretener Mitglieder werden nicht automatisch entfernt (bewusst, Kassenwart entscheidet); die Rechnungsliste zeigt dazu den Hinweis „Nicht mehr Mitglied“ (erledigt).
 - 2000er-Grenze entfernt: `OrgsService.allActiveMembersWithRole` liest blockweise per Keyset (Primärschlüssel org_id, user_id) ohne Obergrenze; genutzt von Mitgliedsprofilen (`ensureProfiles`), Mitgliederliste, CSV-Export, Beitragslauf und `allActiveMemberIds` (Rechnungsempfänger, Namensliste für Vorstand/Moderation, Chat-Kandidaten). Vorher gingen dort Mitglieder ab Nr. 2001 still verloren. SKALIERUNG: Mitgliederliste und Export laden weiter alles in den Speicher und filtern dort (bei > 20.000 Mitgliedern Suche/Paging in die DB verlagern). Die Liste offener Rechnungen (`GET /orgs/:slug/invoices`, 500) und der Rechnungs-CSV-Export (5000/Jahr) haben weiter feste Grenzen.
 - GiroCode: Name im SEPA-Zeichensatz (Latin-1 bleibt, anderes wird „?“); ohne abschließenden Zeilenumbruch nach dem Verwendungszweck (EPC069-12: nach dem letzten belegten Feld kein Trenner). Mit echten Banking-Apps (Sparkasse, VR, ING, DKB) testen.
 
 ## Paket P5 (Datenschutz-Lücken, Aufräum-Jobs, Mail): offen (Stand 2026-11-08)
-- ~~Mailversand aktivieren~~ – erledigt in S2 (siehe unten).
 - **Scaleway TEM (Paris/FR):** AVV abschließen, Unterauftragsverarbeiter-Liste, Datenschutzerklärung, Domain-Einträge SPF/DKIM/DMARC; Zugangsdaten nur als Server-Secret (`SMTP_USER`/`SMTP_PASS`), nie im Repo. Für Rechnungsmails muss der AVV mit dem Verein den Mail-Anbieter nennen.
 - **Fristen mit DSB bestätigen:** Benachrichtigungen 180 Tage (früher Vorschlag 90), Zugriffsprotokoll 12 Monate / Moderation 24 Monate / Rechnungsaktionen 10 Jahre, Anwesenheit 24 Monate, gelöschte Beiträge 30 Tage (offene Meldung hält länger), abgelaufene/widerrufene Einladungen 30 Tage. Konstanten in `apps/api/src/privacy/retention.service.ts`.
 - **Mail-Jobdaten in Redis:** Adresse und Link (Token) liegen bis zum Versand in der Queue-Redis (AOF-persistiert); nach Erfolg und nach dem letzten Fehlversuch werden sie sofort entfernt. Tokens für Passwort-Reset trotzdem kurz gültig halten (Vorschlag 30–60 Min.) und nur gehasht speichern.
@@ -130,7 +141,8 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - `created_by` an Rechnungen und Beitragsläufen bleibt nach Kontolöschung (Frage aus P4c Teil 2 weiter offen); `chat.conversations.created_by` ebenso prüfen.
 - **DSA-Frage Kontolöschung:** Löscht jemand sein Konto, verschwinden seine Beiträge und Kommentare per Kaskade – samt **offener Meldungen** darüber (die Ausnahme „offene Meldung hält den Beitrag“ gilt nur für das eigene Löschen eines Beitrags und den 30-Tage-Job). Mit Anwalt/DSB klären, ob gemeldete Inhalte als Beweis (verschlüsselte Kopie, Frist) die Kontolöschung überstehen müssen (wie Chat-Meldungen, Art. 17 Abs. 3 lit. e DSGVO).
 - Aufräumjob: schlägt ein Schritt fehl, laufen die anderen weiter; der Job meldet am Ende einen Fehler mit den Schrittnamen (BullMQ wiederholt ihn). Ein Monitoring-Alarm darauf fehlt noch.
-- Anwesenheits-Export (CSV/PDF) für Vereine weiter offen (nicht Teil von P5).
+- Anwesenheits-Export (CSV/PDF) für Vereine weiter offen (nicht Teil von P5; im Code kein Export in `attendance.service.ts` gefunden).
+- ~~Mailversand aktivieren~~ – Code erledigt in S2 (siehe unten); Aktivieren auf dem Server liegt beim Nutzer.
 
 ## Paket S2 (Mail mit Scaleway + Kostenbremse): offen (Stand 2026-11-09)
 - **Aktivieren auf dem Server:** `MAIL_DRIVER=smtp`, `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`MAIL_FROM` (optional `MAIL_REPLY_TO`, `MAIL_DAILY_LIMIT`, `MAIL_MONTHLY_LIMIT`) nur als Server-Secret in `/opt/vereine/.env`; `APP_URL` kommt aus `WEB_ORIGIN`. Vorher Scaleway-AVV, SPF/DKIM/DMARC, Datenschutzerklärung.
@@ -142,15 +154,15 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **Rechtsfragen (DSB):** Sperrlisten-Fristen 12/36 Monate; Sammelmail als Einwilligung vs. Vertrag; Einladung per Mail an fremde Adresse (lit. f des Vereins, Hinweis in AVV/Nutzungsbedingungen); Rechnungsmail im Auftrag des Vereins.
 - **Sammelmail:** läuft stündlich ab 07:00 (Berlin), höchstens einmal am Tag, nur Anzahlen; Likes nie. SKALIERUNG: Abfrage je Nutzer – bei vielen Tausend Abonnenten in Batches/Jobs aufteilen.
 - **Weitere Mails später:** Termin-Erinnerungen, Austritt/Beitragsklasse – bewusst nicht in S2.
-- **Secrets-Trennung (ARCHITEKTUR Punkt 5):** SMTP-Zugang liegt derzeit in `api` **und** `worker`, weil der Treiber beim Start die Konfiguration prüft; versendet wird nur im Worker. Später den Treiber in der API erst beim Versand anlegen und `SMTP_USER`/`SMTP_PASS` nur dem Worker geben.
+- ~~**Secrets-Trennung (ARCHITEKTUR Punkt 5):**~~ erledigt (LazyMailDriver, SMTP_* nur im worker). SMTP-Zugang liegt derzeit in `api` **und** `worker`, weil der Treiber beim Start die Konfiguration prüft; versendet wird nur im Worker. Später den Treiber in der API erst beim Versand anlegen und `SMTP_USER`/`SMTP_PASS` nur dem Worker geben.
 
 ## Paket S5 (Mitglieder-Import per CSV): offen (Stand 2026-11-10)
 - **Rechtsfragen (DSB):** Einladungsmail an importierte Mitglieder (lit. b des Vereins, hilfsweise lit. f); Informationspflicht des Vereins (Art. 13/14) vor dem Import in AVV-Vorlage/Nutzungsbedingungen aufnehmen; Fristen 30 Tage nach Versand / 60 Tage unversendet bestätigen; **Minderjährige** im Import (Einladung an das Kind, Plattform-Mindestalter 16) – derzeit keine Altersprüfung und kein Geburtsdatum im Import.
 - **Zeilen ohne E-Mail** werden abgelehnt; reine Stammdaten-Erfassung ohne Konto ist nicht möglich (`member_profiles` braucht ein Konto). Falls Vereine das brauchen: eigenes Konzept (Mitglieder ohne Konto).
 - **Weitere Spalten** (Anschrift, Telefon, Geburtsdatum) werden bewusst nicht übernommen – Mitglieder pflegen sie selbst. Ggf. später optional mit Zustimmung bei Annahme.
-- **Erneut senden** einer abgelaufenen Import-Einladung fehlt (Workaround: zurückziehen und neu importieren).
 - **Vereinslimit 100 Einladungen/Tag** gilt für Import und Einzel-Einladungen zusammen; das Kontolimit (20/Tag) gilt beim Import nicht (Massenversand nur über das Vereinslimit). Großer Import (500) dauert 5 Tage – ggf. Limit je Vereinsgröße/Tarif.
 - SKALIERUNG: Die Dublettenprüfung gegen vorhandene Mitglieder lädt die Adressen aller aktiven Mitglieder (UsersDirectory.mailContacts); bei sehr großen Vereinen gezielte Abfrage nach den Adressen der Datei (Hash-Index) nutzen.
+- ~~**Erneut senden** einer abgelaufenen Import-Einladung~~ erledigt: `POST /orgs/:slug/member-imports/pending/:id/resend` (alter Link ungültig, neuer Ablauf, Versand über Kostenbremse), Knopf in der Liste.
 
 ## S6 Story-Kacheln und OG-Bilder
 
@@ -171,7 +183,9 @@ Quellen: `docs/welle2/JUGEND-KONZEPT.md` 3.6, `D2-DOKU.md` Abschnitt 5, `F1-DOKU
 - **Namenskopie des Kindes** auf aufbewahrungspflichtigen Rechnungen (`subject_name`), Rechnung an den Elternteil mit Kindesbezug (GoBD).
 - **Anwesenheit Minderjähriger:** 12 oder 24 Monate; Information der Eltern.
 - **Sorgerechtskonflikt, Zwei-Eltern-Grenze:** höchstens zwei Elternteile (Patchwork, Vormund, Pflegeeltern?); „ein Widerspruch genügt“ ist Produktentscheidung; Löschung durch einen Elternteil nach 7 Tagen gegen Widerspruch des anderen (Gleichrang).
-- **Ruhen ab 16:** Wirkung auf Mitgliedschaft und Rechnungsempfänger; Löschung nach 12 Monaten ohne Übernahme (Vorschlag); Eltern-Export/-Löschung nur bis zum 16. Geburtstag; Neu-Einwilligung nötig? (E5 noch nicht gebaut).
+- **Ruhen ab 16:** Wirkung auf Mitgliedschaft und Rechnungsempfänger; Löschung nach 12 Monaten ohne Übernahme (Vorschlag); Eltern-Export nur bis zum 16. Geburtstag; Neu-Einwilligung nötig? (E5 noch nicht gebaut).
+- **Löschung durch Eltern ab 16 (bis E5):** bis E5 dürfen Eltern ab 16 löschen, damit Art. 17 ausübbar bleibt (das Kind hat noch keinen Login); mit E5 neu entscheiden.
+- **Mindestalter für die Selbstauskunft „sorgeberechtigt“:** heute wird nur ein Jugendkonto abgelehnt, ein Mindestalter gibt es nicht; Rechtsfrage, ob und welches Alter nötig ist.
 - **Altersuntergrenze 6 Jahre** (Missbrauchsschutz, Wert offen).
 - **Import für Kinder:** Der Verein gibt Name, Geburtsdatum und Elternadresse an Klubnest; wie belegt der Verein die Information der Eltern (Art. 13/14)? Bindung der Einladung nur über Geburtsdatum.
 - **Mitlesen der Eltern in Chats, Zwei-Erwachsene-Regel, Direktnachrichten an Kinder** (erst mit E3/E4), Jugendschutzkonzept JMStV/JuSchG (§ 24a), chronologischer Feed für Minderjährige (DSA Art. 28), Foto-Einwilligungen (KUG).
@@ -180,4 +194,4 @@ Quellen: `docs/welle2/JUGEND-KONZEPT.md` 3.6, `D2-DOKU.md` Abschnitt 5, `F1-DOKU
 - **Sicherungsfrist** jetzt 14 tägliche + 4 wöchentliche Sätze = bis zu 5 Wochen (`infra/ops/lib.sh`): im Löschkonzept, in der TOM-Liste, im Betriebshandbuch und in der Datenschutzerklärung aktualisiert. AVV-Text angepasst als Fassung 4 (15.11.2026, `AVV_DOCUMENT`); Vereine mit älterer Zustimmung stimmen innerhalb der Übergangsfrist neu zu.
 - **`LEGAL_VERSION`:** keine erzwungene Neu-Zustimmung bei geänderten Rechtstexten (kein Dialog); Datenschutzerklärung sagt das ehrlich. Prüfen, ob das für den Launch genügt.
 - **Erledigte Meldungen 30 Tage** (Beweiskopie bei Chat-Meldungen siehe oben, Art. 20 DSA 6 Monate): Abwägung bleibt offen.
-- **Protokolle:** Caddy-Zugriffslog ist auf /24 bzw. /56 gekürzt und schwärzt Einladungs- und Kalender-Token; trotzdem als personenbezogen behandeln (14 Tage).
+- **Protokolle:** Caddy-Zugriffslog ist auf /24 bzw. /56 gekürzt und schwärzt Einladungs-Pfade, Kalender-Token und alle Query-Werte; trotzdem als personenbezogen behandeln (14 Tage).

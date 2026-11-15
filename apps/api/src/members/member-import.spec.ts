@@ -227,6 +227,26 @@ describe("Mitglieder-Import (CSV + Einladungen)", () => {
     expect(inv.revokedAt).not.toBeNull();
   });
 
+  it("Erneut senden: neues Token, neuer Ablauf, alter Link ungueltig; nur Vorstand", async () => {
+    const file = ["Vorname;Nachname;E-Mail", "Rene;Resend;rene@example.de"].join("\n");
+    expect((await upload(vera, base, file)).statusCode).toBe(201);
+    const [before] = await db.select().from(schema.pendingMembers).where(eq(schema.pendingMembers.email, "rene@example.de"));
+    const oldToken = /\/einladung\/([A-Za-z0-9_-]+)/.exec(mails.last("rene@example.de", "member-invite")!.text)![1];
+    await db.update(schema.pendingMembers).set({ inviteExpiresAt: new Date(Date.now() - 1000) }).where(eq(schema.pendingMembers.id, before.id));
+    expect((await req(mia, "POST", `${base}/pending/${before.id}/resend`)).statusCode).toBe(403);
+    expect((await req(vera, "POST", `${base}/pending/${before.id}/resend`)).statusCode).toBe(204);
+    const [after] = await db.select().from(schema.pendingMembers).where(eq(schema.pendingMembers.id, before.id));
+    expect(after.status).toBe("sent");
+    expect(after.inviteId).not.toBe(before.inviteId);
+    expect(after.inviteExpiresAt!.getTime()).toBeGreaterThan(Date.now());
+    const newToken = /\/einladung\/([A-Za-z0-9_-]+)/.exec(mails.last("rene@example.de", "member-invite")!.text)![1];
+    expect(newToken).not.toBe(oldToken);
+    expect((await req(mia, "GET", `/invites/${oldToken}`)).statusCode).toBe(404);
+    expect((await req(mia, "GET", `/invites/${newToken}`)).statusCode).toBe(200);
+    await req(vera, "DELETE", `${base}/pending/${before.id}`);
+    expect((await req(vera, "POST", `${base}/pending/${before.id}/resend`)).statusCode).toBe(404);
+  });
+
   it("Vormerkung waehrend des Versands entfernt: Einladung wird widerrufen", async () => {
     const mail = app.get(MailService);
     const file = ["Vorname;Nachname;E-Mail", "Rita;Race;rita@example.de"].join("\n");

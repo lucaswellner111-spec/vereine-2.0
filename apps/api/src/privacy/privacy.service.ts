@@ -232,7 +232,7 @@ export class PrivacyService implements OnModuleInit {
   /** Loeschung eines Jugendkontos durch einen Elternteil (Passwort des Elternteils); danach wie bei der Kontoloeschung. */
   async deleteChild(guardian: PublicUser, childId: string, password: string): Promise<DeleteChildResult> {
     if (!(await this.auth.verifyPassword(guardian.id, password))) throw new ForbiddenException("Passwort ist falsch.");
-    const child = await this.guardians.childForPrivacy(guardian.id, childId);
+    const child = await this.guardians.childForPrivacy(guardian.id, childId, "erase");
     // Zwei Elternteile: 7 Tage Vorankuendigung an den anderen, der widersprechen kann; geloescht wird dann vom Job privacy.retention
     const plan = await this.guardians.planDeletion(guardian.id, childId);
     if (plan.status === "scheduled") return plan;
@@ -253,9 +253,9 @@ export class PrivacyService implements OnModuleInit {
     for (const id of ids) {
       // Ein Fehler bei einem Konto haelt die anderen nicht auf; der naechste Lauf versucht es erneut
       try {
-        await this.guardians.auditDeleted(null, id); // Loeschung nach Vorankuendigung, ohne Elternteil bzw. nach 12 Monaten Ruhen (nur Kind-ID)
         await this.auth.beginAccountDeletion(id);
         await this.eraseEverything(id);
+        await this.guardians.auditDeleted(null, id); // Loeschung nach Vorankuendigung, ohne Elternteil bzw. nach 12 Monaten Ruhen (nur Kind-ID), erst nach Erfolg
         done += 1;
       } catch (err) {
         this.log.error(`Loeschung eines Jugendkontos fehlgeschlagen: ${describeError(err)}`);

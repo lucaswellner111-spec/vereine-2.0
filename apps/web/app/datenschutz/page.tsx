@@ -482,10 +482,10 @@ export default function Page() {
               <H3>Rechte, Löschung und Fristen</H3>
               <UL>
                 <li>
-                  <Strong>Auskunft und Export:</Strong> Eltern laden die Daten ihres Kindes unter „Meine Kinder“ herunter, <Strong>bis zum 16. Geburtstag</Strong>. Ab dem Geburtstag gehören die Daten dem Jugendlichen; Eltern können sie dann nicht mehr abrufen oder löschen.
+                  <Strong>Auskunft und Export:</Strong> Eltern laden die Daten ihres Kindes unter „Meine Kinder“ herunter, <Strong>bis zum 16. Geburtstag</Strong>. Ab dem Geburtstag gehören die Daten dem Jugendlichen; Eltern können sie dann nicht mehr abrufen.
                 </li>
                 <li>
-                  <Strong>Löschung:</Strong> Eltern löschen das Jugendkonto jederzeit (mit Passwort), ebenfalls bis zum 16. Geburtstag. Gibt es zwei Elternteile, kündigen wir die Löschung dem anderen Elternteil 7 Tage vorher an; er kann widersprechen. Löscht der letzte Elternteil sein eigenes Konto, ruht das Jugendkonto und wird nach 30 Tagen gelöscht. Rechnungen bleiben mit der Namenskopie wegen der Aufbewahrungspflicht erhalten, die Verknüpfung zum Konto entfällt.
+                  <Strong>Löschung:</Strong> Eltern löschen das Jugendkonto jederzeit (mit Passwort). Solange die Übernahme als eigenes Konto noch nicht freigeschaltet ist, geht das auch nach dem 16. Geburtstag, damit die Löschung immer möglich bleibt. Gibt es zwei Elternteile, kündigen wir die Löschung dem anderen Elternteil 7 Tage vorher an; er kann widersprechen. Löscht der letzte Elternteil sein eigenes Konto, ruht das Jugendkonto und wird nach 30 Tagen gelöscht. Rechnungen bleiben mit der Namenskopie wegen der Aufbewahrungspflicht erhalten, die Verknüpfung zum Konto entfällt.
                 </li>
                 <li>
                   <Strong>Ab 16:</Strong> Am 16. Geburtstag ruht das Jugendkonto; die Eltern erhalten vorher Hinweise (30 und 7 Tage vorher). Wird es nicht als eigenes Konto übernommen, löschen wir es nach 12 Monaten. Die Eltern-Einwilligungen gelten nicht als eigene des Jugendlichen weiter. Eine Übernahme als eigenes Konto ist technisch noch nicht freigeschaltet.

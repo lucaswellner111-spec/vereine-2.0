@@ -473,6 +473,27 @@ export class MemberImportService implements OnModuleInit {
     await this.audit.record(user.id, "members.import.removed", { orgId: org.id, pendingId: id });
   }
 
+  /** Erneut senden: alte Einladung widerrufen, Vormerkung zurueck in die Warteschlange (neues Token und Ablauf beim Versand). */
+  async resendPending(user: PublicUser, slug: string, id: string): Promise<void> {
+    const org = await this.requireAdmin(user, slug);
+    await this.avv.assertAccepted(org.id);
+    await enforceLimit(this.cache, `import:resend:${org.id}`, 50, 3600, limitMessage("erneut gesendete Einladungen"));
+    // Lesen und Zuruecksetzen unter Zeilensperre: Doppelklicks laufen nacheinander, der zweite findet "sent" nicht mehr
+    const oldInviteId = await this.db.transaction(async (tx) => {
+      const [old] = await tx.select({ inviteId: pendingMembers.inviteId }).from(pendingMembers).where(and(eq(pendingMembers.id, id), eq(pendingMembers.orgId, org.id), eq(pendingMembers.status, "sent"))).for("update");
+      if (!old) throw new NotFoundException("Eintrag nicht gefunden oder noch nicht verschickt.");
+      // createdAt neu: sonst loescht die Frist fuer nie versendete Vormerkungen (60 Tage) alte Eintraege vor dem Versand
+      await tx
+        .update(pendingMembers)
+        .set({ status: "queued", sentAt: null, inviteId: null, inviteExpiresAt: null, createdAt: new Date() })
+        .where(eq(pendingMembers.id, id));
+      return old.inviteId;
+    });
+    if (oldInviteId) await this.invites.revokeImportInvites(org.id, [oldInviteId]);
+    await this.audit.record(user.id, "members.import.resent", { orgId: org.id, pendingId: id });
+    await this.jobs.enqueue(JOB, { orgId: org.id }, { attempts: 3, backoffMs: 60_000 }).catch((e) => this.log.error(`Import-Einladungen nicht eingereiht: ${describeError(e)}`));
+  }
+
   // --- Loeschfristen ------------------------------------------------------------------------------
 
   /** Versendete Vormerkungen bei Ablauf der Einladung, nie versendete nach 60 Tagen loeschen (Job privacy.retention). */

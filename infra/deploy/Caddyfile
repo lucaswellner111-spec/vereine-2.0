@@ -63,7 +63,7 @@
 				request>headers>Authorization delete
 				request>headers>X-Forwarded-For delete
 				resp_headers>Set-Cookie delete
-				request>uri regexp "(/api/calendar/|/api/invites/|/einladung/|/eltern-einladung/|[?&]t=)[^/?&]+" "${1}GESCHWAERZT"
+				request>uri regexp "(/api/calendar/|/invites/|einladung/|[?&][^=&/]+=)[^/?&]+" "${1}GESCHWAERZT"
 			}
 		}
 	}

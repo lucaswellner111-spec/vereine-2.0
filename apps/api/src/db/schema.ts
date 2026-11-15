@@ -153,6 +153,9 @@ export const guardianInvites = identity.table(
   },
   (t) => [
     index("guardian_invites_youth_idx").on(t.youthUserId, t.status),
+    // Fremdschluessel-Indizes: Kontoloeschung setzt diese Spalten auf NULL (sonst Tabellenscan)
+    index("guardian_invites_inviter_idx").on(t.inviterUserId),
+    index("guardian_invites_accepted_by_idx").on(t.acceptedBy),
     check("guardian_invites_status_chk", sql`status IN ('open', 'accepted', 'revoked')`),
   ],
 );
@@ -254,7 +257,11 @@ export const organizations = social.table(
     publicPage: boolean("public_page").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("organizations_tags_idx").using("gin", t.tags)],
+  (t) => [
+    index("organizations_tags_idx").using("gin", t.tags),
+    index("organizations_logo_media_idx").on(t.logoMediaId).where(sql`logo_media_id IS NOT NULL`),
+    index("organizations_banner_media_idx").on(t.bannerMediaId).where(sql`banner_media_id IS NOT NULL`),
+  ],
 );
 
 /** Einladungslinks: nur der SHA-256-Hash des Tokens wird gespeichert (wie bei Sessions). */
@@ -434,6 +441,7 @@ export const reports = social.table("reports", {
   index("reports_org_status_idx").on(t.orgId, t.status),
   index("reports_post_status_idx").on(t.postId, t.status),
   index("reports_comment_idx").on(t.commentId),
+  index("reports_reporter_idx").on(t.reporterId),
   // Je Person hoechstens eine offene Meldung pro Beitrag bzw. pro Kommentar (Doppelklicks, Spam).
   uniqueIndex("reports_open_once_uq").on(t.postId, t.reporterId).where(sql`status = 'open' AND comment_id IS NULL`),
   uniqueIndex("reports_comment_open_once_uq").on(t.commentId, t.reporterId).where(sql`status = 'open' AND comment_id IS NOT NULL`),
@@ -992,6 +1000,7 @@ export const pendingMembers = membersArea.table(
     unique("pending_members_no_unique").on(t.orgId, t.memberNo),
     index("pending_members_status_idx").on(t.orgId, t.status),
     index("pending_members_invite_idx").on(t.inviteId),
+    index("pending_members_fee_class_idx").on(t.feeClassId),
   ],
 );
 

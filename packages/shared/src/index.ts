@@ -732,6 +732,8 @@ export type InvoiceSummary = {
   dueDate: string;
   totalCents: number;
   paidAt: string | null;
+  /** Nur in der Vereinsliste: Entwurf, dessen Empfaenger nicht mehr Mitglied ist. */
+  recipientLeft?: boolean;
 };
 export type InvoiceDetail = InvoiceSummary & {
   recipientAddress: string;

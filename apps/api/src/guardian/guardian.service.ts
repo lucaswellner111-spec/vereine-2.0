@@ -427,6 +427,9 @@ export class GuardianService implements OnModuleInit {
       throw new ForbiddenException("Diese Einladung gilt für ein Konto mit einer anderen E-Mail-Adresse. Melde dich mit der Adresse an, an die sie geschickt wurde.");
     }
     if (await this.youth.isGuardianOf(user.id, row.youthUserId)) throw new ConflictException("Du bist schon Elternteil dieses Kindes.");
+    // Ruhendes Kind (16+) oder geplante Loeschung: keine neuen Elternteile (generischer Fehler)
+    const [profile] = await this.db.select().from(youthProfiles).where(eq(youthProfiles.userId, row.youthUserId)).limit(1);
+    if (!profile || this.paused(profile) || profile.deletionRequestedAt) throw gone;
     return row;
   }
 
@@ -444,6 +447,10 @@ export class GuardianService implements OnModuleInit {
     const row = await this.usableInvite(user, token);
     await enforceLimit(this.cache, `guardian:accept:${user.id}`, 10, 86_400, limitMessage("Annahmen von Einladungen"));
     await this.db.transaction(async (tx) => {
+      // Zeile des Kindes sperren: parallele Annahmen laufen nacheinander, die Zaehlung danach sieht die vorherige Annahme
+      const [locked] = await tx.select().from(youthProfiles).where(eq(youthProfiles.userId, row.youthUserId)).for("update");
+      // Nach der Sperre erneut pruefen: parallel geplante Loeschung oder Ruhen (16+) laesst keinen neuen Elternteil mehr zu
+      if (!locked || this.paused(locked) || locked.deletionRequestedAt) throw new NotFoundException("Dieser Einladungslink ist ungültig oder abgelaufen.");
       const claimed = await tx
         .update(guardianInvites)
         .set({ status: "accepted", acceptedBy: user.id, acceptedAt: sql`now()` })
@@ -562,11 +569,12 @@ export class GuardianService implements OnModuleInit {
   // --- Datenschutz (Auskunft, Loeschung, Fristen) ---------------------------------------------------------------
 
   /** Das Kind fuer Auskunft/Loeschung durch den Elternteil: Pruefung der Elternschaft, liefert das Nutzerobjekt des Kindes. */
-  async childForPrivacy(guardianId: string, childId: string): Promise<PublicUser> {
-    // Ab dem 16. Geburtstag endet die Verfuegungsgewalt der Eltern (Auskunft/Loeschung nur noch durch das Kind selbst)
+  async childForPrivacy(guardianId: string, childId: string, purpose: "export" | "erase" = "export"): Promise<PublicUser> {
+    // Ab dem 16. Geburtstag ist die Auskunft durch die Eltern gesperrt. Loeschung bleibt bis zur Uebernahme (E5) erlaubt,
+    // weil das Kind noch keinen Login hat und Art. 17 sonst nicht ausuebbar waere (siehe OFFENE-PUNKTE, Jugend P2).
     const { user, profile } = await this.requireChild(guardianId, childId);
-    if (this.paused(profile)) {
-      throw new ConflictException("Dein Kind ist 16 geworden. Auskunft und Löschung liegen jetzt bei deinem Kind, das Jugendkonto wird nach 12 Monaten automatisch gelöscht.");
+    if (purpose === "export" && this.paused(profile)) {
+      throw new ConflictException("Dein Kind ist 16 geworden. Die Auskunft liegt jetzt bei deinem Kind. Löschen kannst du das ruhende Jugendkonto weiterhin, sonst wird es nach 12 Monaten automatisch gelöscht.");
     }
     return this.childUser(user);
   }
@@ -598,10 +606,11 @@ export class GuardianService implements OnModuleInit {
       this.db.select().from(guardianConsents).where(eq(guardianConsents.guardianUserId, userId)).orderBy(guardianConsents.createdAt),
     ]);
     const orgs = await this.orgs.lookupByIds(given.flatMap((c) => (c.orgId ? [c.orgId] : [])));
-    const invited = await this.db.select().from(guardianInvites).where(eq(guardianInvites.inviterUserId, userId)).orderBy(guardianInvites.createdAt);
+    const invited = await this.db.select().from(guardianInvites).where(or(eq(guardianInvites.inviterUserId, userId), eq(guardianInvites.acceptedBy, userId))).orderBy(guardianInvites.createdAt);
     return {
       // Eingeladene Adresse wird nicht gespeichert (nur ein Hash zur Bindung der Annahme)
-      guardianInvitesSent: invited.map((i) => ({ childId: i.youthUserId, status: i.status, at: i.createdAt.toISOString(), expiresAt: i.expiresAt.toISOString() })),
+      guardianInvitesSent: invited.filter((i) => i.inviterUserId === userId).map((i) => ({ childId: i.youthUserId, status: i.status, at: i.createdAt.toISOString(), expiresAt: i.expiresAt.toISOString() })),
+      guardianInvitesAccepted: invited.filter((i) => i.acceptedBy === userId).map((i) => ({ childId: i.youthUserId, at: i.createdAt.toISOString(), acceptedAt: i.acceptedAt?.toISOString() ?? null })),
       children: links.map((l) => ({ childId: l.g.youthUserId, childName: l.name ?? null, status: l.g.status, billingContact: l.g.isBillingContact, since: l.g.createdAt.toISOString() })),
       consentsGiven: given.map((c) => ({ childId: c.youthUserId, purpose: c.purpose, club: c.orgId ? (orgs.get(c.orgId)?.name ?? null) : null, granted: c.granted, textVersion: c.textVersion, at: c.createdAt.toISOString() })),
     };

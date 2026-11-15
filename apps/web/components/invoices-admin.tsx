@@ -118,6 +118,7 @@ export function InvoicesAdmin({ slug, onError }: { slug: string; onError: (m: st
                       <span className="min-w-0 max-sm:truncate">{i.recipientName}</span>
                       <span className="shrink-0 font-normal sm:hidden"><InvoiceStatusBadge status={i.displayStatus} /></span>
                     </span>
+                    {i.recipientLeft && <span className="mt-0.5 block text-xs font-normal text-muted">Nicht mehr Mitglied – Entwurf prüfen oder löschen.</span>}
                   </td>
                   <td className={stackTable.td}><CellLabel>Fällig</CellLabel>{dateDe(i.dueDate)}</td>
                   <td className={stackTable.td}><CellLabel>Betrag</CellLabel>{eurCents(i.totalCents)}</td>

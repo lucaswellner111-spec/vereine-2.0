@@ -12,6 +12,8 @@ export const RETENTION = {
   auditModeration: "24 months",
   /** Rechnungsaktionen (finalisiert/bezahlt/storniert) wie die Rechnungen selbst (GoBD/AO). */
   auditFinance: "10 years",
+  /** Finalisierte Rechnungen geloeschter Vereine (GoBD/AO): ab Ende des Kalenderjahres der Finalisierung. */
+  invoices: "10 years",
   attendance: "24 months",
   /** Abgelaufene/widerrufene Einladungen bleiben noch kurz in der Liste des Vorstands sichtbar. */
   invites: "30 days",

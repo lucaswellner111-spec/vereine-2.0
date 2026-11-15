@@ -241,10 +241,23 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
 
 function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMemberPage> }) {
   const [removing, runRemove] = useBusy();
+  const [resending, runResend] = useBusy();
   const page = state.data;
   if (!page || page.total === 0) return null;
   const label = (p: PendingMemberItem) =>
     p.status === "queued" ? <Badge>wartet auf Versand</Badge> : p.status === "expired" ? <Badge tone="danger">abgelaufen</Badge> : <Badge tone="brand">eingeladen</Badge>;
+
+  async function resend(p: PendingMemberItem) {
+    await runResend(async () => {
+      try {
+        await api(`/orgs/${slug}/member-imports/pending/${p.id}/resend`, { method: "POST" });
+        state.reload();
+        toast.success("Einladung wird erneut verschickt. Der alte Link gilt nicht mehr.");
+      } catch (err) {
+        toast.error(describeError(err));
+      }
+    });
+  }
 
   async function remove(p: PendingMemberItem) {
     if (!(await ask(`Einladung für ${p.firstName} ${p.lastName} zurückziehen und die Angaben löschen?`, { confirmLabel: "Zurückziehen", danger: true }))) return;
@@ -273,6 +286,9 @@ function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMem
               <p className="break-all text-xs text-muted">{p.email}{p.youth && " (Eltern)"}{p.sentAt && ` · verschickt am ${dateDe(p.sentAt.slice(0, 10))}`}</p>
             </div>
             {label(p)}
+            {p.status !== "queued" && (
+              <Button size="sm" variant="ghost" disabled={resending} onClick={() => resend(p)} aria-label={`Einladung für ${p.firstName} ${p.lastName} erneut senden`}>Erneut senden</Button>
+            )}
             <Button size="sm" variant="ghost" disabled={removing} onClick={() => remove(p)} aria-label={`Einladung für ${p.firstName} ${p.lastName} zurückziehen`}>Zurückziehen</Button>
           </li>
         ))}

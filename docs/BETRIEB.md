@@ -135,6 +135,9 @@ Ziel: beweisen, dass die Sicherung **ohne** den Produktionsserver wiederherstell
 
 Alternativ ohne Cloud-Maschine: auf deinem Laptop mit Docker, gleiche Befehle (`fresh` braucht nur Docker, age und die Dateien).
 
+### 5.1a Protokoll der Restore-Proben
+- **2026-11-15 (Vorschau-Server, ohne age):** Handsicherung `backups/vereine-20261115-095618-vor-p1p4.sql.gz` (pg_dump, gzip) in die Wegwerf-Datenbank `restore_probe` im laufenden Postgres-Container eingespielt (`psql -v ON_ERROR_STOP=1`), Dauer ca. 1 s, ohne Fehler. Vergleich: 32 Migrationen (Stand vor P1–P4), Nutzer 15 und Beiträge 20, gleich wie live. Danach `dropdb restore_probe`, Live-Daten unberührt. Medien und verschlüsselte Sätze (`restore.sh fresh`) sind **nicht** geprüft, weil `age` und der Schlüssel noch fehlen (Entscheidung des Nutzers).
+
 ### 5.2 Echte Wiederherstellung (Notfall)
 
 Szenarien und Vorgehen:

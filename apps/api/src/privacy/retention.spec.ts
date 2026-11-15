@@ -14,6 +14,7 @@ import { StorageService } from "../media/storage.service";
 import { Logger } from "@nestjs/common";
 import { vi } from "vitest";
 import { AuditService } from "../auth/audit.service";
+import { BillingService } from "../billing/billing.service";
 import { EventsService } from "../events/events.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgAdminService } from "../orgs/org-admin.service";
@@ -27,6 +28,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
   let db: ReturnType<typeof drizzle<typeof schema>>;
   let retention: RetentionService;
   let storage: StorageService;
+  let billing: BillingService;
   let notificationsSvc: NotificationsService, postsSvc: PostsService, audit: AuditService, eventsSvc: EventsService, orgAdmin: OrgAdminService;
   let close: () => Promise<void>;
   const dir = mkdtempSync(join(tmpdir(), "vereine-retention-"));
@@ -44,6 +46,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
     notificationsSvc = app.get(NotificationsService);
     postsSvc = app.get(PostsService);
     audit = app.get(AuditService);
+    billing = app.get(BillingService);
     eventsSvc = app.get(EventsService);
     orgAdmin = app.get(OrgAdminService);
 
@@ -67,7 +70,7 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
 
   it("ist als taeglicher Job registriert und laeuft komplett", async () => {
     const result = await retention.runAll();
-    expect(Object.keys(result).sort()).toEqual(["attendance", "auditLog", "authTokens", "deletedPosts", "guardianConsents", "invites", "mailSuppressions", "notifications", "orphanedYouth", "pendingAccounts", "pendingMembers", "waitlist"]);
+    expect(Object.keys(result).sort()).toEqual(["attendance", "auditLog", "authTokens", "deletedPosts", "guardianConsents", "invites", "invoices", "mailSuppressions", "notifications", "orphanedYouth", "pendingAccounts", "pendingMembers", "waitlist"]);
   });
 
   it("ein fehlschlagender Schritt haelt die anderen nicht auf; Fehler am Ende mit Schrittnamen", async () => {
@@ -174,6 +177,35 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
     const left = new Set((await db.select({ id: schema.auditLog.id }).from(schema.auditLog)).map((r) => r.id));
     expect([0, 3, 4, 7].every((i) => left.has(rows[i].id))).toBe(true);
     expect([1, 2, 5, 6, 8].some((i) => left.has(rows[i].id))).toBe(false);
+  });
+
+  it("Rechnungen: finalisierte Rechnungen geloeschter Vereine nach 10 Jahren, Nummernkreis ohne Rest", async () => {
+    const gone = "00000000-0000-4000-8000-0000000000aa";
+    const gone2 = "00000000-0000-4000-8000-0000000000bb";
+    const base = { recipientName: "X", issuerName: "Weg e.V.", dueDate: "2000-01-31", createdBy: userA };
+    const years = (n: number) => new Date(Date.now() - n * 365 * DAY);
+    const inv = await db
+      .insert(schema.invoices)
+      .values([
+        { ...base, orgId: gone, number: "2010-0001", status: "paid", finalizedAt: years(12) }, // weg
+        { ...base, orgId: gone, number: "2025-0001", status: "open", finalizedAt: years(1) }, // bleibt (Frist laeuft)
+        { ...base, orgId: orgId, number: "2010-0001", status: "paid", finalizedAt: years(12) }, // bleibt (Verein besteht)
+        { ...base, orgId: gone2, number: "2010-0001", status: "void", finalizedAt: years(12) }, // weg
+      ])
+      .returning();
+    await db.insert(schema.invoiceItems).values({ invoiceId: inv[0].id, position: 1, description: "B", quantity: 1, unitCents: 100, vatRate: 0 });
+    await db.insert(schema.invoiceCounters).values([
+      { orgId: gone, year: 2010, lastNo: 1 }, // bleibt (Rechnung uebrig)
+      { orgId: gone2, year: 2010, lastNo: 1 }, // weg
+      { orgId, year: 2010, lastNo: 1 }, // bleibt (Verein besteht)
+    ]);
+    expect(await billing.purgeExpired()).toBe(2);
+    const left = (await db.select({ id: schema.invoices.id }).from(schema.invoices)).map((r) => r.id);
+    expect(left.sort()).toEqual([inv[1].id, inv[2].id].sort());
+    expect(await db.select().from(schema.invoiceItems).where(eq(schema.invoiceItems.invoiceId, inv[0].id))).toHaveLength(0);
+    expect((await db.select().from(schema.invoiceCounters)).map((c) => c.orgId).sort()).toEqual([gone, orgId].sort());
+    // zweiter Lauf: nichts mehr zu tun
+    expect(await billing.purgeExpired()).toBe(0);
   });
 
   it("Anwesenheit: 23 Monate bleiben, 25 Monate werden geloescht", async () => {

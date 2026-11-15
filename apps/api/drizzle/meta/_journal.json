@@ -246,6 +246,13 @@
       "when": 1794735031394,
       "tag": "0034_consents_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794738742288,
+      "tag": "0035_fk_indizes",
+      "breakpoints": true
     }
   ]
 }

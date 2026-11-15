@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNull, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, notExists, sql, type SQL } from "drizzle-orm";
 import type {
   CreateInvoiceInput,
   InvoiceDetail,
@@ -17,6 +17,7 @@ import { DB, type Database } from "../db/db.module";
 import { invoiceCounters, invoiceItems, invoices } from "../db/schema";
 import { JobsService } from "../jobs/jobs.service";
 import { appLink } from "../common/app-url";
+import { RETENTION } from "../common/retention";
 import { MailService } from "../mail/mail.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgEvents } from "../orgs/org-events";
@@ -62,12 +63,64 @@ export class BillingService implements OnModuleInit {
     this.jobs.define("billing.overdue", async () => void (await this.notifyOverdue()));
     this.jobs.every("billing.overdue", OVERDUE_INTERVAL_MS);
     // Verein geloescht: nur Entwuerfe entfernen. Finalisierte Rechnungen bleiben (Aufbewahrungspflicht, Ausstellerdaten
-    // liegen als Kopie in der Rechnung); ihr Loesch-Job nach Fristende ist noch offen (docs/OFFENE-PUNKTE.md).
+    // liegen als Kopie in der Rechnung); nach Fristende loescht `purgeExpired` (Job privacy.retention).
     this.orgEvents.onOrgDeleted("billing", (orgId) => this.deleteDraftsOfOrg(orgId));
   }
 
   async deleteDraftsOfOrg(orgId: string): Promise<void> {
     await this.db.delete(invoices).where(and(eq(invoices.orgId, orgId), eq(invoices.status, "draft")));
+  }
+
+  /**
+   * Loeschfrist (Job privacy.retention): finalisierte Rechnungen geloeschter Vereine nach 10 Jahren (ab Ende des Kalenderjahres
+   * der Finalisierung); Nummernkreise geloeschter Vereine, sobald keine Rechnung mehr uebrig ist. Rechnungen bestehender Vereine bleiben.
+   */
+  async purgeExpired(): Promise<number> {
+    const cutoff = sql`date_trunc('year', now()) - ${sql.raw(`interval '${RETENTION.invoices}'`)}`;
+    let total = 0;
+    // Je Verein einmal pruefen (Keyset ueber org_id), damit bestehende Vereine die Runden nicht blockieren.
+    let after: string | null = null;
+    for (;;) {
+      const page: { orgId: string }[] = await this.db
+        .selectDistinct({ orgId: invoices.orgId })
+        .from(invoices)
+        .where(and(ne(invoices.status, "draft"), isNotNull(invoices.finalizedAt), sql`${invoices.finalizedAt} < ${cutoff}`, after ? gt(invoices.orgId, after) : undefined))
+        .orderBy(asc(invoices.orgId))
+        .limit(200);
+      if (page.length === 0) break;
+      after = page[page.length - 1].orgId;
+      const alive = await this.orgs.lookupByIds(page.map((p) => p.orgId));
+      for (const { orgId } of page) {
+        if (alive.has(orgId)) continue;
+        const gone = await this.db
+          .delete(invoices)
+          .where(and(eq(invoices.orgId, orgId), ne(invoices.status, "draft"), isNotNull(invoices.finalizedAt), sql`${invoices.finalizedAt} < ${cutoff}`))
+          .returning({ id: invoices.id });
+        total += gone.length;
+      }
+      if (page.length < 200) break;
+    }
+    // Nummernkreise geloeschter Vereine ohne verbleibende Rechnung
+    after = null;
+    for (;;) {
+      const page: { orgId: string }[] = await this.db
+        .selectDistinct({ orgId: invoiceCounters.orgId })
+        .from(invoiceCounters)
+        .where(after ? gt(invoiceCounters.orgId, after) : undefined)
+        .orderBy(asc(invoiceCounters.orgId))
+        .limit(200);
+      if (page.length === 0) break;
+      after = page[page.length - 1].orgId;
+      const alive = await this.orgs.lookupByIds(page.map((p) => p.orgId));
+      const dead = page.map((p) => p.orgId).filter((id) => !alive.has(id));
+      if (dead.length) {
+        await this.db
+          .delete(invoiceCounters)
+          .where(and(inArray(invoiceCounters.orgId, dead), notExists(this.db.select({ one: sql`1` }).from(invoices).where(eq(invoices.orgId, invoiceCounters.orgId)))));
+      }
+      if (page.length < 200) break;
+    }
+    return total;
   }
 
   // --- Zugriff ----------------------------------------------------------------
@@ -114,7 +167,18 @@ export class BillingService implements OnModuleInit {
       conds.push(sql`coalesce(extract(year from ${invoices.issueDate}), extract(year from ${invoices.createdAt})) = ${Number(filter.year)}`);
     }
     const rows = await this.db.select().from(invoices).where(and(...conds)).orderBy(desc(invoices.createdAt)).limit(500);
-    return this.summaries(rows);
+    const list = await this.summaries(rows);
+    // Hinweis fuer den Kassenwart: Entwurf an jemanden, der nicht (mehr) Mitglied ist (Austritt/Kontoloeschung)
+    if (list.some((i) => i.status === "draft")) {
+      const active = new Set(await this.orgs.allActiveMemberIds(org.id));
+      // Mitglied ist bei Kinder-Rechnungen das Kind (subject), Empfaenger der Elternteil
+      const memberOf = new Map(rows.map((r) => [r.id, r.subjectUserId ?? r.recipientUserId]));
+      for (const i of list) {
+        const member = memberOf.get(i.id);
+        if (i.status === "draft" && !(member && active.has(member))) i.recipientLeft = true;
+      }
+    }
+    return list;
   }
 
   /** Eigene (finalisierte) Rechnungen des Nutzers ueber alle Vereine. */

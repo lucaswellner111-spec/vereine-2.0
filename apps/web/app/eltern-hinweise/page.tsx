@@ -77,7 +77,7 @@ export default function Page() {
               <li>Du kannst das Jugendkonto jederzeit löschen (mit deinem Passwort). Mit zwei Elternteilen kündigen wir die Löschung dem anderen 7 Tage vorher an; er kann widersprechen.</li>
               <li>Löschst du dein eigenes Konto und bist der letzte Elternteil, ruht das Jugendkonto und wird nach 30 Tagen gelöscht.</li>
               <li>Der Nachweis deiner Bestätigungen bleibt nach der Löschung 3 Jahre erhalten, ohne Namen (nur Kennungen), damit wir die Zustimmung bei Streit belegen können.</li>
-              <li><Strong>Bis zum 16. Geburtstag.</Strong> Danach gehören die Daten deinem Kind: Einsehen, Export und Löschung durch dich sind dann nicht mehr möglich.</li>
+              <li><Strong>Bis zum 16. Geburtstag.</Strong> Danach gehören die Daten deinem Kind: Einsehen und Export durch dich sind dann nicht mehr möglich. Löschen kannst du das ruhende Jugendkonto weiterhin, solange die Übernahme als eigenes Konto noch nicht freigeschaltet ist.</li>
             </UL>
           ),
         },

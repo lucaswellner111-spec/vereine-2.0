@@ -28,14 +28,14 @@ Stand: 14. November 2026 (Paket A1). Fasst die umgesetzten Fristen und Löschweg
 | Zugriffsprotokoll Rechnungsaktionen | 10 Jahre | Eintrag | Job (`auditFinance`) | umgesetzt |
 | Anwesenheit | 24 Monate ab Erfassung; Austritt: sofort | Erfassung | Job (`attendance`) + Austritts-Handler | umgesetzt |
 | Einladungslinks | 30 Tage nach Ablauf/Widerruf | Ablauf | Job (`invites`) | umgesetzt |
-| Jugendkonto (Kind) | bis Löschung durch die Eltern (nur bis zum 16. Geburtstag); letzter Elternteil weg: 30 Tage; ruhend ab 16 nicht übernommen: 12 Monate | Löschung / Ablauf | `GuardianService.eraseUser`, Job `privacy.retention` (`orphanedYouth`, ruhende Jugendkonten, Paket P2) | umgesetzt bzw. in P2 im Bau (Backend) |
+| Jugendkonto (Kind) | bis Löschung durch die Eltern (Auskunft nur bis zum 16. Geburtstag, Löschung bis zur Übernahme E5 auch danach); letzter Elternteil weg: 30 Tage; ruhend ab 16 nicht übernommen: 12 Monate | Löschung / Ablauf | `GuardianService.eraseUser`, Job `privacy.retention` (`orphanedYouth`, ruhende Jugendkonten, Paket P2) | umgesetzt |
 | Nachweis Elternfreigabe (`guardian_consents`) | pseudonym 3 Jahre nach Löschung des Kindes | Löschung des Kindes | Job (`purgeExpired`, Trigger append-only) | umgesetzt; **Frist Rechtsfrage** |
 | Einladung zweiter Elternteil (`guardian_invites`) | 30 Tage nach Ablauf/Annahme/Widerruf | Ablauf | Job | umgesetzt |
 | Geplante Löschung eines Kindes | 7 Tage Vorankündigung, dann Löschung | Antrag | Job `privacy.retention` (`eraseOrphanedYouth`) | umgesetzt |
-| Rechnungen für Kinder (`subject_name`) | wie Rechnungen (8–10 Jahre); Entwürfe gelöschter Kinder werden gelöscht | Rechnungsdatum / Löschung | Anonymisierung; Entwurfslöschung (P2) | umgesetzt bzw. in P2 im Bau |
+| Rechnungen für Kinder (`subject_name`) | wie Rechnungen (8–10 Jahre); Entwürfe gelöschter Kinder werden gelöscht | Rechnungsdatum / Löschung | Anonymisierung; Entwurfslöschung (P2) | umgesetzt |
 | Mitglieder-Import (Vormerkung) | Annahme: sofort; sonst Ablauf der Einladung; nie versendet 60 Tage | Annahme/Ablauf | Job (`pendingMembersUnsent`) | umgesetzt |
 | Mitgliederstammdaten | Austritt: Personendaten sofort; Kontolöschung: alles | Austritt/Löschung | `onLeave`-Ereignis, `eraseUser` | umgesetzt; Aufbewahrung der pseudonymen Austrittsdaten mit DSB klären |
-| Rechnungen (finalisiert) | 8–10 Jahre; bei Kontolöschung anonymisiert | Rechnungsdatum | Anonymisierung | umgesetzt; **Löschjob nach Fristablauf, auch für gelöschte Vereine, fehlt** |
+| Rechnungen (finalisiert) | 8–10 Jahre; bei Kontolöschung anonymisiert | Rechnungsdatum | Anonymisierung | umgesetzt; gelöschte Vereine: Löschjob `BillingService.purgeExpired` 10 Jahre ab Ende des Finalisierungsjahres; bestehende Vereine: Löschung alter Rechnungen liegt beim Verein (Verantwortlicher), automatischer Job offen |
 | Rechnungsentwürfe, Beitragsläufe | jederzeit; mit Verein gelöscht | Löschung | manuell/Kaskade | umgesetzt; Frist `fee_runs` offen |
 | Mail-Sperrliste (Hash) | Bounce/Beschwerde 12 Monate; Abmeldung Einladungen 36 Monate; Warteliste-Abmeldung 36 Monate | Eintrag | Job (`mailBounce`, `mailUnsubscribe`) | umgesetzt; Wartelisten-Scope vor Newsletter-Versand überdenken |
 | Mail-Warteschlange (Job `mail.send`) | bis Versand, danach sofort entfernt | Versand | BullMQ `removeOnComplete/Fail` | umgesetzt |
@@ -72,7 +72,7 @@ Ist die löschende Person das einzige aktive Mitglied, wird der Verein gelöscht
 Mindestens jährlich: Fristen gegen Code (`retention.ts`) und Datenschutzerklärung prüfen, Löschjobs auf Fehler prüfen (Warteschlange, Logs), Stichprobe Sicherungsablauf.
 
 ## 4. Offene Punkte
-- Löschjob für finalisierte Rechnungen nach Ablauf der Aufbewahrungsfrist (insbesondere gelöschter Vereine) und für `billing.fee_runs`.
+- Löschjob für finalisierte Rechnungen **bestehender** Vereine nach Ablauf der Aufbewahrungsfrist (gelöschte Vereine: umgesetzt) und für `billing.fee_runs`.
 - Löschjob bestätigter Wartelisteneinträge (6 Monate nach Launch, Launch-Datum festlegen) bzw. Rückfrage nach 24 Monaten.
 - Frist und Löschweg für AVV-Zustimmungen (Trigger beachten, `docs/welle1/W1c-DOKU.md`).
 - Backup-Automatisierung und Löschverfahren nach Wiederherstellung.
