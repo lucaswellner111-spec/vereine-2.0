@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configureApp } from "../app.setup";
@@ -84,6 +85,11 @@ describe("Privacy", () => {
 
     const history = await db.select().from(schema.consents);
     expect(history.filter((c) => c.purpose === "personalized_feed")).toHaveLength(2);
+    // Datenbank-Trigger: weder Aendern noch Loeschen einzelner Nachweise
+    const row = history.find((c) => c.purpose === "personalized_feed")!;
+    await expect(db.update(schema.consents).set({ granted: true }).where(eq(schema.consents.id, row.id))).rejects.toThrow();
+    await expect(db.delete(schema.consents).where(eq(schema.consents.id, row.id))).rejects.toThrow();
+    expect(await db.select().from(schema.consents).where(eq(schema.consents.id, row.id))).toHaveLength(1);
   });
 
   it("verbietet das Aendern von Vertragszwecken", async () => {

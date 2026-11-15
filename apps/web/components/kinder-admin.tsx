@@ -24,7 +24,7 @@ export function StoredAboutChild() {
         ))}
       </ul>
       <p className="mt-3 text-sm text-muted">{NOT_STORED_ABOUT_CHILD}</p>
-      <p className="mt-3 text-sm text-muted">Du kannst alle Daten jederzeit ansehen, herunterladen und löschen.</p>
+      <p className="mt-3 text-sm text-muted">Du kannst alle Daten bis zum 16. Geburtstag deines Kindes jederzeit ansehen, herunterladen und löschen.</p>
     </Card>
   );
 }
@@ -152,6 +152,9 @@ export function KinderAdmin() {
             required
             hint={`Dein Kind muss mindestens ${YOUTH_AGE_MIN} und darf höchstens ${YOUTH_AGE_LIMIT - 1} Jahre alt sein.`}
           />
+          <p className="text-sm text-muted">
+            Lies vorher die <Link href="/eltern-hinweise" target="_blank" rel="noopener" className="font-medium text-brand underline">Hinweise für Eltern</Link> (öffnet in neuem Tab).
+          </p>
           <Checkbox id="kind-sorgeberechtigt" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)}>
             {YOUTH_CONSENT_TEXTS.account}
           </Checkbox>

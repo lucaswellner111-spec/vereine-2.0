@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
@@ -235,7 +235,12 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
     expect((await req(mia, "DELETE", `/orgs/${org}/teams/${teamId}/members/${mia.id}`)).statusCode).toBe(204); // Austritt
     expect(await titles(mia)).not.toContain("Nur Team");
     expect((await req(mia, "GET", `/events/${t2}`)).statusCode).toBe(404);
-    expect((await req(vera, "DELETE", `/orgs/${org}/teams/${teamId}`)).statusCode).toBe(204); // Team loeschen entfernt Termine
+    const refused = await req(vera, "DELETE", `/orgs/${org}/teams/${teamId}`); // kuenftige Termine: Loeschen verweigert
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().message).toContain("kuenftige Termine");
+    expect((await req(vera, "GET", `/events/${t2}`)).statusCode).toBe(200);
+    await db.update(schema.events).set({ startsAt: new Date("2020-06-01T18:00:00Z") }).where(eq(schema.events.teamId, teamId));
+    expect((await req(vera, "DELETE", `/orgs/${org}/teams/${teamId}`)).statusCode).toBe(204); // nur noch vergangene Termine: weg mit dem Team
     expect((await req(vera, "GET", `/events/${t2}`)).statusCode).toBe(404);
   });
 
@@ -259,5 +264,36 @@ describe("Termine, Teams, RSVP, Erinnerungen, ICS", () => {
     expect(await names(teamEvent)).toEqual(["vera"]);
     const counted = (await req(vera, "GET", `/events/${internal}/attendees`)).json();
     expect(counted.total).toBe(2); // Anzahl passt zu den gezeigten Personen
+  });
+  it("Team-Austritt: kuenftige Zusagen und Helfer-Eintraege der Team-Termine verschwinden, Warteliste rueckt nach", async () => {
+    const [ina, jo] = [await signup("ina"), await signup("jo")];
+    for (const m of [ina, jo]) {
+      await req(m, "POST", `/orgs/${org}/membership`);
+      await req(vera, "POST", `/orgs/${org}/members/${m.id}/decision`, { decision: "approve" });
+    }
+    const team = (await req(vera, "POST", `/orgs/${org}/teams`, { name: "Jugend" })).json().id;
+    for (const m of [ina, jo]) await req(vera, "PUT", `/orgs/${org}/teams/${team}/members/${m.id}`);
+    const ev = (await req(vera, "POST", `/orgs/${org}/events`, { title: "Jugend-Turnier", startsAt: inHours(30), teamId: team, capacity: 1 })).json().id;
+    expect((await req(ina, "PUT", `/events/${ev}/rsvp`, { status: "yes" })).json().myStatus).toBe("yes");
+    expect((await req(jo, "PUT", `/events/${ev}/rsvp`, { status: "yes" })).json().myStatus).toBe("waitlist");
+    const shift = (await req(vera, "POST", `/events/${ev}/shifts`, { title: "Kuchen", slots: 2 })).json()[0].id;
+    expect((await req(ina, "PUT", `/shifts/${shift}/signup`)).statusCode).toBeLessThan(300);
+    expect((await req(vera, "DELETE", `/orgs/${org}/teams/${team}/members/${ina.id}`)).statusCode).toBe(204);
+    const rows = await db.select().from(schema.eventRsvps).where(eq(schema.eventRsvps.eventId, ev));
+    expect(rows.map((r) => [r.userId, r.status])).toEqual([[jo.id, "yes"]]);
+    expect(await db.select().from(schema.eventShiftSignups).where(eq(schema.eventShiftSignups.userId, ina.id))).toHaveLength(0);
+  });
+
+  it("ICS: 3 h ohne Ende, SEQUENCE/LAST-MODIFIED, einzelnes CR maskiert", async () => {
+    const body = (await req(mia, "GET", `/events/${internalId}/ics`)).body;
+    expect(body).toMatch(/LAST-MODIFIED:\d{8}T\d{6}Z/);
+    expect(body).toMatch(/SEQUENCE:\d+/);
+    const start = new Date(inHours(100));
+    const { buildIcs } = await import("./ics");
+    const out = buildIcs({ id: "x", title: "a\rb", description: "", location: "", startsAt: start, endsAt: null, canceled: false, orgName: "V" });
+    expect(out).toContain("SUMMARY:a\\nb");
+    expect(out).not.toContain("a\rb");
+    const end = out.match(/DTEND:(\d{8}T\d{6})Z/)![1];
+    expect(end).toBe(new Date(start.getTime() + 3 * 3600_000).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z/, ""));
   });
 });

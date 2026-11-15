@@ -35,7 +35,10 @@ export type SendResult = "queued" | "suppressed" | "limited:recipient" | "limite
 
 /** Millisekunden bis morgen 06:00 Uhr deutscher Zeit (ungefaehr; Sommerzeitwechsel egal). */
 export function msUntilNextMorning(now = new Date()): number {
-  const guess = new Date(`${berlinDate(new Date(now.getTime() + 24 * 3600_000))}T06:00:00Z`);
+  const hourNow = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", hourCycle: "h23" }).format(now));
+  // Zwischen 0 und 6 Uhr ist "der Morgen" noch heute
+  const target = hourNow < 6 ? now : new Date(now.getTime() + 24 * 3600_000);
+  const guess = new Date(`${berlinDate(target)}T06:00:00Z`);
   const berlinHour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", hourCycle: "h23" }).format(guess));
   return Math.max(60_000, guess.getTime() - (berlinHour - 6) * 3600_000 - now.getTime());
 }

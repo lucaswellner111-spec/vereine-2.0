@@ -597,7 +597,25 @@ export class PostsService {
    * Meldungen, Bild-Verknuepfungen per Kaskade; Bilddateien und "Weniger davon"-Eintraege vorher). Beitraege mit offener
    * Meldung bleiben bis zur Pruefung (Beweis, DSA). Job privacy.retention, blockweise.
    */
-  purgeExpired(): Promise<number> {
+  async purgeExpired(): Promise<number> {
+    const resolved = await this.purgeResolvedReports();
+    return resolved + (await this.purgeDeletedPosts());
+  }
+
+  /** Erledigte Meldungen (nicht offen) 30 Tage nach der Bearbeitung loeschen. */
+  private purgeResolvedReports(): Promise<number> {
+    return purgeInRounds(async () => {
+      const rows = await this.db
+        .select({ id: reports.id })
+        .from(reports)
+        .where(and(sql`${reports.status} <> 'open'`, sql`coalesce(${reports.resolvedAt}, ${reports.createdAt}) < ${ago(RETENTION.reportsResolved)}`))
+        .limit(RETENTION_BATCH);
+      if (rows.length === 0) return 0;
+      return (await this.db.delete(reports).where(inArray(reports.id, rows.map((r) => r.id))).returning({ id: reports.id })).length;
+    });
+  }
+
+  private purgeDeletedPosts(): Promise<number> {
     return purgeInRounds(async () => {
       const rows = await this.db
         .select({ id: posts.id })

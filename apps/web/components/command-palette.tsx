@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Building2, CalendarDays, CornerDownLeft, Keyboard, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, type LucideIcon } from "lucide-react";
+import { Building2, CalendarDays, CornerDownLeft, Keyboard, LogOut, MessageSquare, Moon, Monitor, Newspaper, Plus, Search, Settings, Sun, UserSearch, X, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OrgSummary, PersonItem } from "@vereine/shared";
@@ -71,11 +71,16 @@ export function CommandPalette() {
       setPeople([]);
       return;
     }
+    // stale: Antworten zu einer alten Eingabe verwerfen
+    let stale = false;
     const t = setTimeout(() => {
-      api<OrgSummary[]>(`/orgs?q=${encodeURIComponent(q.trim())}`).then((r) => setOrgs(r.slice(0, 4))).catch(() => setOrgs([]));
-      api<PersonItem[]>(`/profiles/search?q=${encodeURIComponent(q.trim())}`).then((r) => setPeople(r.slice(0, 4))).catch(() => setPeople([]));
+      api<OrgSummary[]>(`/orgs?q=${encodeURIComponent(q.trim())}`).then((r) => !stale && setOrgs(r.slice(0, 4))).catch(() => !stale && setOrgs([]));
+      api<PersonItem[]>(`/profiles/search?q=${encodeURIComponent(q.trim())}`).then((r) => !stale && setPeople(r.slice(0, 4))).catch(() => !stale && setPeople([]));
     }, 200);
-    return () => clearTimeout(t);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
   }, [q, open]);
 
   const close = () => setOpen(false);
@@ -139,7 +144,10 @@ export function CommandPalette() {
               else if (e.key === "Enter") (e.preventDefault(), choose(entries[index]));
             }}
           />
-          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] text-muted sm:block">Esc</kbd>
+          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] text-muted sm:block pointer-coarse:hidden">Esc</kbd>
+          <button type="button" onClick={close} aria-label="Schließen" className="hit-area -mr-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text md:hidden">
+            <X size={18} aria-hidden />
+          </button>
         </div>
         <ul id="palette-list" role="listbox" className="max-h-80 overflow-y-auto overscroll-contain p-1.5">
           {entries.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Nichts gefunden.</li>}
@@ -157,7 +165,7 @@ export function CommandPalette() {
                   aria-selected={i === index}
                   onMouseMove={() => setIndex(i)}
                   onClick={() => choose(e)}
-                  className={clsx("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm", i === index ? "bg-brand/15 text-brand" : "text-text")}
+                  className={clsx("flex w-full items-center gap-3 rounded-lg min-h-11 px-2.5 py-2 text-left text-sm", i === index ? "bg-brand/15 text-brand" : "text-text")}
                 >
                   <Icon size={16} aria-hidden className="shrink-0" />
                   <span className="flex-1 truncate">{e.label}</span>
@@ -168,7 +176,7 @@ export function CommandPalette() {
             );
           })}
         </ul>
-        <p className="border-t border-border px-3 py-2 text-[11px] text-muted">
+        <p className="border-t border-border px-3 py-2 text-[11px] text-muted pointer-coarse:hidden">
           <kbd className="rounded border border-border px-1">↑</kbd> <kbd className="rounded border border-border px-1">↓</kbd> wählen · <kbd className="rounded border border-border px-1">Enter</kbd> öffnen · Strg+K oder / zum Öffnen
         </p>
       </div>

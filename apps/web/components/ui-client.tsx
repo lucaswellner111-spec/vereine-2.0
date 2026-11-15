@@ -820,27 +820,28 @@ export function LargeTitleHeader({ title, subtitle, action }: { title: string; s
  * Anzeige zu usePullToRefresh (lib/use-pull-to-refresh.ts): waechst beim Ziehen, dreht sich beim Neuladen.
  * Rein visuell (aria-hidden), nur am Handy; schiebt den Inhalt nach unten.
  */
-export function PullIndicator({ pull, refreshing, threshold = 70 }: { pull: number; refreshing: boolean; threshold?: number }) {
-  const height = refreshing ? 48 : pull;
-  const progress = Math.min(1, pull / threshold);
+export function PullIndicator({ refreshing, indicatorRef }: { refreshing: boolean; indicatorRef: RefObject<HTMLDivElement | null> }) {
+  // Hoehe/Fortschritt setzt usePullToRefresh direkt per --pull und data-Attributen (kein Re-Render je Bewegung)
   return (
     <div
+      ref={indicatorRef}
       aria-hidden
-      className={clsx("flex items-end justify-center overflow-hidden md:hidden", pull === 0 && "transition-[height] duration-200 motion-reduce:transition-none")}
-      style={{ height }}
+      className="group flex items-end justify-center overflow-hidden transition-[height] duration-200 data-[pulling=true]:transition-none motion-reduce:transition-none md:hidden"
+      style={refreshing ? { height: 48 } : undefined}
     >
-      {(refreshing || pull > 0) && (
-        <span
-          className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface text-brand shadow-card"
-          style={refreshing ? undefined : { opacity: 0.4 + progress * 0.6 }}
-        >
-          {refreshing ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <ArrowDown size={16} style={{ transform: `rotate(${progress >= 1 ? 180 : 0}deg)` }} className="transition-transform motion-reduce:transition-none" />
-          )}
-        </span>
-      )}
+      <span
+        className={clsx(
+          "mb-2 h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-surface text-brand shadow-card",
+          refreshing ? "inline-flex" : "hidden group-data-[pulling=true]:inline-flex",
+        )}
+        style={refreshing ? undefined : { opacity: "calc(0.4 + var(--pull, 0) * 0.6)" }}
+      >
+        {refreshing ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <ArrowDown size={16} className="transition-transform group-data-[reached=true]:rotate-180 motion-reduce:transition-none" />
+        )}
+      </span>
     </div>
   );
 }

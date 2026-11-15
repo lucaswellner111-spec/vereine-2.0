@@ -163,3 +163,21 @@ Stand: 2026-10-31. Reihenfolge innerhalb einer Gruppe = Empfehlung. "Blockiert d
 - **Start-Mail an die Warteliste** ist nicht gebaut (viele Adressen auf einmal würden das Mail-Kontingent sprengen: in Tranchen über mehrere Tage planen).
 - Bei vollem Mail-Kontingent (ab 80 %) entfallen Bestätigungsmails der Warteliste (Kategorie notice); Nutzer müssen sich dann erneut anmelden.
 - SKALIERUNG: Betreiber-Liste lädt bis zu 10.000 bestätigte Einträge auf einmal; bei mehr seitenweise laden.
+
+## Jugendkonten und Texte, Paket P2: offen (Stand 2026-11-15)
+Quellen: `docs/welle2/JUGEND-KONZEPT.md` 3.6, `D2-DOKU.md` Abschnitt 5, `F1-DOKU.md` Abschnitt 6. Alles Rechtsfragen für Anwalt/DSB; die Texte (`/datenschutz`, `/eltern-hinweise`, AGB) sind Entwürfe des Betreibers.
+- **Nachweis der Elternschaft (Art. 8 Abs. 2):** reichen Selbstauskunft, bestätigte E-Mail und Vereinsbestätigung? Zweiter Elternteil nur mit Hash der Adresse und eigenem Konto: genügt das?
+- **Freigabe-Nachweise 3 Jahre** nach Löschung des Kindes (pseudonym) gegen den Löschanspruch.
+- **Namenskopie des Kindes** auf aufbewahrungspflichtigen Rechnungen (`subject_name`), Rechnung an den Elternteil mit Kindesbezug (GoBD).
+- **Anwesenheit Minderjähriger:** 12 oder 24 Monate; Information der Eltern.
+- **Sorgerechtskonflikt, Zwei-Eltern-Grenze:** höchstens zwei Elternteile (Patchwork, Vormund, Pflegeeltern?); „ein Widerspruch genügt“ ist Produktentscheidung; Löschung durch einen Elternteil nach 7 Tagen gegen Widerspruch des anderen (Gleichrang).
+- **Ruhen ab 16:** Wirkung auf Mitgliedschaft und Rechnungsempfänger; Löschung nach 12 Monaten ohne Übernahme (Vorschlag); Eltern-Export/-Löschung nur bis zum 16. Geburtstag; Neu-Einwilligung nötig? (E5 noch nicht gebaut).
+- **Altersuntergrenze 6 Jahre** (Missbrauchsschutz, Wert offen).
+- **Import für Kinder:** Der Verein gibt Name, Geburtsdatum und Elternadresse an Klubnest; wie belegt der Verein die Information der Eltern (Art. 13/14)? Bindung der Einladung nur über Geburtsdatum.
+- **Mitlesen der Eltern in Chats, Zwei-Erwachsene-Regel, Direktnachrichten an Kinder** (erst mit E3/E4), Jugendschutzkonzept JMStV/JuSchG (§ 24a), chronologischer Feed für Minderjährige (DSA Art. 28), Foto-Einwilligungen (KUG).
+- **DSFA** mit Jugendkonten als Kernpunkt; **Elterninformation** (Art. 13) in zwei Fassungen (Eltern, kindgerecht) ist erst für Eltern geschrieben (`/eltern-hinweise`).
+- **Zwei-Faktor-Pflicht für Vorstand und Kasse** und **Captcha** in der Datenschutzerklärung ergänzt: Frist 14 Tage und berechtigtes Interesse (lit. f) vom DSB bestätigen lassen.
+- **Sicherungsfrist** jetzt 14 tägliche + 4 wöchentliche Sätze = bis zu 5 Wochen (`infra/ops/lib.sh`): im Löschkonzept, in der TOM-Liste, im Betriebshandbuch und in der Datenschutzerklärung aktualisiert. AVV-Text angepasst als Fassung 4 (15.11.2026, `AVV_DOCUMENT`); Vereine mit älterer Zustimmung stimmen innerhalb der Übergangsfrist neu zu.
+- **`LEGAL_VERSION`:** keine erzwungene Neu-Zustimmung bei geänderten Rechtstexten (kein Dialog); Datenschutzerklärung sagt das ehrlich. Prüfen, ob das für den Launch genügt.
+- **Erledigte Meldungen 30 Tage** (Beweiskopie bei Chat-Meldungen siehe oben, Art. 20 DSA 6 Monate): Abwägung bleibt offen.
+- **Protokolle:** Caddy-Zugriffslog ist auf /24 bzw. /56 gekürzt und schwärzt Einladungs- und Kalender-Token; trotzdem als personenbezogen behandeln (14 Tage).

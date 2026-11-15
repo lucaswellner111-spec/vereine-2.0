@@ -21,7 +21,7 @@ export function TagChips({ tags, to, className }: { tags: string[]; to?: TagTarg
       {tags.map((t) => (
         <li key={t}>
           {to ? (
-            <Link href={tagHref(to, t)} className={clsx(chip, "transition-colors hover:bg-brand/15 hover:text-brand")}>
+            <Link href={tagHref(to, t)} className={clsx(chip, "pointer-coarse:min-h-9 transition-colors hover:bg-brand/15 hover:text-brand")}>
               {tagLabel(t)}
             </Link>
           ) : (

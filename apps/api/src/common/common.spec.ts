@@ -135,3 +135,12 @@ describe("Hilfsfunktionen", () => {
     expect(isAllowedPushEndpoint("https://fcm.googleapis.com.evil.de/x")).toBe(false);
   });
 });
+
+describe("describeError (Logs ohne Meldungstext)", () => {
+  it("DB-Fehler: nur Name und pg-Code, nie SQL oder Parameter", async () => {
+    const { describeError } = await import("./log-redact");
+    const err = Object.assign(new Error("Failed query: select * from users where email = $1 params: geheim@example.de"), { name: "DrizzleQueryError", cause: { code: "23503" } });
+    expect(describeError(err)).toBe("DrizzleQueryError (pg 23503)");
+    expect(describeError(new Error("geheim@example.de"))).not.toContain("geheim");
+  });
+});

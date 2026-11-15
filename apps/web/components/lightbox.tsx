@@ -34,7 +34,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
       role="dialog"
       aria-modal="true"
       aria-label="Bildansicht"
-      className="fixed inset-0 z-50 flex touch-pan-y items-center justify-center bg-scrim/85 p-4"
+      className="fixed inset-0 z-50 flex touch-pan-y touch-pinch-zoom items-center justify-center bg-scrim/85 p-4"
       {...swipe.handlers}
       onClick={() => {
         if (!swipe.moved()) onClose(); // Wischen ist kein Klick auf den Hintergrund
@@ -56,7 +56,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
         type="button"
         onClick={onClose}
         aria-label="Schließen"
-        className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-on-scrim/15 text-on-scrim hover:bg-on-scrim/25"
+        className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] inline-flex h-11 w-11 items-center justify-center rounded-full bg-on-scrim/15 text-on-scrim hover:bg-on-scrim/25"
       >
         <X size={20} aria-hidden />
       </button>
@@ -86,7 +86,7 @@ export function Lightbox({ ids, index, onIndex, onClose }: { ids: string[]; inde
           >
             <ChevronRight size={20} aria-hidden />
           </button>
-          <p className="absolute bottom-4 rounded-full bg-scrim/60 px-3 py-1 text-xs text-on-scrim">
+          <p className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] rounded-full bg-scrim/60 px-3 py-1 text-xs text-on-scrim">
             {index + 1} / {ids.length}
           </p>
         </>

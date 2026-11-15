@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fastifyRateLimit from "@fastify/rate-limit";
-import { fastifyOptions, isStrictRoute, rateLimitAllowList } from "./app.setup";
+import { assertProductionEnv, fastifyOptions, isStrictRoute, rateLimitAllowList } from "./app.setup";
 
 describe("Proxy-Vertrauen (TRUST_PROXY)", () => {
   const app = Fastify({ ...fastifyOptions({ logger: false }) });
@@ -50,5 +50,15 @@ describe("Rate-Limit-Ausnahme fuer den Lastgenerator (RATE_LIMIT_ALLOWLIST)", ()
     expect(await limited(["203.0.113.7"], "203.0.113.7")).toEqual([200, 200, 200, 200, 200, 200]);
     expect(await limited(["203.0.113.7"], "198.51.100.9")).toContain(429);
     expect(await limited([], "203.0.113.7")).toContain(429);
+  });
+});
+
+describe("Produktions-Startpruefung", () => {
+  it("bricht ohne WEB_ORIGIN oder COOKIE_SECURE=true ab, nur in Produktion", () => {
+    expect(() => assertProductionEnv({ NODE_ENV: "production", COOKIE_SECURE: "true" })).toThrow(/WEB_ORIGIN/);
+    expect(() => assertProductionEnv({ NODE_ENV: "production", WEB_ORIGIN: "https://klubnest.de" })).toThrow(/COOKIE_SECURE/);
+    expect(() => assertProductionEnv({ NODE_ENV: "production", WEB_ORIGIN: "https://klubnest.de", COOKIE_SECURE: "true" })).not.toThrow();
+    expect(() => assertProductionEnv({ NODE_ENV: "production", WEB_ORIGIN: "https://klubnest.de" }, { cookies: false })).not.toThrow();
+    expect(() => assertProductionEnv({ NODE_ENV: "test" })).not.toThrow();
   });
 });

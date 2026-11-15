@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { hasMetricsToken } from "../common/metrics-token";
 import { Controller, Get, Header, Inject, NotFoundException, Req, UnauthorizedException } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
@@ -25,9 +25,7 @@ export class MetricsController {
   async scrape(@Req() req: FastifyRequest): Promise<string> {
     const token = process.env.METRICS_TOKEN;
     if (!token) throw new NotFoundException();
-    const given = Buffer.from((req.headers.authorization ?? "").replace(/^Bearer\s+/i, ""));
-    const expected = Buffer.from(token);
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw new UnauthorizedException();
+    if (!hasMetricsToken(req)) throw new UnauthorizedException();
 
     const dbUp = await this.db.execute(sql`select 1`).then(() => 1, () => 0);
     const queue = await this.jobs.stats().catch(() => null);

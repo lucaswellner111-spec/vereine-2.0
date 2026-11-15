@@ -10,6 +10,7 @@ import { StoredAboutChild } from "@/components/kinder-admin";
 import { Alert, ArrowLink, BackLink, Badge, Button, Card, EmptyState, ErrorState, Field, ListSkeleton, PageHeader, SectionTitle } from "@/components/ui";
 import { Dialog, SegmentedControl } from "@/components/ui-client";
 import { ask, toast } from "@/components/ui-hosts";
+import { downloadJson } from "@/lib/download";
 import { api, describeError } from "@/lib/api";
 import { ATTENDANCE_LABEL, RSVP_OPTIONS, RSVP_STATUS_LABEL } from "@/lib/events";
 import { CONSENT_LABEL, inviteTokenFrom, orgSlugFrom } from "@/lib/kinder";
@@ -87,10 +88,7 @@ export function KindDetail({ id }: { id: string }) {
   async function download() {
     try {
       const data = await api<unknown>(`/guardian/children/${id}/export`);
-      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-      const a = Object.assign(document.createElement("a"), { href: url, download: "daten-meines-kindes.json" });
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadJson(data, "daten-meines-kindes.json");
       toast.success("Die Daten deines Kindes wurden heruntergeladen.");
     } catch (err) {
       toast.error(describeError(err));

@@ -27,6 +27,7 @@ import { EventsService } from "../events/events.service";
 import { JobsService } from "../jobs/jobs.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { DigestService } from "../notifications/digest.service";
+import { describeError } from "../common/log-redact";
 import { SuppressionsService } from "../mail/suppressions.service";
 import { ago, RETENTION } from "../common/retention";
 import { WaitlistService } from "../waitlist/waitlist.service";
@@ -135,11 +136,12 @@ export class PrivacyService implements OnModuleInit {
       this.calendar.status(user.id),
       this.chat.exportUser(user.id),
     ]);
+    const [{ requiredSince } = { requiredSince: null }] = await this.db.select({ requiredSince: users.twoFactorRequiredSince }).from(users).where(eq(users.id, user.id)).limit(1);
     return {
       exportedAt: new Date().toISOString(),
       profile: user,
       socialProfile: social.profile,
-      twoFactor,
+      twoFactor: { ...twoFactor, requiredSince: requiredSince?.toISOString() ?? null }, // Beginn der Zwei-Faktor-Pflichtfrist
       calendarFeed: { active: calendar.enabled, since: calendar.createdAt },
       email: await this.auth.exportEmailInfo(user.id),
       emailSettings: await this.digest.exportFor(user.id),
@@ -217,8 +219,10 @@ export class PrivacyService implements OnModuleInit {
     const data = await this.exportData(child);
     const youth = await this.guardians.exportChild(guardian.id, childId);
     await this.guardians.auditExported(guardian.id, childId);
+    // Platzhalter-Adresse (*.invalid) und alles, was an ihr haengt, gehoert nicht in die Auskunft
+    const { email: _email, mailSuppressions: _suppressions, waitlist: _waitlist, ...rest } = data;
     return {
-      ...data,
+      ...rest,
       profile: { id: youth.account.id, displayName: youth.account.displayName, createdAt: youth.account.createdAt },
       youth,
       invoicesForChild: await this.billing.exportForSubject(childId),
@@ -244,13 +248,20 @@ export class PrivacyService implements OnModuleInit {
 
   /** Loeschfrist: Jugendkonten ohne Elternteil seit 30 Tagen (Job privacy.retention). */
   async eraseOrphanedYouth(): Promise<number> {
-    const ids = [...new Set([...(await this.guardians.orphanedForDeletion()), ...(await this.guardians.deletionDue())])];
+    const ids = [...new Set([...(await this.guardians.orphanedForDeletion()), ...(await this.guardians.deletionDue()), ...(await this.guardians.dormantForDeletion())])];
+    let done = 0;
     for (const id of ids) {
-      await this.guardians.auditDeleted(null, id); // Loeschung nach Vorankuendigung bzw. ohne Elternteil (nur Kind-ID)
-      await this.auth.beginAccountDeletion(id);
-      await this.eraseEverything(id);
+      // Ein Fehler bei einem Konto haelt die anderen nicht auf; der naechste Lauf versucht es erneut
+      try {
+        await this.guardians.auditDeleted(null, id); // Loeschung nach Vorankuendigung, ohne Elternteil bzw. nach 12 Monaten Ruhen (nur Kind-ID)
+        await this.auth.beginAccountDeletion(id);
+        await this.eraseEverything(id);
+        done += 1;
+      } catch (err) {
+        this.log.error(`Loeschung eines Jugendkontos fehlgeschlagen: ${describeError(err)}`);
+      }
     }
-    return ids.length;
+    return done;
   }
 
   /**

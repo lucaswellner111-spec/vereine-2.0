@@ -563,7 +563,11 @@ export class GuardianService implements OnModuleInit {
 
   /** Das Kind fuer Auskunft/Loeschung durch den Elternteil: Pruefung der Elternschaft, liefert das Nutzerobjekt des Kindes. */
   async childForPrivacy(guardianId: string, childId: string): Promise<PublicUser> {
-    const { user } = await this.requireChild(guardianId, childId);
+    // Ab dem 16. Geburtstag endet die Verfuegungsgewalt der Eltern (Auskunft/Loeschung nur noch durch das Kind selbst)
+    const { user, profile } = await this.requireChild(guardianId, childId);
+    if (this.paused(profile)) {
+      throw new ConflictException("Dein Kind ist 16 geworden. Auskunft und Löschung liegen jetzt bei deinem Kind, das Jugendkonto wird nach 12 Monaten automatisch gelöscht.");
+    }
     return this.childUser(user);
   }
 
@@ -665,6 +669,17 @@ export class GuardianService implements OnModuleInit {
     return rows.map((r) => r.id);
   }
 
+  /** Ruhende Jugendkonten (16. Geburtstag erreicht, keine Uebernahme) seit mehr als 12 Monaten (der Datenschutzdienst loescht sie). */
+  // E5 (Uebernahme durch das Kind): uebernommene Konten muessen hier ausgeschlossen werden (bis dahin ruht jedes Konto ab 16).
+  async dormantForDeletion(limit = 100): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: youthProfiles.userId })
+      .from(youthProfiles)
+      .where(and(isNotNull(youthProfiles.graduationStartedAt), lt(youthProfiles.graduationStartedAt, ago(RETENTION.dormantYouth))))
+      .limit(limit);
+    return rows.map((r) => r.id);
+  }
+
   async auditDeleted(guardianId: string | null, childId: string): Promise<void> {
     await this.audit.record(guardianId, "youth.deleted", { youthId: childId });
   }
@@ -685,7 +700,8 @@ export class GuardianService implements OnModuleInit {
       .select()
       .from(youthProfiles)
       .innerJoin(users, and(eq(users.id, youthProfiles.userId), isNull(users.deletedAt)))
-      .where(and(isNull(youthProfiles.graduationStartedAt), lte(youthProfiles.graduationDueOn, horizon)))
+      .where(and(isNull(youthProfiles.graduationStartedAt), lte(youthProfiles.graduationDueOn, horizon), or(isNull(youthProfiles.notified7At), lte(youthProfiles.graduationDueOn, today))))
+      .orderBy(youthProfiles.graduationDueOn)
       .limit(500);
     let notified = 0;
     let paused = 0;

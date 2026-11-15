@@ -5,6 +5,14 @@
 export function safeNext(search: string, fallback = "/feed"): string {
   const next = new URLSearchParams(search).get("next");
   if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return fallback;
+  // Steuerzeichen (Tab, Zeilenumbruch) entfernt der URL-Parser still: "/<Tab>/evil.example" wuerde zu "//evil.example"
+  if (/[\u0000-\u001f\u007f]/.test(next)) return fallback;
+  const base = "https://klubnest.invalid";
+  try {
+    if (new URL(next, base).origin !== base) return fallback;
+  } catch {
+    return fallback;
+  }
   return next;
 }
 

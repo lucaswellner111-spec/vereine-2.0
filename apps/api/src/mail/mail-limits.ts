@@ -123,7 +123,7 @@ export class MailLimits {
   async inviteCapacityToday(orgId: string, now = new Date()): Promise<number> {
     const k = this.keys(now);
     try {
-      const [org, day, month] = await Promise.all([this.count(`mail:o:d:${orgId}`), this.count(k.day), this.count(k.month)]);
+      const [org, day, month] = await Promise.all([this.count(`mail:o:d:${orgId}:${berlinDate(now)}`), this.count(k.day), this.count(k.month)]);
       const left = Math.min(
         MAIL_LIMITS.orgInvitesPerDay - org,
         allowedFor(this.global.daily, "normal") - day,
@@ -149,7 +149,7 @@ export class MailLimits {
 
   /** Einladungs-Mails je Verein: 100/Tag. */
   orgInvitesOver(orgId: string): Promise<boolean> {
-    return this.over(`mail:o:d:${orgId}`, MAIL_LIMITS.orgInvitesPerDay, DAY);
+    return this.over(`mail:o:d:${orgId}:${berlinDate()}`, MAIL_LIMITS.orgInvitesPerDay, DAY);
   }
 
   /**

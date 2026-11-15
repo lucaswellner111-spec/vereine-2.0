@@ -368,7 +368,9 @@ export class BillingService implements OnModuleInit {
       .update(invoices)
       .set({ recipientUserId: null, recipientName: DELETED_NAME, recipientAddress: "", subjectUserId: null, subjectName: null })
       .where(eq(invoices.recipientUserId, userId));
-    // Kind geloescht: Verweis entfaellt, die Namenskopie bleibt als Rechnungsunterlage (Aufbewahrungspflicht)
+    // Kind geloescht: Entwuerfe sind keine Unterlagen (nie finalisiert), sie werden entfernt
+    await this.db.delete(invoices).where(and(eq(invoices.subjectUserId, userId), eq(invoices.status, "draft")));
+    // Verweis entfaellt, die Namenskopie bleibt bei finalisierten Rechnungen als Rechnungsunterlage (Aufbewahrungspflicht)
     await this.db.update(invoices).set({ subjectUserId: null }).where(eq(invoices.subjectUserId, userId));
   }
 

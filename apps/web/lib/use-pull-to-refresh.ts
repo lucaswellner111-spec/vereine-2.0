@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { hasOpenEscapeLayer } from "@/components/ui-client";
 import { haptic } from "./haptics";
 
@@ -10,7 +10,8 @@ const MAX_PULL = PULL_THRESHOLD * 1.6;
 /** Indikator mindestens so lange zeigen, damit das Neuladen sichtbar ist. */
 const MIN_SPIN_MS = 600;
 
-export type PullState = { pull: number; refreshing: boolean };
+/** indicatorRef gehoert an PullIndicator: der Zugweg wird dort direkt gesetzt (kein Re-Render der Seite je Bewegung). */
+export type PullState = { refreshing: boolean; indicatorRef: RefObject<HTMLDivElement | null> };
 
 /**
  * Pull-to-Refresh fuer Seiten, die im Fenster scrollen: nur bei Touch, nur wenn ganz oben gescrollt
@@ -18,7 +19,7 @@ export type PullState = { pull: number; refreshing: boolean };
  * Waehrend der Hook aktiv ist, ist das browsereigene Neuladen per Ziehen (Chrome Android) aus.
  */
 export function usePullToRefresh(onRefresh: () => unknown, { enabled = true }: { enabled?: boolean } = {}): PullState {
-  const [pull, setPull] = useState(0);
+  const indicatorRef = useRef<HTMLDivElement>(null);
   const [refreshing, setRefreshing] = useState(false);
   const cb = useRef(onRefresh);
   cb.current = onRefresh;
@@ -33,9 +34,26 @@ export function usePullToRefresh(onRefresh: () => unknown, { enabled = true }: {
     let busy = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    /** Zugweg direkt am Indikator setzen (Hoehe, Fortschritt), ohne React-Zustand. */
+    const paint = (d: number) => {
+      const el = indicatorRef.current;
+      if (!el) return;
+      if (d === 0) {
+        el.style.removeProperty("height");
+        el.style.removeProperty("--pull");
+        delete el.dataset.pulling;
+        delete el.dataset.reached;
+        return;
+      }
+      el.style.height = `${d}px`;
+      el.style.setProperty("--pull", String(Math.min(1, d / PULL_THRESHOLD)));
+      el.dataset.pulling = "true";
+      if (d >= PULL_THRESHOLD) el.dataset.reached = "true";
+      else delete el.dataset.reached;
+    };
     const reset = () => {
       startY = null;
-      if (dist !== 0) setPull(0);
+      if (dist !== 0) paint(0);
       dist = 0;
     };
     const onStart = (e: TouchEvent) => {
@@ -55,12 +73,12 @@ export function usePullToRefresh(onRefresh: () => unknown, { enabled = true }: {
         if (dy < 0) reset();
         else if (dist !== 0) {
           dist = 0;
-          setPull(0);
+          paint(0);
         }
         return;
       }
       dist = Math.min(dy * 0.5, MAX_PULL);
-      setPull(dist);
+      paint(dist);
     };
     const onEnd = () => {
       if (startY === null) return;
@@ -93,10 +111,10 @@ export function usePullToRefresh(onRefresh: () => unknown, { enabled = true }: {
       window.removeEventListener("touchcancel", reset);
       clearTimeout(timer);
       root.style.overscrollBehaviorY = prevOverscroll;
-      setPull(0);
+      paint(0);
       setRefreshing(false);
     };
   }, [enabled]);
 
-  return { pull, refreshing };
+  return { refreshing, indicatorRef };
 }

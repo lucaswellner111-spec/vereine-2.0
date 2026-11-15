@@ -34,6 +34,10 @@ export const RETENTION = {
   youthDeletionNotice: "7 days",
   /** Einladungen an einen zweiten Elternteil: nach Ablauf, Annahme oder Widerruf. */
   guardianInvites: "30 days",
+  /** Erledigte Meldungen (abgelehnt/umgesetzt): nach der Bearbeitung; offene bleiben bis zur Pruefung. */
+  reportsResolved: "30 days",
+  /** Ruhendes Jugendkonto (ab dem 16. Geburtstag, keine Uebernahme): nach dieser Frist geloescht. */
+  dormantYouth: "12 months",
 } as const;
 
 /** Je Runde hoechstens so viele Zeilen (kurze Sperren, kleine Transaktionen). */

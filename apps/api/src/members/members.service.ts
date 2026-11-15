@@ -20,6 +20,7 @@ import { DB, type Database } from "../db/db.module";
 import { feeClasses, memberCounters, memberProfiles, pendingMembers } from "../db/schema";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { ageOn } from "../common/age";
 import { berlinDate } from "../common/berlin-date";
 import { ProfileAccess } from "../profiles/profile-access.service";
 import { isUniqueViolation } from "../common/pg-errors";
@@ -29,13 +30,9 @@ const READERS: OrgRole[] = ["admin", "treasurer"];
 const DELETED = "Gelöschtes Mitglied";
 const today = () => berlinDate();
 
-function isMinor(birthDate: string | null): boolean | null {
+function isMinor(birthDate: string | null, on: string = berlinDate()): boolean | null {
   if (!birthDate) return null;
-  const b = new Date(birthDate);
-  const t = new Date();
-  let age = t.getUTCFullYear() - b.getUTCFullYear();
-  if (t.getUTCMonth() < b.getUTCMonth() || (t.getUTCMonth() === b.getUTCMonth() && t.getUTCDate() < b.getUTCDate())) age -= 1;
-  return age < 18;
+  return ageOn(birthDate, on) < 18;
 }
 
 /**
@@ -485,7 +482,7 @@ export class MembersService implements OnModuleInit {
 
   // --- Kennzahlen fuer das Dashboard ----------------------------------------------------
 
-  async stats(orgId: string) {
+  async stats(orgId: string, now = new Date()) {
     await this.ensureProfiles(orgId);
     const profiles = await this.db.select().from(memberProfiles).where(and(eq(memberProfiles.orgId, orgId), isNull(memberProfiles.leftOn)));
     const classes = await this.db.select().from(feeClasses).where(eq(feeClasses.orgId, orgId));
@@ -497,15 +494,15 @@ export class MembersService implements OnModuleInit {
     }
     const known = profiles.filter((p) => p.birthDate);
     const months: { month: string; joins: number }[] = [];
-    const now = new Date();
+    const todayBerlin = berlinDate(now);
     for (let i = 11; i >= 0; i--) {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      const d = new Date(Date.UTC(Number(todayBerlin.slice(0, 4)), Number(todayBerlin.slice(5, 7)) - 1 - i, 1));
       const month = d.toISOString().slice(0, 7);
       months.push({ month, joins: profiles.filter((p) => p.joinedOn.startsWith(month)).length });
     }
     return {
-      newMembers30d: profiles.filter((p) => p.joinedOn >= new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)).length,
-      minors: known.length ? known.filter((p) => isMinor(p.birthDate)).length : null,
+      newMembers30d: profiles.filter((p) => p.joinedOn >= berlinDate(new Date(now.getTime() - 30 * 86400_000))).length,
+      minors: known.length ? known.filter((p) => isMinor(p.birthDate, todayBerlin)).length : null,
       byFeeClass: [...byClass].map(([name, members]) => ({ name, members })).sort((a, b) => b.members - a.members),
       joinsByMonth: months,
     };

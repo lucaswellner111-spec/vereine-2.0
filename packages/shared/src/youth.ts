@@ -23,11 +23,11 @@ export type AccountType = "adult" | "youth";
 export const YOUTH_CONSENT_PURPOSES = ["account", "org_membership"] as const;
 export type YouthConsentPurpose = (typeof YOUTH_CONSENT_PURPOSES)[number];
 /** Fassung der angezeigten Einwilligungstexte; bei Aenderung neue Version (der Nachweis speichert Fassung und Pruefsumme). */
-export const YOUTH_CONSENT_VERSION = "2026-11-14";
+export const YOUTH_CONSENT_VERSION = "2026-11-15";
 
 export const YOUTH_CONSENT_TEXTS: Record<YouthConsentPurpose, string> = {
   account:
-    "Ich bin sorgeberechtigt für dieses Kind und lege für es ein Jugendkonto an. Ich habe die Hinweise zur Verarbeitung der Daten meines Kindes gelesen. Ich kann alle Daten jederzeit einsehen, exportieren und löschen.",
+    "Ich bin sorgeberechtigt für dieses Kind und lege für es ein Jugendkonto an. Ich habe die Hinweise für Eltern zur Verarbeitung der Daten meines Kindes gelesen. Ich kann alle Daten bis zum 16. Geburtstag meines Kindes einsehen, exportieren und löschen.",
   org_membership:
     "Ich stimme zu, dass mein Kind Mitglied in diesem Verein wird. Der Verein sieht dafür den vollen Namen meines Kindes, seine Termin-Zusagen und seine Anwesenheit. Ich kann die Mitgliedschaft jederzeit beenden.",
 };

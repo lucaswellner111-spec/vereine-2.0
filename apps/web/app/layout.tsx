@@ -24,6 +24,8 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Klubnest", statusBarStyle: "default" },
   openGraph: { type: "website", locale: "de_DE", siteName: "Klubnest", title: "Klubnest", description: SITE_DESCRIPTION },
   // Vorschau mit Testdaten: nicht in Suchmaschinen aufnehmen, bis NEXT_PUBLIC_ALLOW_INDEXING=1 gesetzt ist
+  // Safari macht sonst aus Zahlen/Datum Links, das fuehrt zu Hydration-Fehlern (#418)
+  formatDetection: { telephone: false, email: false, address: false, date: false },
   robots: ALLOW_INDEXING ? undefined : { index: false, follow: false },
 };
 

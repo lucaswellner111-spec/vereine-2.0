@@ -222,7 +222,8 @@ describe("E-Mail-Ablaeufe", () => {
     expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: u.cookie } })).json().email).toBe("wechsel@example.de");
     const ok = await post("/auth/email/confirm", { token: tokenOf(confirmMail.text) });
     expect(ok.json()).toMatchObject({ changed: true, loggedIn: false, user: { email: "neu-wanda@example.de", emailVerified: true } });
-    expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: u.cookie } })).json().email).toBe("neu-wanda@example.de");
+    // Wechsel beendet alle Sitzungen ausser der im bestaetigenden Browser (hier keine): neu anmelden
+    expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie: u.cookie } })).statusCode).toBe(401);
     expect((await post("/auth/login", { email: "neu-wanda@example.de", password })).statusCode).toBe(200);
   });
 
@@ -354,7 +355,9 @@ describe("E-Mail-Ablaeufe", () => {
   });
 
   it("/health/ready und /platform zeigen das Mail-Kontingent", async () => {
-    const ready = (await app.inject({ method: "GET", url: "/health/ready" })).json();
+    process.env.METRICS_TOKEN = "mail-test-token";
+    const ready = (await app.inject({ method: "GET", url: "/health/ready", headers: { authorization: "Bearer mail-test-token" } })).json();
+    delete process.env.METRICS_TOKEN;
     expect(ready.mail).toMatchObject({ driver: "memory", warning: false });
     expect(ready.mail.day).toMatch(/^\d+\/200$/);
     const u = await signup("plattform-mail@example.de");

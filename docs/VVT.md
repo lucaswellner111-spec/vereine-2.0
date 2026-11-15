@@ -47,6 +47,10 @@ Abkürzungen: **b** = Vertrag (Art. 6 Abs. 1 lit. b), **a** = Einwilligung, **c*
 | A26 | **Datenauskunft und Bilder-Export** | Export der eigenen Daten (keine Speicherung), Zähler | c (Art. 15, 20) | keine Speicherung; Limit 5/h |
 | A27 | **Nachweis AVV-Zustimmung** | Verein, Fassung, Prüfsumme, zustimmende Person, Zeit (keine IP) | c (Art. 28 Abs. 3), f | Frist offen (Vorschlag: 3 Jahre nach Vertragsende); anonym bei Kontolöschung |
 | A28 | **Lokaler Speicher im Browser** (Theme, Tastenkürzel, letzte Verwaltungswahl, Rückkehrziel) | keine Übermittlung an den Server | § 25 Abs. 2 Nr. 2 TDDDG | bis Browser-Speicher geleert |
+| A-J1 | **Jugendkonten (Kinder 6 bis 15) unter dem Elternkonto:** Verwaltung durch die Eltern, Altersgrenze 16 | Kind: Name, Geburtsdatum, Platzhalter-E-Mail; Eltern: Verknüpfung, Rechnungsempfänger | b (Mitgliedschaft über Eltern), Art. 8 (für spätere Freigaben) | bis Löschung (nur bis 16. Geburtstag); letzter Elternteil weg 30 Tage; ruhend ab 16: 12 Monate |
+| A-J2 | **Nachweis der Elternfreigaben** (`guardian_consents`, append-only) | Kind-ID, Eltern-ID, Zweck, Verein, Textfassung, Prüfsumme | c, f, Art. 7 Abs. 1 | nach Löschung des Kindes pseudonym 3 Jahre |
+| A-J3 | **Zweiter Elternteil und geplante Löschung** | Token-Hash, HMAC-Hash der Adresse, Status; Zeitpunkt/ID des beantragenden Elternteils | b, f | Einladung 30 Tage nach Ablauf; Löschankündigung 7 Tage |
+| A-J4 | **Zwei-Faktor-Pflicht, Bot-Abwehr (Proof-of-Work), Kommentar-Likes** (2FA: Frist-Zeitstempel `two_factor_required_since`; Captcha: keine Personendaten; Likes: Kommentar-ID, Nutzer-ID) | Konto-Inhaber | f (2FA, Captcha), b (Likes) | 2FA mit Konto; Captcha 10 Minuten; Likes mit Kommentar/Konto |
 
 ## Teil B: Betreiber als Auftragsverarbeiter für Vereine (Art. 30 Abs. 2)
 
@@ -55,7 +59,7 @@ Verantwortlicher ist jeweils der Verein. Weisung: Nutzung der Funktionen durch V
 | Nr. | Tätigkeit | Daten | Fristen |
 |---|---|---|---|
 | B1 | **Mitgliederstammdaten:** Anschrift, Telefon, Geburtsdatum, Eintritt/Austritt, Beitragsklasse, Erziehungsberechtigte, Notiz | Mitglieder, Erziehungsberechtigte | Austritt löscht Personendaten (Nummer, Daten, Klasse bleiben ohne Namen); Kontolöschung löscht alle |
-| B2 | **Mitglieder-Import per CSV:** Vormerkung, persönliche Einladung | Vorname, Nachname, E-Mail, optional Nummer, Eintritt, Klasse | Annahme: sofort löschen; sonst 30 Tage nach Versand / 60 Tage unversendet |
+| B2 | **Mitglieder-Import per CSV (auch Kinder: Geburtsdatum, Elternadresse):** Vormerkung, persönliche Einladung | Vorname, Nachname, E-Mail, optional Nummer, Eintritt, Klasse | Annahme: sofort löschen; sonst 30 Tage nach Versand / 60 Tage unversendet |
 | B3 | **Beitragsläufe und Rechnungen (PDF, CSV, GiroCode):** Beitragsabrechnung | Name, Anschrift (Kopie), Beträge, Status; Ausstellerdaten des Vereins | Rechnungen 8–10 Jahre (GoBD/AO), nach Kontolöschung anonymisiert; Entwürfe jederzeit löschbar |
 | B4 | **Einladungs- und Rechnungsmails im Auftrag des Vereins** | Adresse, Name, Link | Job nach Versand gelöscht; Sperrliste (A24) |
 | B5 | **Anwesenheit:** da/fehlt/entschuldigt (ohne Grund) | Mitglied, Termin, Erfasser, Zeit | 24 Monate; Austritt löscht alle Einträge |

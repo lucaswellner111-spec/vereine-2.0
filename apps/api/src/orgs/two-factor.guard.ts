@@ -6,7 +6,7 @@ import { TwoFactorPolicyService } from "../auth/two-factor-policy.service";
 import { OrgsService } from "./orgs.service";
 
 /**
- * Nach `SessionGuard` auf sensiblen Routen (Mitgliederdaten, Rechnungen, Einladungen, Moderation): Vorstaende ohne
+ * Nach `SessionGuard` auf sensiblen Routen (Mitgliederdaten, Rechnungen, Einladungen, Moderation): Vorstand und Kasse ohne
  * Zwei-Faktor werden nach der Uebergangsfrist gesperrt. Wirkt nur fuer Vorstaende/Plattform-Admins und nur, wenn die
  * Pflicht auf dem Server aktiv ist (twoFactorEnforced); alle anderen Rollen passieren ohne Zusatzabfrage.
  */

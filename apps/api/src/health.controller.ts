@@ -1,8 +1,10 @@
-import { Controller, Get, Inject, ServiceUnavailableException } from "@nestjs/common";
+import { Controller, Get, Inject, Req, ServiceUnavailableException } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { sql } from "drizzle-orm";
 import type { HealthResponse } from "@vereine/shared";
 import { CACHE, type Cache } from "./cache/cache.module";
 import { DB, type Database } from "./db/db.module";
+import { hasMetricsToken } from "./common/metrics-token";
 import { JobsService } from "./jobs/jobs.service";
 import { MailService } from "./mail/mail.service";
 import { OpsService } from "./ops/ops.service";
@@ -22,11 +24,21 @@ export class HealthController {
     return { status: "ok", service: "api", time: new Date().toISOString() };
   }
 
-  /** Readiness: Datenbank und Cache muessen antworten (Load Balancer / Docker-Healthcheck). */
+  /**
+   * Readiness: Datenbank und Cache muessen antworten (Load Balancer / Docker-Healthcheck). Oeffentlich nur `{status}`;
+   * Details (Queue, Fehlerarten, Mail-Kontingent) nur mit `Authorization: Bearer <METRICS_TOKEN>`.
+   */
   @Get("ready")
-  async ready() {
+  async ready(@Req() req: FastifyRequest) {
     const db = await this.db.execute(sql`select 1`).then(() => true, () => false);
     const cache = await this.cache.ping();
+    if (!hasMetricsToken(req)) {
+      // Worker-Lebenszeichen bleibt oeffentlich (Uptime-/Smoke-Check), enthaelt nichts Vertrauliches
+      const { worker } = await this.ops.status().catch(() => ({ worker: "unknown" as const }));
+      const pub = { status: db && cache ? "ok" : "degraded", worker };
+      if (!db || !cache) throw new ServiceUnavailableException(pub);
+      return pub;
+    }
     // Warteschlange: viele wartende/fehlgeschlagene Jobs = Worker steht oder haengt (Alarm-Kriterium, nicht Bereitschaft)
     const queue = await this.jobs.stats().catch(() => null);
     // Mail-Kontingent (Kostenbremse): nur Zahlen, ab 80 % "warning" (nicht wichtige Mails werden dann zurueckgehalten)

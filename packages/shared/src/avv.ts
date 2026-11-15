@@ -263,14 +263,31 @@ export const AVV_DOCUMENT_V2: AvvDocument = {
  * der gerenderte Text (und damit der Hash) aendert. Fassungen 1 und 2 bleiben unveraendert abrufbar.
  * NICHT als rechtlich geprueft bezeichnen: die Pruefung steht aus.
  */
-export const AVV_DOCUMENT: AvvDocument = {
+export const AVV_DOCUMENT_V3: AvvDocument = {
   ...AVV_DOCUMENT_V2,
   version: "2026-11-14-fassung-3",
   status: "published",
 };
 
+const BACKUP_OLD = ["Ablauf des Sicherungszeitraums (bis zu 14 Tage)", "Aufbewahrung der letzten 14 Sicherungen"];
+const BACKUP_NEW = ["Ablauf des Sicherungszeitraums (bis zu 5 Wochen)", "Aufbewahrung von 14 täglichen und 4 wöchentlichen Sicherungen (bis zu 5 Wochen)"];
+
+/**
+ * Fassung 4 (15.11.2026): Sicherungsfrist an den Betrieb angepasst (14 taeglich + 4 woechentlich = bis zu 5 Wochen).
+ * Abschnitte werden geklont, damit Fassung 2/3 (gemeinsame Objekte) unveraendert bleiben.
+ */
+export const AVV_DOCUMENT: AvvDocument = {
+  ...AVV_DOCUMENT_V3,
+  version: "2026-11-15-fassung-4",
+  publishedAt: "2026-11-15",
+  sections: AVV_DOCUMENT_V3.sections.map((sec) => ({
+    ...sec,
+    paragraphs: sec.paragraphs.map((p) => BACKUP_OLD.reduce((t, o, i) => t.replace(o, BACKUP_NEW[i]), p)),
+  })),
+};
+
 /** Alle bekannten Fassungen (neueste zuletzt). Aeltere Fassungen bleiben erhalten, damit akzeptierte Texte abrufbar sind. */
-export const AVV_VERSIONS: AvvDocument[] = [AVV_DOCUMENT_V1, AVV_DOCUMENT_V2, AVV_DOCUMENT];
+export const AVV_VERSIONS: AvvDocument[] = [AVV_DOCUMENT_V1, AVV_DOCUMENT_V2, AVV_DOCUMENT_V3, AVV_DOCUMENT];
 
 /** "2026-11-14" -> "14.11.2026" */
 export function avvDateDe(iso: string): string {

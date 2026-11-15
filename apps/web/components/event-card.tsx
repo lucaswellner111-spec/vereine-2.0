@@ -8,8 +8,8 @@ import { api, describeError } from "@/lib/api";
 import { capacityText, EVENT_KIND_LABEL, myStatusText, RSVP_OPTIONS, withRsvp } from "@/lib/events";
 import { Alert, Badge, Button, Card } from "./ui";
 
-const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
-const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
+const dateFmt = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
 
 /** showDate: Datum mit anzeigen (Listen ohne Tagesueberschrift, z. B. vergangene Termine). */
 

@@ -10,6 +10,7 @@ import { DB } from "../db/db.module";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testing/test-db";
 import { confirmEmailForTest } from "../testing/auth";
+import { MembersService } from "./members.service";
 
 const password = "ein-sehr-langes-passwort";
 const years = (n: number) => `${new Date().getUTCFullYear() - n}-01-15`;
@@ -194,5 +195,11 @@ describe("Mitgliederverwaltung", () => {
     expect(exported.memberData[0]).toMatchObject({ club: "SV Mitglieder", street: "Löschweg 9" });
     expect((await req(gone, "DELETE", "/privacy/account", { password })).statusCode).toBe(204);
     expect(await db.select().from(schema.memberProfiles).where(eq(schema.memberProfiles.userId, gone.id))).toHaveLength(0);
+  });
+  it("Kennzahlen: Monate und Stichtage nach deutscher Zeit (Silvester 23:30 UTC ist schon Januar)", async () => {
+    const [o] = await db.select().from(schema.organizations).where(eq(schema.organizations.slug, org));
+    const stats = await app.get(MembersService).stats(o.id, new Date("2026-12-31T23:30:00Z"));
+    expect(stats.joinsByMonth.at(-1)!.month).toBe("2027-01");
+    expect(stats.joinsByMonth).toHaveLength(12);
   });
 });

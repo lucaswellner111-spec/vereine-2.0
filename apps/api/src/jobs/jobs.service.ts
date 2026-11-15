@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, Optional } from "@nestjs/common";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
+import { describeError } from "../common/log-redact";
 
 export type JobHandler = (data: any) => Promise<void>;
 
@@ -56,7 +57,7 @@ export class JobsService implements OnModuleDestroy {
   every(name: string, everyMs: number): void {
     this.schedules.push({ name, everyMs });
     if (this.mode === "inline") {
-      const t = setInterval(() => void this.run(name, {}).catch((e) => this.log.error(`${name}: ${e.message}`)), everyMs);
+      const t = setInterval(() => void this.run(name, {}).catch((e) => this.log.error(`${name}: ${describeError(e)}`)), everyMs);
       t.unref();
       this.timers.push(t);
     }
@@ -67,7 +68,7 @@ export class JobsService implements OnModuleDestroy {
     if (this.mode === "inline") {
       if (!opts.delayMs) return this.run(name, data);
       // Verzoegert (z. B. Mail auf morgen verschoben): Timer im selben Prozess, geht beim Neustart verloren (nur lokal/Tests).
-      const t = setTimeout(() => void this.run(name, data).catch((e) => this.log.error(`${name}: ${e.message}`)), opts.delayMs);
+      const t = setTimeout(() => void this.run(name, data).catch((e) => this.log.error(`${name}: ${describeError(e)}`)), opts.delayMs);
       t.unref();
       this.timers.push(t as unknown as NodeJS.Timeout);
       return;
@@ -86,13 +87,18 @@ export class JobsService implements OnModuleDestroy {
   async startWorker(): Promise<void> {
     if (this.mode !== "bullmq") throw new Error("Worker braucht QUEUE_REDIS_URL (oder REDIS_URL).");
     for (const s of this.schedules) {
-      await this.queue!.upsertJobScheduler(`schedule:${s.name}`, { every: s.everyMs }, { name: s.name, data: {} });
+      await this.queue!.upsertJobScheduler(`schedule:${s.name}`, { every: s.everyMs }, {
+        name: s.name,
+        data: {},
+        // Wiederhol-Jobs laufen alle paar Minuten: ohne Aufraeumen fuellen sie das Queue-Redis (noeviction)
+        opts: { removeOnComplete: 100, removeOnFail: { age: 7 * 24 * 3600, count: 1_000 } },
+      });
     }
     this.worker = new Worker(QUEUE, (job) => this.run(job.name, job.data), {
       connection: this.connect(this.url!) as never,
       concurrency: Number(process.env.WORKER_CONCURRENCY ?? 5),
     });
-    this.worker.on("failed", (job, err) => this.log.error(`Job ${job?.name} fehlgeschlagen: ${err.message}`));
+    this.worker.on("failed", (job, err) => this.log.error(`Job ${job?.name} fehlgeschlagen: ${describeError(err)}`));
     this.worker.on("completed", (job) => this.log.debug(`Job ${job.name} fertig`));
     this.log.log(`Worker bereit: ${[...this.handlers.keys()].join(", ")}`);
   }

@@ -32,7 +32,7 @@ describe("AvvAdmin", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<AvvAdmin slug="sv" />);
 
-    await screen.findByText(/Fassung vom 14\.11\.2026/);
+    await screen.findByText(/Fassung vom 15\.11\.2026/);
     expect(screen.queryByText(/Anwaltsprüfung|ENTWURF/)).toBeNull();
     expect(screen.getByRole("region", { name: /Text des Vertrags/ }).textContent).toContain("Hetzner");
     expect(screen.getByRole("region", { name: /Text des Vertrags/ }).textContent).toContain("Scaleway");

@@ -30,7 +30,7 @@ const VIEWS: { value: View; label: string }[] = [
 /** Seitengroesse der API fuer vergangene Termine. */
 const PAST_PAGE = 100;
 
-const dayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long" });
+const dayFmt = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long" });
 const replaceIn = (list: EventItem[] | null, u: EventItem) => (list ?? []).map((x) => (x.id === u.id ? u : x));
 
 // useSearchParams braucht eine Suspense-Grenze (sonst bricht der statische Build ab)

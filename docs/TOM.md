@@ -32,7 +32,7 @@ Verantwortlich für die Pflege: Geschäftsführung (Betreiber). Überprüfung mi
 
 | Maßnahme | Status | Nachweis |
 |---|---|---|
-| **Sicherungen:** Skript sichert Datenbank und Medienspeicher, behält die letzten 14 Sicherungen; Wiederherstellungstest-Skript | **teilweise**: Skripte vorhanden; **automatischer Lauf (Cron/Timer) und verschlüsselte Offsite-Kopie fehlen**; Wiederherstellungsübung nicht durchgeführt | `infra/deploy/backup.sh`, `restore-test.sh` |
+| **Sicherungen:** Skript sichert Datenbank und Medienspeicher, behält 14 tägliche und 4 wöchentliche Sätze (bis zu 5 Wochen, keine monatlichen); Wiederherstellungstest-Skript | **teilweise**: Skripte vorhanden; **automatischer Lauf (Cron/Timer) und verschlüsselte Offsite-Kopie fehlen**; Wiederherstellungsübung nicht durchgeführt | `infra/deploy/backup.sh`, `restore-test.sh` |
 | **Ausfallsicherheit:** Container starten automatisch neu, Zustandsprüfungen; Warteschlange (Redis mit AOF, noeviction) wiederholt Jobs; Hintergrundjobs als Sicherheitsnetz (z. B. Löschung nach Austritt) | umgesetzt | `docker-compose.preview.yml`, `JobsService` |
 | **Schutz vor Überlast und Missbrauch:** Rate-Limits (öffentlich je IP, Anmeldung, Nutzeraktionen, Mail-Kostenbremse, Export) | umgesetzt | Redis-Zähler |
 | **Netzwerk:** Datenbank und Redis nur im internen Docker-Netz; Caddy als einziger öffentlicher Eingang | umgesetzt; **Cloud-Firewall (Hetzner) offen** | `infra/` |

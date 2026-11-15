@@ -69,10 +69,20 @@ export default function PlatformPage() {
   );
 }
 
+/** Platzhalter, solange eine Kennzahl laedt oder nicht geladen werden konnte (statt die Karte still wegzulassen). */
+function StatusLine({ loading, what }: { loading: boolean; what: string }) {
+  return (
+    <p role={loading ? "status" : "alert"} className="mb-4 text-xs text-muted">
+      {loading ? `${what} wird geladen …` : `${what} konnte nicht geladen werden.`}
+    </p>
+  );
+}
+
 /** Betriebslage: Alarme (Worker, Jobs, Mail-Kontingent, Platte, Backup). Gleiche Kriterien wie die Alarm-Mail an den Betreiber. */
 function OpsCard() {
-  const o = useApi<OpsStatus>("/platform/ops").data;
-  if (!o) return null;
+  const state = useApi<OpsStatus>("/platform/ops");
+  const o = state.data;
+  if (!o) return <StatusLine loading={!state.error} what="Betriebslage" />;
   return (
     <Card className="mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -101,8 +111,9 @@ function OpsCard() {
 
 /** Kostenbremse sichtbar machen: "Mail-Kontingent 82 %" (Tag/Monat), ab 80 % werden nicht wichtige Mails zurueckgehalten. */
 function MailQuotaCard() {
-  const q = useApi<MailQuota>("/platform/mail-quota").data;
-  if (!q) return null;
+  const state = useApi<MailQuota>("/platform/mail-quota");
+  const q = state.data;
+  if (!q) return <StatusLine loading={!state.error} what="Mail-Kontingent" />;
   return (
     <Card className="mb-4">
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1,14 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { ConsentState } from "@vereine/shared";
+import type { ConsentState, YouthChild } from "@vereine/shared";
 import { BlockedPeopleCard } from "@/components/blocked-people-card";
 import { SettingsBackLink } from "@/components/settings-back-link";
 import { Alert, Button, Card, ErrorState, Field, ListSkeleton, PageHeader, Toggle } from "@/components/ui";
 import { api, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { useApi } from "@/lib/use-api";
+import { downloadJson } from "@/lib/download";
+import { useApi, useBusy } from "@/lib/use-api";
 import { toast } from "@/components/ui-hosts";
 
 const labels: Record<string, { title: string; text: string; locked?: boolean }> = {
@@ -27,45 +29,50 @@ export default function PrivacyPage() {
   const { user, clear } = useAuth();
   const router = useRouter();
   const consentList = useApi<ConsentState[]>("/privacy/consents");
+  const childList = useApi<YouthChild[]>("/guardian/children");
+  const children = childList.data ?? [];
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [exporting, runExport] = useBusy();
+  const [deleting, runDelete] = useBusy();
+  const [consentBusy, runConsent] = useBusy();
 
-  async function toggle(purpose: ConsentState["purpose"], granted: boolean) {
-    setError(null);
-    try {
-      consentList.setData(await api<ConsentState[]>("/privacy/consents", { method: "PUT", body: { purpose, granted } }));
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const toggle = (purpose: ConsentState["purpose"], granted: boolean) =>
+    runConsent(async () => {
+      setError(null);
+      try {
+        consentList.setData(await api<ConsentState[]>("/privacy/consents", { method: "PUT", body: { purpose, granted } }));
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
-  async function download() {
-    setError(null);
-    try {
-      const data = await api<unknown>("/privacy/export");
-      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-      const a = Object.assign(document.createElement("a"), { href: url, download: "meine-daten.json" });
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Deine Daten wurden heruntergeladen.");
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const download = () =>
+    runExport(async () => {
+      setError(null);
+      try {
+        const data = await api<unknown>("/privacy/export");
+        downloadJson(data, "meine-daten.json");
+        toast.success("Deine Daten wurden heruntergeladen.");
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
-  async function deleteAccount() {
-    setDeleteError(null);
-    try {
-      await api("/privacy/account", { method: "DELETE", body: { password } });
-      router.replace("/login?geloescht=1");
-      clear();
-    } catch (e) {
-      // 409: du bist einziger Vorstand eines Vereins mit weiteren Mitgliedern - der Servertext nennt die Vereine.
-      setDeleteError(describeError(e));
-    }
-  }
+  const deleteAccount = () =>
+    runDelete(async () => {
+      setDeleteError(null);
+      try {
+        await api("/privacy/account", { method: "DELETE", body: { password } });
+        router.replace("/login?geloescht=1");
+        clear();
+      } catch (e) {
+        // 409: du bist einziger Vorstand eines Vereins mit weiteren Mitgliedern - der Servertext nennt die Vereine.
+        setDeleteError(describeError(e));
+      }
+    });
 
   return (
     <>
@@ -90,7 +97,7 @@ export default function PrivacyPage() {
                     <p className="text-sm font-medium">{meta.title}</p>
                     <p className="text-xs text-muted">{VISIBLE.has(c.purpose) ? meta.text : UNUSED_TEXT}</p>
                   </div>
-                  <Toggle label={meta.title} checked={c.granted} disabled={meta.locked} onChange={(v) => toggle(c.purpose, v)} />
+                  <Toggle label={meta.title} checked={c.granted} disabled={meta.locked || consentBusy} onChange={(v) => toggle(c.purpose, v)} />
                 </div>
               );
             })}
@@ -102,7 +109,7 @@ export default function PrivacyPage() {
       <h2 className="mb-2 font-semibold">Deine Daten</h2>
       <Card className="mb-6">
         <p className="text-sm text-muted">Lade alle über dich gespeicherten Daten als JSON-Datei herunter (Art. 15 und 20 DSGVO).</p>
-        <Button variant="secondary" className="mt-3" onClick={download}>Daten herunterladen</Button>
+        <Button variant="secondary" className="mt-3" busy={exporting} onClick={download}>Daten herunterladen</Button>
       </Card>
 
       <h2 className="mb-2 font-semibold text-danger">Konto löschen</h2>
@@ -114,12 +121,25 @@ export default function PrivacyPage() {
           Bist du einziger Vorstand eines Vereins, übertrage vorher die Vorstandsrolle (Verwaltung → Mitglieder).
           Vereine ohne weitere Mitglieder werden gelöscht; exportiere vorher die Rechnungen (CSV).
         </p>
+        {children.length > 0 && (
+          <div className="mt-3"><Alert tone="info">
+            <p className="font-medium">
+              Du hast {children.length === 1 ? "ein Jugendkonto" : `${children.length} Jugendkonten`}: {children.map((c) => c.name).join(", ")}.
+            </p>
+            <p className="mt-1">
+              Ist kein weiterer Elternteil eingetragen, ruht das Jugendkonto nach deiner Löschung und wird nach 30 Tagen
+              gelöscht (Mitgliedschaften, Zusagen und Anwesenheit entfallen, Rechnungen bleiben anonymisiert erhalten).
+              Ist ein zweiter Elternteil eingetragen, bleibt das Kind bei ihm. Lade die Daten deiner Kinder vorher unter{" "}
+              <Link href="/kinder" className="underline">Meine Kinder</Link> herunter.
+            </p>
+          </Alert></div>
+        )}
         {confirmDelete ? (
           <div className="mt-3 max-w-sm space-y-3">
             {deleteError && <Alert>{deleteError}</Alert>}
             <Field id="del-pw" label="Passwort zur Bestätigung" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             <div className="flex gap-2">
-              <Button variant="danger" disabled={!password} onClick={deleteAccount}>Endgültig löschen</Button>
+              <Button variant="danger" disabled={!password} busy={deleting} onClick={deleteAccount}>Endgültig löschen</Button>
               <Button variant="ghost" onClick={() => { setConfirmDelete(false); setPassword(""); }}>Abbrechen</Button>
             </div>
           </div>

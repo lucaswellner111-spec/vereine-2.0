@@ -122,7 +122,16 @@ describe("Redis: Session-Cache, Rate-Limit, Aufraeumen, Health", () => {
     expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
     const ready = await app.inject({ method: "GET", url: "/health/ready" });
     expect(ready.statusCode).toBe(200);
-    expect(ready.json()).toMatchObject({ status: "ok", db: "up", cache: "up (redis)" });
+    // oeffentlich nur Status und Worker, keine Queue-/Fehlerdetails
+    expect(Object.keys(ready.json()).sort()).toEqual(["status", "worker"]);
+    process.env.METRICS_TOKEN = "health-test-token";
+    try {
+      expect((await app.inject({ method: "GET", url: "/health/ready", headers: { authorization: "Bearer falsch" } })).json().db).toBeUndefined();
+      const full = await app.inject({ method: "GET", url: "/health/ready", headers: { authorization: "Bearer health-test-token" } });
+      expect(full.json()).toMatchObject({ status: "ok", db: "up", cache: "up (redis)" });
+    } finally {
+      delete process.env.METRICS_TOKEN;
+    }
   });
 });
 
@@ -231,7 +240,7 @@ describe("Health: Ausfall", () => {
     const { app } = await boot({ cache: broken });
     const res = await app.inject({ method: "GET", url: "/health/ready" });
     expect(res.statusCode).toBe(503);
-    expect(res.json()).toMatchObject({ status: "degraded", cache: "down" });
+    expect(res.json()).toMatchObject({ status: "degraded" }); // oeffentlich ohne Details
     // Liveness bleibt gruen
     expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
     await app.close();

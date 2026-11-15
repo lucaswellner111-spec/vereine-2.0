@@ -31,6 +31,8 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
   const [moreBusy, runMore] = useBusy();
   const [moreFailed, setMoreFailed] = useMoreFailed(postsPath);
   const [followBusy, runFollow] = useBusy();
+  // eine Sperre fuer Mitglied werden / Antrag zurueckziehen / Austreten / Tags speichern
+  const [acting, runAct] = useBusy();
   const [error, setError] = useState<string | null>(null);
   usePageTitle(org.data?.name ?? null);
   const [editTags, setEditTags] = useState<string[] | null>(null);
@@ -41,14 +43,15 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
   const isMember = org.data?.viewer.membership === "active";
   const teams = useApi<TeamItem[]>(isMember ? `/orgs/${slug}/teams` : null);
 
-  async function act(fn: () => Promise<OrgDetail>) {
-    setError(null);
-    try {
-      org.setData(await fn());
-    } catch (e) {
-      setError(describeError(e));
-    }
-  }
+  const act = (fn: () => Promise<OrgDetail>) =>
+    runAct(async () => {
+      setError(null);
+      try {
+        org.setData(await fn());
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
 
   const loadMore = () =>
     runMore(async () => {
@@ -110,14 +113,16 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
 
   const withdraw = async () => {
     if (!(await ask("Deinen Mitgliedsantrag zurückziehen? Du kannst später einen neuen stellen.", { title: "Antrag zurückziehen?", confirmLabel: "Zurückziehen" }))) return;
-    setError(null);
-    try {
-      await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
-      org.reload();
-      toast.success("Antrag zurückgezogen.");
-    } catch (e) {
-      setError(describeError(e));
-    }
+    await runAct(async () => {
+      setError(null);
+      try {
+        await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
+        org.reload();
+        toast.success("Antrag zurückgezogen.");
+      } catch (e) {
+        setError(describeError(e));
+      }
+    });
   };
 
   const nextEvents = (upcoming.data ?? []).slice(0, 3);
@@ -158,29 +163,32 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
               {viewer.following ? "Du folgst" : "Folgen"}
             </Button>
             {viewer.membership === "none" && (
-              <Button variant="secondary" onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/membership`, { method: "POST", body: {}, captcha: true }))}>
+              <Button variant="secondary" busy={acting} onClick={() => act(() => api<OrgDetail>(`/orgs/${slug}/membership`, { method: "POST", body: {}, captcha: true }))}>
                 Mitglied werden
               </Button>
             )}
             {viewer.membership === "pending" && (
               <>
                 <Badge tone="accent">Antrag wartet auf Freigabe</Badge>
-                <Button variant="ghost" onClick={() => void withdraw()}>Antrag zurückziehen</Button>
+                <Button variant="ghost" busy={acting} onClick={() => void withdraw()}>Antrag zurückziehen</Button>
               </>
             )}
             {viewer.membership === "active" && viewer.role !== "admin" && (
               <Button
                 variant="ghost"
+                busy={acting}
                 onClick={async () => {
                   if (!(await ask("Mitgliedschaft wirklich beenden? Du verlierst den Zugriff auf interne Termine und Chats des Vereins.", { title: "Austreten?", confirmLabel: "Austreten", danger: true }))) return;
-                  setError(null);
-                  try {
-                    await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
-                    org.reload();
-                    posts.reload();
-                  } catch (e) {
-                    setError(describeError(e));
-                  }
+                  await runAct(async () => {
+                    setError(null);
+                    try {
+                      await api(`/orgs/${slug}/members/${user!.id}`, { method: "DELETE" });
+                      org.reload();
+                      posts.reload();
+                    } catch (e) {
+                      setError(describeError(e));
+                    }
+                  });
                 }}
               >
                 Austreten
@@ -211,7 +219,7 @@ export default function OrgPage({ params }: { params: Promise<{ slug: string }> 
           <div className="mt-3 space-y-3">
             <TagPicker label="Sportarten und Themen" value={editTags} onChange={setEditTags} max={MAX_ORG_TAGS} />
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => act(async () => { const r = await api<OrgDetail>(`/orgs/${slug}/tags`, { method: "PUT", body: { tags: editTags } }); setEditTags(null); return r; })}>Speichern</Button>
+              <Button size="sm" busy={acting} onClick={() => act(async () => { const r = await api<OrgDetail>(`/orgs/${slug}/tags`, { method: "PUT", body: { tags: editTags } }); setEditTags(null); return r; })}>Speichern</Button>
               <Button size="sm" variant="ghost" onClick={() => setEditTags(null)}>Abbrechen</Button>
             </div>
           </div>

@@ -238,6 +238,8 @@ p, li { text-wrap: pretty; }
     animation: none !important;
     transition: none !important;
   }
+  /* Lade-Drehung bleibt: ohne sie sieht "laedt" wie "haengt" aus */
+  .animate-spin { animation: spin 1s linear infinite !important; }
 }
 
 /* Trefferflaeche mind. 44x44 px bei Touch, ohne Optik zu aendern. Element braucht position. */

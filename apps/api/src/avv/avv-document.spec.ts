@@ -12,6 +12,8 @@ const PINNED: Record<string, string> = {
   "2026-11-14-entwurf-2": "27a0a3d694c1764f1f48ed621f58baf7fc3d3e02c2399ae1d506ed094a2118d8",
   // D1: derselbe Text ohne Entwurfshinweis im Kopf ("Fassung vom 14.11.2026"); Fassungen 1 und 2 bleiben unveraendert
   "2026-11-14-fassung-3": "722b98c79a73990bca5d5b24c3cbeea73638689c425a2c658df19731605ad639",
+  // P2: Sicherungsfrist "bis zu 5 Wochen" (14 taeglich + 4 woechentlich)
+  "2026-11-15-fassung-4": "675e6b707c5539fb19ef876f122f7fc4a304c55523371bfab1f9a96c71e7b3ac",
 };
 
 describe("AVV-Dokument", () => {
@@ -24,7 +26,7 @@ describe("AVV-Dokument", () => {
     expect(new Set(AVV_VERSIONS.map((d) => d.version)).size).toBe(AVV_VERSIONS.length);
     const md = avvToMarkdown(AVV_DOCUMENT);
     expect(md).not.toMatch(/ENTWURF|Platzhalter|Anwaltsprüfung/);
-    expect(md).toContain("Fassung vom 14.11.2026");
+    expect(md).toContain("Fassung vom 15.11.2026");
     // alte Fassungen behalten ihren Hinweis (ihr Hash haengt daran)
     expect(avvToMarkdown(AVV_VERSIONS[1])).toMatch(/Platzhalter, Anwaltsprüfung ausstehend/);
   });
@@ -37,7 +39,7 @@ describe("AVV-Dokument", () => {
   });
 
   it("alte Fassung bleibt abrufbar und die neue hat TOM-Anhang und Unterauftragsverarbeiter-Liste", () => {
-    expect(AVV_VERSIONS.map((d) => d.version)).toEqual(["2026-11-13-entwurf-1", "2026-11-14-entwurf-2", "2026-11-14-fassung-3"]);
+    expect(AVV_VERSIONS.map((d) => d.version)).toEqual(["2026-11-13-entwurf-1", "2026-11-14-entwurf-2", "2026-11-14-fassung-3", "2026-11-15-fassung-4"]);
     const md = avvToMarkdown(AVV_DOCUMENT);
     for (const part of ["Anhang 1: Technische und organisatorische Maßnahmen", "Anhang 2: Unterauftragsverarbeiter", "Hetzner Online GmbH", "Scaleway SAS", "Art. 28", "Meldung von Datenschutzverletzungen"]) {
       expect(md, part).toContain(part);

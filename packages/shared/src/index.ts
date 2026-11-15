@@ -28,7 +28,11 @@ export const CONSENT_PURPOSES = [
 export const consentPurposeSchema = z.enum(CONSENT_PURPOSES);
 export type ConsentPurpose = z.infer<typeof consentPurposeSchema>;
 
-/** Aktuelle Version der Rechtstexte; bei Aenderung muss neu zugestimmt werden. */
+/**
+ * Version der Rechtstexte, die bei der Registrierung als Nachweis gespeichert wird (Art. 7 Abs. 1 DSGVO).
+ * Eine Aenderung erzwingt KEINE Neu-Zustimmung bestehender Konten (kein Dialog gebaut); wesentliche Aenderungen
+ * werden ueber die Datenschutzerklaerung/Mitteilung bekanntgegeben. Siehe Abschnitt "Aenderungen" der Erklaerung.
+ */
 export const LEGAL_VERSION = "2026-11-14";
 
 export const registerSchema = z.object({

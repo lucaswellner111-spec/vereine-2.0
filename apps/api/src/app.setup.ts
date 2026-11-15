@@ -125,3 +125,15 @@ export async function configureApp(
     }
   });
 }
+
+/**
+ * Produktion startet nicht mit unsicherer Konfiguration: ohne WEB_ORIGIN fehlen CSRF-/WebSocket-Origin-Pruefung,
+ * ohne COOKIE_SECURE=true ginge das Sitzungs-Cookie auch ueber HTTP. Das Chat-Gateway setzt keine Cookies (`cookies: false`).
+ */
+export function assertProductionEnv(env: NodeJS.ProcessEnv = process.env, opts: { cookies?: boolean } = {}): void {
+  if (env.NODE_ENV !== "production") return;
+  const missing: string[] = [];
+  if (!env.WEB_ORIGIN) missing.push("WEB_ORIGIN");
+  if ((opts.cookies ?? true) && env.COOKIE_SECURE !== "true") missing.push("COOKIE_SECURE=true");
+  if (missing.length) throw new Error(`Produktion braucht ${missing.join(" und ")} - Start abgebrochen.`);
+}

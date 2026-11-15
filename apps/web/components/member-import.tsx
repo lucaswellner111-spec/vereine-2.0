@@ -240,6 +240,7 @@ export function MemberImport({ slug, onImported }: { slug: string; onImported?: 
 }
 
 function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMemberPage> }) {
+  const [removing, runRemove] = useBusy();
   const page = state.data;
   if (!page || page.total === 0) return null;
   const label = (p: PendingMemberItem) =>
@@ -247,13 +248,15 @@ function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMem
 
   async function remove(p: PendingMemberItem) {
     if (!(await ask(`Einladung für ${p.firstName} ${p.lastName} zurückziehen und die Angaben löschen?`, { confirmLabel: "Zurückziehen", danger: true }))) return;
-    try {
-      await api(`/orgs/${slug}/member-imports/pending/${p.id}`, { method: "DELETE" });
-      state.reload();
-      toast.success("Einladung zurückgezogen.");
-    } catch (err) {
-      toast.error(describeError(err));
-    }
+    await runRemove(async () => {
+      try {
+        await api(`/orgs/${slug}/member-imports/pending/${p.id}`, { method: "DELETE" });
+        state.reload();
+        toast.success("Einladung zurückgezogen.");
+      } catch (err) {
+        toast.error(describeError(err));
+      }
+    });
   }
 
   return (
@@ -270,7 +273,7 @@ function PendingList({ slug, state }: { slug: string; state: ApiState<PendingMem
               <p className="break-all text-xs text-muted">{p.email}{p.youth && " (Eltern)"}{p.sentAt && ` · verschickt am ${dateDe(p.sentAt.slice(0, 10))}`}</p>
             </div>
             {label(p)}
-            <Button size="sm" variant="ghost" onClick={() => remove(p)} aria-label={`Einladung für ${p.firstName} ${p.lastName} zurückziehen`}>Zurückziehen</Button>
+            <Button size="sm" variant="ghost" disabled={removing} onClick={() => remove(p)} aria-label={`Einladung für ${p.firstName} ${p.lastName} zurückziehen`}>Zurückziehen</Button>
           </li>
         ))}
       </ul>

@@ -94,9 +94,9 @@ Danach in `.env.preview` setzen (siehe Abschnitt 7): `OPERATOR_ALERT_EMAIL`, und
 
 **Nicht** enthalten und getrennt zu sichern: `CHAT_MASTER_KEYS`, `AUTH_SECRET_KEY`, `POSTGRES_PASSWORD`, VAPID-Schlüssel, SMTP-Zugang, `METRICS_TOKEN`, age-Privatschlüssel, SSH-Schlüssel (Abschnitt 6).
 
-**Aufbewahrung:** täglich 14, wöchentlich 8 (sonntags), monatlich 6 (am Ersten); Weekly/Monthly sind Hardlinks (kein doppelter Platz). Einstellbar mit `KEEP_DAILY/WEEKLY/MONTHLY` in `/etc/vereine/ops.env`.
+**Aufbewahrung:** täglich 14, wöchentlich 4 (sonntags), monatlich 0 (aus); Weekly sind Hardlinks (kein doppelter Platz). Einstellbar mit `KEEP_DAILY/WEEKLY/MONTHLY` in `/etc/vereine/ops.env`.
 
-**Datenschutz:** Ein Satz enthält auch Daten, die inzwischen gelöscht wurden, bis der Satz ausgemustert ist: längstens ca. 6 Monate + 1 Monat (monatliche Sätze). Das ist im Löschkonzept zu dokumentieren und mit dem Datenschutzbeauftragten abzustimmen (Vorschlag und Alternativen: `docs/welle2/A3-DOKU.md`). Wird eine Sicherung eingespielt, müssen seit dem Satz gelöschte Konten **erneut gelöscht** werden (Abschnitt 5). Verschlüsselung ruht, der Schlüssel liegt nie auf dem Server.
+**Datenschutz:** Ein Satz enthält auch Daten, die inzwischen gelöscht wurden, bis der Satz ausgemustert ist: bis zu 5 Wochen (14 tägliche + 4 wöchentliche Sätze; monatliche Sätze gibt es nicht mehr). Das steht so im Löschkonzept und in der Datenschutzerklärung; mit dem Datenschutzbeauftragten abzustimmen (Alternativen: `docs/welle2/A3-DOKU.md`). Wird eine Sicherung eingespielt, müssen seit dem Satz gelöschte Konten **erneut gelöscht** werden (Abschnitt 5). Verschlüsselung ruht, der Schlüssel liegt nie auf dem Server.
 
 **Offsite:** `rsync` über SSH auf die Storage Box; nach dem Kopieren folgt ein Trockenlauf, der **keinen** Unterschied mehr zeigen darf. Schlägt Offsite fehl, gilt die Sicherung als fehlgeschlagen (Alarm). Lokale Sicherung allein schützt nicht vor Server-Verlust.
 

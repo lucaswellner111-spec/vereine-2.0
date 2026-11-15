@@ -75,6 +75,7 @@ describe("Zwei-Faktor-Pflicht fuer Vorstaende und Plattform-Admins", () => {
     `/orgs/${slug}/member-imports/pending`,
     `/orgs/${slug}/moderation/posts`,
     `/orgs/${slug}/billing-profile`,
+    `/orgs/${slug}/members`,
   ];
 
   it("ohne Pflicht (Standard in Tests): Vorstand arbeitet normal, Richtlinie meldet nichts", async () => {
@@ -117,10 +118,14 @@ describe("Zwei-Faktor-Pflicht fuer Vorstaende und Plattform-Admins", () => {
     expect((await call("GET", `/orgs/${slug}/member-registry`, vera.cookie)).statusCode).toBe(200);
   });
 
-  it("Mitglieder und Kassenwarte ohne Vorstandsrolle sind nie betroffen", async () => {
+  it("einfache Mitglieder sind nie betroffen, Kassenwarte (Zugriff auf Personendaten) schon", async () => {
     process.env.TWOFACTOR_ENFORCE = "true";
     const tom = await signup("tom");
     expect((await call("GET", "/security/two-factor", tom.cookie)).json()).toMatchObject({ required: false, blocked: false });
+    const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.slug, slug));
+    const [tomRow] = await db.select().from(schema.users).where(eq(schema.users.email, tom.email));
+    await db.insert(schema.orgMembers).values({ orgId: org.id, userId: tomRow.id, role: "treasurer", status: "active" });
+    expect((await call("GET", "/security/two-factor", tom.cookie)).json()).toMatchObject({ required: true, reason: "org-admin" });
   });
 
   it("nach der Einrichtung (TOTP aktiv) ist alles wieder frei und Notfallcodes wurden erzeugt", async () => {

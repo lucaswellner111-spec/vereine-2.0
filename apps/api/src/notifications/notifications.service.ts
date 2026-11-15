@@ -89,6 +89,11 @@ export class NotificationsService implements OnModuleInit {
 
   private async insert(userIds: string[], type: Type, data: Record<string, string>, actorId: string | null) {
     if (!userIds.length) return;
+    // Geloeschte/gesperrte Empfaenger und Akteure vorab herausfiltern (sonst scheitert der ganze Insert am Fremdschluessel, 23503)
+    const alive = await this.directory.names(actorId ? [...userIds, actorId] : userIds);
+    if (actorId && !alive.has(actorId)) return; // Akteur weg: Benachrichtigung mit seinem Namen entfaellt
+    userIds = userIds.filter((u) => alive.has(u));
+    if (!userIds.length) return;
     const rows = await this.db
       .insert(notifications)
       .values(userIds.map((userId) => ({ userId, type, data, actorId })))

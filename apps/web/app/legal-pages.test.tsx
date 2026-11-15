@@ -98,7 +98,7 @@ describe("Rechts- und Hilfeseiten", () => {
   });
 
   it("interne Links der Seiten zeigen auf vorhandene Routen", async () => {
-    const known = new Set(["/", "/registrieren", "/login", "/vereine-finden", "/warteliste"]);
+    const known = new Set(["/", "/registrieren", "/login", "/vereine-finden", "/warteliste", "/eltern-hinweise"]);
     for (const p of PAGES) known.add(p.href);
     for (const p of PAGES) {
       const Page = await loadPage(p.href);

@@ -256,8 +256,11 @@ export class AuthService implements OnModuleInit {
     return this.twoFactor.setup(user.id, user.email);
   }
 
-  twoFactorEnable(userId: string, code: string) {
-    return this.twoFactor.enable(userId, code);
+  /** Zwei-Faktor einschalten; andere Sitzungen (evtl. ohne zweiten Faktor entstanden) werden beendet. */
+  async twoFactorEnable(userId: string, code: string, currentToken: string): Promise<string[]> {
+    const codes = await this.twoFactor.enable(userId, code);
+    await this.revokeOtherSessions(userId, currentToken);
+    return codes;
   }
 
   async twoFactorDisable(userId: string, password: string, code: string): Promise<void> {

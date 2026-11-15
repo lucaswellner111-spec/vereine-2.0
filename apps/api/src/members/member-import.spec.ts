@@ -1,3 +1,4 @@
+import { berlinDate } from "../common/berlin-date";
 import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -247,7 +248,7 @@ describe("Mitglieder-Import (CSV + Einladungen)", () => {
 
   it("Kontingent reicht nicht: heute nur ein Teil, der Rest bleibt wartend fuer morgen", async () => {
     const cache = app.get<Cache>(CACHE);
-    const key = `mail:o:d:${orgId}`; // 99 von 100 Vereins-Einladungen heute verbraucht
+    const key = `mail:o:d:${orgId}:${berlinDate()}`; // 99 von 100 Vereins-Einladungen heute verbraucht
     while (Number((await cache.get(key)) ?? 0) < 99) await cache.incr(key, 86400);
     const file = ["Vorname;Nachname;E-Mail", "Anna;A;anna@example.de", "Bert;B;bert@example.de", "Carl;C;carl@example.de"].join("\n");
     const preview = (await upload(vera, `${base}/preview`, file)).json();
@@ -283,5 +284,18 @@ describe("Mitglieder-Import (CSV + Einladungen)", () => {
     while (Number((await cache.get(confKey)) ?? 0) < IMPORT_CONFIRMS_PER_HOUR) await cache.incr(confKey, 3600);
     expect((await upload(vera, base, file)).statusCode).toBe(429);
     expect((await db.select().from(schema.pendingMembers).where(eq(schema.pendingMembers.email, "rita@example.de")))).toHaveLength(0);
+  });
+  it("Sweep: lange wartende Einladungen werden nachgeholt, frische nicht angefasst", async () => {
+    const svc = app.get(MemberImportService);
+    const org2 = (await db.select({ id: schema.pendingMembers.orgId }).from(schema.pendingMembers).limit(1))[0]?.id ?? orgId;
+    await db.insert(schema.pendingMembers).values({ orgId: org2, firstName: "Swen", lastName: "Sweep", email: "swen.sweep@example.de" });
+    expect(await svc.sweepInvites()).toBe(0); // frisch: der regulaere Folgejob ist zustaendig
+    await db.update(schema.pendingMembers).set({ createdAt: new Date(Date.now() - 48 * 3600_000) }).where(eq(schema.pendingMembers.email, "swen.sweep@example.de"));
+    await app.get<Cache>(CACHE).del(`mail:o:d:${org2}:${berlinDate()}`);
+    mails.clear();
+    expect(await svc.sweepInvites()).toBe(1);
+    expect(mails.last("swen.sweep@example.de", "member-invite")).toBeTruthy();
+    const [row] = await db.select().from(schema.pendingMembers).where(eq(schema.pendingMembers.email, "swen.sweep@example.de"));
+    expect(row.status).toBe("sent");
   });
 });

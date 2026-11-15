@@ -190,7 +190,7 @@ export default function Page() {
                 <P>Unter Verwaltung, Vereinsdaten. Dort siehst du, was öffentlich wird: Name, Ort, Beschreibung, Logo und Banner, Mitgliederzahl, öffentliche Termine und die Texte der letzten 10 Beiträge, keine Namen von Personen. Du verantwortest die Inhalte und Bildrechte.</P>
               </Faq>
               <Faq q="Ich habe Mitglieder unter 16.">
-                <P>Klubnest steht Personen ab 16 offen. Für jüngere Mitglieder können Eltern ein eigenes Konto nutzen oder ihr nutzt Klubnest nur mit Zustimmung der Erziehungsberechtigten. Stammdaten von Minderjährigen kannst du mit Angaben zu Erziehungsberechtigten pflegen. Prüft bitte die Anforderungen an Einwilligung und Information im Verein.</P>
+                <P>Ein eigenes Konto gibt es ab 16. Für Kinder von 6 bis 15 Jahren legen die Eltern unter „Meine Kinder“ ein Jugendkonto an: Das Kind hat keinen eigenen Zugang, die Eltern melden es im Verein an, sagen für Termine zu und bekommen die Rechnungen. Lade die Eltern per Einladungslink ein oder nimm sie im Mitglieder-Import mit Geburtsdatum und Eltern-E-Mail auf; die Einladung geht dann an die Eltern. Mehr in den <A href="/eltern-hinweise">Hinweisen für Eltern</A>. Prüft bitte die Anforderungen an Einwilligung und Information im Verein.</P>
               </Faq>
             </Group>
           ),

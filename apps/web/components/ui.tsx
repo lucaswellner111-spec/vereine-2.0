@@ -388,7 +388,7 @@ export function Avatar({
       aria-hidden
       style={{ width: size, height: size, fontSize: size * 0.38 }}
       className={clsx(
-        "inline-flex shrink-0 items-center justify-center bg-brand/15 bg-linear-to-br from-brand/15 to-pop/35 font-bold tracking-tight text-brand dark:to-brand/10",
+        "inline-flex shrink-0 items-center justify-center bg-brand/15 bg-linear-to-br from-brand/15 to-brand-2/35 font-bold tracking-tight text-brand dark:to-brand/10",
         kind === "org" ? "rounded-xl" : "rounded-full",
       )}
     >
@@ -596,7 +596,7 @@ export function EmptyState({
       {(emoji || Icon) && (
         <span
           aria-hidden
-          className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand/15 bg-linear-to-br from-brand/15 to-pop/40 text-3xl text-brand dark:to-brand/5"
+          className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand/15 bg-linear-to-br from-brand/15 to-brand-2/40 text-3xl text-brand dark:to-brand/5"
         >
           {emoji ?? (Icon && <Icon size={28} />)}
         </span>

@@ -16,7 +16,7 @@ export default function Page() {
   return (
     <LegalDocument
       title="Datenschutzerklärung"
-      updated="14. November 2026"
+      updated="15. November 2026"
       intro={
         <>
           <P>
@@ -80,7 +80,7 @@ export default function Page() {
               </P>
               <H3>Server-Protokolle</H3>
               <P>
-                Unser Webserver (Caddy) protokolliert bei jedem Aufruf technisch notwendige Angaben: IP-Adresse, Datum und Uhrzeit, aufgerufener Pfad, Statuscode und Browserkennung. Das dient der Sicherheit und Stabilität (Angriffsabwehr, Fehlersuche). Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse am sicheren Betrieb). Die Protokolle werden automatisch rotiert und überschrieben und liegen in der Regel nicht länger als 14 Tage vor. Die Protokolle unserer Anwendung (API) enthalten dagegen nur Methode und bereinigten Pfad: keine IP-Adressen, keine Cookies, keine Zugangsdaten, keine Inhalte aus Adressen wie Einladungs- oder Kalenderlinks.
+                Unser Webserver (Caddy) protokolliert bei jedem Aufruf technisch notwendige Angaben: IP-Adresse (im Zugriffsprotokoll gekürzt auf die ersten drei Blöcke bei IPv4 bzw. die ersten 56 Bit bei IPv6, also nicht mehr auf einen Anschluss zurückführbar), Datum und Uhrzeit, aufgerufener Pfad, Statuscode und Browserkennung. Das dient der Sicherheit und Stabilität (Angriffsabwehr, Fehlersuche). Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse am sicheren Betrieb). Die Protokolle werden automatisch rotiert und überschrieben und liegen in der Regel nicht länger als 14 Tage vor. Die Protokolle unserer Anwendung (API) enthalten dagegen nur Methode und bereinigten Pfad: keine IP-Adressen, keine Cookies, keine Zugangsdaten, keine Inhalte aus Adressen wie Einladungs- oder Kalenderlinks. Auch im Webserver-Protokoll schwärzen wir die geheimen Teile solcher Links (Einladungs-, Eltern-Einladungs- und Kalender-Abo-Links). Gekürzt wird nur das Protokoll: für die Begrenzung von Anfragen und die Abwehr von Angriffen im Betrieb brauchen wir die volle Adresse kurzzeitig im Arbeitsspeicher.
               </P>
               <H3>Zugriffsbegrenzung je IP-Adresse</H3>
               <P>
@@ -108,10 +108,10 @@ export default function Page() {
                 <Strong>Sitzungen.</Strong> Nach der Anmeldung speichern wir einen Hash des Sitzungstokens, eine grobe Gerätebeschreibung und den Ablauf. Eine Sitzung gilt 30 Tage; abgelaufene Sitzungen werden stündlich gelöscht. In deinen Einstellungen kannst du Sitzungen beenden. Rechtsgrundlage: Art. 6 Abs. 1 lit. b und f DSGVO (Vertrag und Sicherheit).
               </P>
               <P>
-                <Strong>Zwei-Faktor-Anmeldung (freiwillig).</Strong> Wenn du sie einschaltest, speichern wir dein TOTP-Geheimnis verschlüsselt und Hashes der Notfallcodes. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (Sicherheit deines Kontos). Beim Ausschalten oder mit dem Konto werden die Daten gelöscht.
+                <Strong>Zwei-Faktor-Anmeldung.</Strong> Für dich als normales Mitglied ist sie freiwillig. Für Rollen mit Zugriff auf Mitglieder- und Rechnungsdaten (Vorstand und Kasse) sowie für Plattform-Administration ist sie verpflichtend; für Vorstand und Kasse gilt nach der ersten Prüfung eine Frist von 14 Tagen, dafür speichern wir den Zeitpunkt, ab dem die Pflicht gilt. Wenn du sie einschaltest, speichern wir dein TOTP-Geheimnis verschlüsselt und Hashes der Notfallcodes. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (Sicherheit deines Kontos). Beim Ausschalten (soweit du nicht verpflichtet bist) oder mit dem Konto werden die Daten gelöscht.
               </P>
               <P>
-                <Strong>Schutz vor Missbrauch.</Strong> Gegen das Erraten von Passwörtern zählen wir Fehlversuche je Kombination aus E-Mail-Adresse und IP-Adresse sowie je E-Mail-Adresse (10 Fehlversuche sperren 15 Minuten). Zusätzlich begrenzen wir die Zahl von Aktionen je Konto (zum Beispiel Vereine gründen, Beiträge, Kommentare, Meldungen, Chat-Nachrichten). Die Zähler enthalten E-Mail-Adresse und IP-Adresse nur als Hash, liegen im Arbeitsspeicher und laufen automatisch ab, spätestens nach 30 Tagen. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO.
+                <Strong>Schutz vor Missbrauch.</Strong> Gegen das Erraten von Passwörtern zählen wir Fehlversuche je Kombination aus E-Mail-Adresse und IP-Adresse sowie je E-Mail-Adresse (10 Fehlversuche sperren 15 Minuten). Bei Registrierung, „Passwort vergessen“, Warteliste und Mitgliedsantrag lösen Browser und Server außerdem eine kleine Rechenaufgabe (selbst betriebenes Proof-of-Work-Verfahren, ohne Bilderrätsel und ohne Drittanbieter): Du musst nichts bedienen, dein Gerät rechnet kurz. Dabei speichern wir keine Personendaten; im Arbeitsspeicher liegt nur die Signatur der gelösten Aufgabe, bis sie abläuft (10 Minuten). Zusätzlich begrenzen wir die Zahl von Aktionen je Konto (zum Beispiel Vereine gründen, Beiträge, Kommentare, Meldungen, Chat-Nachrichten). Die Zähler enthalten E-Mail-Adresse und IP-Adresse nur als Hash, liegen im Arbeitsspeicher und laufen automatisch ab, spätestens nach 30 Tagen. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO.
               </P>
               <P>
                 <Strong>Einwilligungen.</Strong> Zustimmungen und Widerrufe (zum Beispiel zum personalisierten Feed) speichern wir mit Zweck, Ja oder Nein, Fassung und Zeitpunkt, nur zum Anhängen und mit dem Konto. Rechtsgrundlage ist die gesetzliche Nachweispflicht (Art. 7 Abs. 1 DSGVO).
@@ -174,7 +174,7 @@ export default function Page() {
                 <Strong>Vereinsmitgliedschaft und Rollen.</Strong> Wir speichern, in welchen Vereinen du Mitglied bist oder denen du folgst, und welche Rolle du hast (Vorstand, Kasse, Moderation, Mitglied). Rechtsgrundlage: Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO).
               </P>
               <P>
-                <Strong>Einladungen.</Strong> Einladungslinks speichern wir als Hash, zusätzlich verschlüsselt, damit der Vorstand den Link erneut anzeigen kann (jeder Abruf wird protokolliert). Wir löschen sie 30 Tage nach Ablauf oder Widerruf.
+                <Strong>Einladungen.</Strong> Einladungslinks speichern wir als Hash und zusätzlich verschlüsselt, damit der Vorstand den Link erneut anzeigen kann (jeder Abruf wird protokolliert). Wer den Link kennt, kann beitreten: Gib ihn nur an Personen weiter, die ihn bekommen sollen. Der geheime Teil des Links erscheint nicht in unseren Protokollen. Wir löschen sie 30 Tage nach Ablauf oder Widerruf.
               </P>
               <P>
                 <Strong>Termine, Teams und Zusagen.</Strong> Titel, Ort, Zeit und deine Zusage, Absage oder Warteliste-Position pro Termin. Aktive Mitglieder sehen bei internen oder Team-Terminen Namen und Profilbilder der Zugesagten (höchstens 12 Bilder, der Rest als Zahl); bei öffentlichen Terminen nur die Anzahl. Ist ein Termin voll, rückt die Person mit dem frühesten Eintrag nach und wird benachrichtigt. Rechtsgrundlage: Vereinszweck und Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO), hilfsweise lit. f (Planung, wer kommt). Mit Absage, Austritt oder Kontolöschung verschwinden die Einträge.
@@ -249,7 +249,7 @@ export default function Page() {
                 <Strong>In der App.</Strong> Benachrichtigungen (zum Beispiel neuer Kommentar, neuer Follower, Termin geändert) speichern wir mit Art, Kurzangaben (etwa Name und Textauszug der handelnden Person) und Zeitpunkt, 180 Tage lang. Löscht die auslösende Person ihr Konto, verschwinden Benachrichtigungen mit ihrem Namen bei allen Empfängern. Rechtsgrundlage: Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO).
               </P>
               <P>
-                <Strong>Browser-Push (freiwillig).</Strong> Nur wenn du im Browser die Berechtigung erteilst, speichern wir die Adresse (Endpunkt) und die Schlüssel deines Geräts und die Browserkennung, höchstens 10 Geräte je Konto. Wir senden dann Kurznachrichten (ohne Nutzerinhalte, Chat ohne Absender und Inhalt) verschlüsselt an den Push-Dienst deines Browserherstellers (zum Beispiel Google, Mozilla, Apple oder Microsoft), der sie an dein Gerät weiterleitet. Dabei erfährt dieser Dienst deine Geräteadresse, den Zeitpunkt und die Größe der Nachricht, nicht den Inhalt. Rechtsgrundlage: Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du in den Browser-Einstellungen oder bei uns jederzeit widerrufen kannst. Wir löschen die Abos bei Abmeldung oder wenn der Dienst sie als ungültig meldet.
+                <Strong>Browser-Push (freiwillig).</Strong> Nur wenn du im Browser die Berechtigung erteilst, speichern wir die Adresse (Endpunkt) und die Schlüssel deines Geräts und die Browserkennung, höchstens 10 Geräte je Konto. Wir senden dann Kurznachrichten (Kurztexte, zum Beispiel einen Termintitel; Chat ohne Absender und Inhalt) verschlüsselt an den Push-Dienst deines Browserherstellers (zum Beispiel Google, Mozilla, Apple oder Microsoft), der sie an dein Gerät weiterleitet. Dabei erfährt dieser Dienst deine Geräteadresse, den Zeitpunkt und die Größe der Nachricht; der Inhalt ist für ihn verschlüsselt. Rechtsgrundlage: Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du in den Browser-Einstellungen oder bei uns jederzeit widerrufen kannst. Wir löschen die Abos bei Abmeldung oder wenn der Dienst sie als ungültig meldet.
               </P>
             </>
           ),
@@ -282,7 +282,7 @@ export default function Page() {
           title: "Meldungen und Moderation",
           body: (
             <P>
-              Wenn du einen Beitrag, Kommentar oder eine Chat-Nachricht meldest, speichern wir den Bezug, deinen Grund, eine optionale Notiz und deine Nutzer-ID. Pro Person und Inhalt gibt es nur eine offene Meldung. Rechtsgrundlage: Art. 6 Abs. 1 lit. c DSGVO in Verbindung mit Art. 16 des Digital Services Act und lit. f (Schutz der Community). Meldungen verschwinden mit dem gemeldeten Beitrag oder deinem Konto; bei Chat-Meldungen gilt Abschnitt 6. Moderationsentscheidungen halten wir im Zugriffsprotokoll fest (Aktion, Beteiligte, keine Inhalte). Mehr dazu auf der Seite <A href="/meldeverfahren">Melden und DSA-Kontakt</A>.
+              Wenn du einen Beitrag, Kommentar oder eine Chat-Nachricht meldest, speichern wir den Bezug, deinen Grund, eine optionale Notiz und deine Nutzer-ID. Pro Person und Inhalt gibt es nur eine offene Meldung. Rechtsgrundlage: Art. 6 Abs. 1 lit. c DSGVO in Verbindung mit Art. 16 des Digital Services Act und lit. f (Schutz der Community). Erledigte Meldungen löschen wir 30 Tage nach der Erledigung; Meldungen verschwinden außerdem mit dem gemeldeten Beitrag oder deinem Konto; bei Chat-Meldungen gilt Abschnitt 6. Moderationsentscheidungen halten wir im Zugriffsprotokoll fest (Aktion, Beteiligte, keine Inhalte). Mehr dazu auf der Seite <A href="/meldeverfahren">Melden und DSA-Kontakt</A>.
             </P>
           ),
         },
@@ -298,10 +298,12 @@ export default function Page() {
                 caption="Cookies und lokaler Speicher"
                 head={["Name", "Art", "Zweck", "Dauer"]}
                 rows={[
+                  ["kn-session", "Lokaler Speicher", "Merkt nur „angemeldet“ (Wert 1, kein Token), damit die App beim Laden nicht flackert; das Cookie sid bleibt maßgeblich", "bis Abmeldung"],
                   ["sid", "Cookie (HttpOnly, SameSite=Lax, bei HTTPS Secure)", "Deine Anmeldung (Sitzung)", "bis 30 Tage oder Abmeldung"],
                   ["theme", "Lokaler Speicher", "Gewählte Darstellung (hell, dunkel, automatisch)", "bis du den Speicher löschst"],
                   ["klubnest.shortcuts", "Lokaler Speicher", "Einstellung Tastenkürzel", "bis du den Speicher löschst"],
                   ["verwaltung-org", "Lokaler Speicher", "Zuletzt gewählter Verein in der Verwaltung", "bis du den Speicher löschst"],
+                  ["onboarding-hidden:<Vereinskürzel>", "Lokaler Speicher", "Merkt, dass du die Starthilfe eines Vereins ausgeblendet hast", "bis du den Speicher löschst"],
                   ["klubnest.nachBestaetigung", "Lokaler Speicher", "Zielseite nach der E-Mail-Bestätigung", "kurzlebig, wird nach Gebrauch entfernt"],
                 ]}
               />
@@ -367,15 +369,20 @@ export default function Page() {
                   ["Chat-Nachrichten", "365 Tage (je Gruppe 1 bis 3650 Tage einstellbar)"],
                   ["Gemeldete Chat-Nachricht (Beweiskopie)", "bis zur Prüfung, danach 30 Tage"],
                   ["Gelöschte Beiträge", "30 Tage (bei offener Meldung bis zur Prüfung)"],
+                  ["Erledigte Meldungen (Beiträge, Kommentare)", "30 Tage nach Erledigung"],
                   ["Anwesenheit", "24 Monate ab Erfassung"],
                   ["Einladungslinks", "30 Tage nach Ablauf oder Widerruf"],
                   ["Mitglieder-Import (Vormerkung)", "bis zur Annahme; sonst 30 Tage nach Versand, nie versendet 60 Tage"],
-                  ["Zugriffsprotokoll", "12 Monate; Moderation 24 Monate; Rechnungsaktionen 10 Jahre"],
+                  ["Zugriffsprotokoll (Anwendung)", "12 Monate; Moderation 24 Monate; Rechnungsaktionen 10 Jahre"],
+                  ["Jugendkonto (Daten des Kindes)", "bis zur Löschung durch die Eltern; fällt der letzte Elternteil weg, 30 Tage"],
+                  ["Ruhendes Jugendkonto (ab 16 nicht übernommen)", "12 Monate, dann Löschung"],
+                  ["Nachweise der Elternfreigaben", "nach Löschung des Kindes pseudonym (nur IDs, kein Name) 3 Jahre"],
+                  ["Einladung zweiter Elternteil", "30 Tage nach Ablauf, Annahme oder Widerruf"],
                   ["Rechnungen und Beitragsläufe", "gesetzliche Aufbewahrung (8 bis 10 Jahre), nach Kontolöschung anonymisiert"],
                   ["Sperrliste E-Mail (Hash)", "Unzustellbar oder Beschwerde 12 Monate; Abmeldung 36 Monate"],
                   ["Warteliste", "unbestätigt 7 Tage; bestätigt bis Widerruf, spätestens sechs Monate nach dem Start von Klubnest"],
                   ["Server-Protokolle", "in der Regel höchstens 14 Tage"],
-                  ["Sicherungskopien", "bis zu 14 Tage; in dieser Zeit können bereits gelöschte Daten noch in Sicherungen liegen und werden danach überschrieben"],
+                  ["Sicherungskopien", "bis zu 5 Wochen (14 tägliche und 4 wöchentliche Stände); in dieser Zeit können bereits gelöschte Daten noch in Sicherungen liegen und werden danach überschrieben"],
                 ]}
               />
             </>
@@ -404,7 +411,7 @@ export default function Page() {
                   <Strong>Berichtigung</Strong> (Art. 16): Profil und Angaben änderst du selbst; sonst schreib uns.
                 </li>
                 <li>
-                  <Strong>Löschung</Strong> (Art. 17): In den Einstellungen unter Datenschutz löschst du dein Konto selbst. Ist dein Verein darauf angewiesen, dass du als einziger Vorstand die Rolle vorher übergibst, weisen wir dich darauf hin. Rechnungen bleiben anonymisiert erhalten (gesetzliche Pflicht).
+                  <Strong>Löschung</Strong> (Art. 17): In den Einstellungen unter Datenschutz löschst du dein Konto selbst. Ist dein Verein darauf angewiesen, dass du als einziger Vorstand die Rolle vorher übergibst, weisen wir dich darauf hin. Rechnungen bleiben anonymisiert erhalten (gesetzliche Pflicht). Wenn du Eltern mit Jugendkonten bist, siehe Abschnitt „Eltern- und Jugendkonten“.
                 </li>
                 <li>
                   <Strong>Einschränkung</Strong> (Art. 18) und <Strong>Widerspruch</Strong> (Art. 21): Soweit wir Daten wegen berechtigter Interessen verarbeiten, kannst du aus Gründen, die sich aus deiner besonderen Situation ergeben, jederzeit widersprechen. Wir hören dann auf, es sei denn, wir weisen zwingende schutzwürdige Gründe nach oder die Verarbeitung dient der Verteidigung von Rechtsansprüchen.
@@ -435,9 +442,59 @@ export default function Page() {
           id: "kinder",
           title: "Kinder und Jugendliche",
           body: (
-            <P>
-              Klubnest richtet sich an Personen ab 16 Jahren; bei der Registrierung bestätigst du dein Alter. Wenn wir erfahren, dass ein Konto von einer jüngeren Person ohne Zustimmung der Eltern angelegt wurde, löschen wir es. Eltern können sich jederzeit an uns wenden. Vereine mit minderjährigen Mitgliedern sind verantwortlich dafür, dass sie die Zustimmung der Erziehungsberechtigten einholen, wo das Gesetz sie verlangt; ein Verein kann Angaben zu Erziehungsberechtigten in der Mitgliederverwaltung hinterlegen. Wir erfassen keine besonderen Kategorien von Daten (zum Beispiel Gesundheitsdaten) und bitten Vereine und Nutzer, solche Angaben nicht in Notizen, Beiträgen oder Chats abzulegen.
-            </P>
+            <>
+              <P>
+                Ein eigenes Konto mit eigener Anmeldung gibt es bei Klubnest ab 16 Jahren; bei der Registrierung bestätigst du dein Alter. Wenn wir erfahren, dass ein Konto von einer jüngeren Person ohne Zustimmung der Eltern angelegt wurde, löschen wir es. Kinder unter 16 können nur über ein Jugendkonto unter dem Konto ihrer Eltern dabei sein (siehe nächster Abschnitt). Vereine mit minderjährigen Mitgliedern sind verantwortlich dafür, dass sie die Zustimmung der Erziehungsberechtigten einholen, wo das Gesetz sie verlangt. Wir erfassen keine besonderen Kategorien von Daten (zum Beispiel Gesundheitsdaten) und bitten Vereine und Nutzer, solche Angaben nicht in Notizen, Beiträgen oder Chats abzulegen.
+              </P>
+            </>
+          ),
+        },
+        {
+          id: "eltern-jugend",
+          title: "Eltern- und Jugendkonten",
+          body: (
+            <>
+              <P>
+                Eltern (oder andere Sorgeberechtigte) können unter „Meine Kinder“ ein Jugendkonto für ein Kind von 6 bis 15 Jahren anlegen. Das Kind hat dabei <Strong>keinen eigenen Zugang</Strong>: kein Passwort, keine Anmeldung, keine eigene E-Mail-Adresse. Die Eltern verwalten alles. Hinweise für Eltern findest du auf der Seite <A href="/eltern-hinweise">Eltern-Hinweise</A>.
+              </P>
+              <H3>Welche Daten wir speichern</H3>
+              <UL>
+                <li>
+                  <Strong>Jugendkonto:</Strong> Vorname, Nachname, Geburtsdatum (für die Altersgrenze) und die Verknüpfung zu den Eltern. Statt einer E-Mail-Adresse steht ein technischer Platzhalter im Konto; an ihn wird nie eine Mail geschickt. Das Kind ist nicht über Suche, Profilseiten, Folgen oder Direktnachrichten auffindbar und nicht im Chat.
+                </li>
+                <li>
+                  <Strong>Nachweise der Elternfreigaben:</Strong> Für Anlage und Vereinsmitgliedschaft speichern wir, wer wann welchen Text in welcher Fassung bestätigt oder widerrufen hat (nur zum Anhängen, ohne IP-Adresse). Nach Löschung des Kindes bleibt dieser Nachweis pseudonym (nur Kennungen, kein Name) 3 Jahre erhalten, damit wir uns bei Streit über die Zustimmung verteidigen können (Art. 6 Abs. 1 lit. f, Art. 7 Abs. 1 DSGVO).
+                </li>
+                <li>
+                  <Strong>Vereinsdaten des Kindes:</Strong> Zu- und Absagen, Helferdienste und Anwesenheit, die die Eltern für das Kind erledigen, und Rechnungen. Für die Mitgliederverwaltung ist der Verein verantwortlich (siehe Abschnitt 2); Rechnungen für ein Kind gehen an den Elternteil, der als Rechnungsempfänger eingetragen ist, und tragen den Namen des Kindes.
+                </li>
+                <li>
+                  <Strong>Zweiter Elternteil:</Strong> Ein Elternteil kann den anderen per Mail-Link einladen (7 Tage gültig, einmalig). Wir speichern nur einen Hash der eingeladenen Adresse, nicht die Adresse selbst; angenommen werden kann der Link nur mit einem Konto mit genau dieser Adresse. Es gibt höchstens zwei Elternteile je Kind.
+                </li>
+                <li>
+                  <Strong>Import durch Vereine:</Strong> Ein Verein kann Kinder mit Geburtsdatum und der Adresse der Eltern in seiner Mitgliederliste einladen. Die Einladung geht an die Eltern, die Adresse des Kindes wird nicht übernommen. Verantwortlich dafür ist der Verein; er muss die Eltern informieren.
+                </li>
+              </UL>
+              <H3>Rechtsgrundlagen</H3>
+              <P>
+                Die Mitgliedschaft im Verein über die Eltern stützt sich auf den Vertrag mit dem Verein bzw. die Nutzungsvereinbarung (Art. 6 Abs. 1 lit. b DSGVO); die Eltern stimmen als Träger der elterlichen Verantwortung zu. Soweit wir Funktionen später auf eine Einwilligung stützen, gilt Art. 8 DSGVO: für unter 16-Jährige willigen die Eltern ein. Ob die Angaben der Eltern („ich bin sorgeberechtigt“) als Nachweis genügen, lassen wir noch rechtlich prüfen; wir verlangen bewusst keine Ausweiskopie.
+              </P>
+              <H3>Rechte, Löschung und Fristen</H3>
+              <UL>
+                <li>
+                  <Strong>Auskunft und Export:</Strong> Eltern laden die Daten ihres Kindes unter „Meine Kinder“ herunter, <Strong>bis zum 16. Geburtstag</Strong>. Ab dem Geburtstag gehören die Daten dem Jugendlichen; Eltern können sie dann nicht mehr abrufen oder löschen.
+                </li>
+                <li>
+                  <Strong>Löschung:</Strong> Eltern löschen das Jugendkonto jederzeit (mit Passwort), ebenfalls bis zum 16. Geburtstag. Gibt es zwei Elternteile, kündigen wir die Löschung dem anderen Elternteil 7 Tage vorher an; er kann widersprechen. Löscht der letzte Elternteil sein eigenes Konto, ruht das Jugendkonto und wird nach 30 Tagen gelöscht. Rechnungen bleiben mit der Namenskopie wegen der Aufbewahrungspflicht erhalten, die Verknüpfung zum Konto entfällt.
+                </li>
+                <li>
+                  <Strong>Ab 16:</Strong> Am 16. Geburtstag ruht das Jugendkonto; die Eltern erhalten vorher Hinweise (30 und 7 Tage vorher). Wird es nicht als eigenes Konto übernommen, löschen wir es nach 12 Monaten. Die Eltern-Einwilligungen gelten nicht als eigene des Jugendlichen weiter. Eine Übernahme als eigenes Konto ist technisch noch nicht freigeschaltet.
+                </li>
+                <li>
+                  <Strong>Weitere Rechte</Strong> (Berichtigung, Widerspruch, Beschwerde) nehmen die Eltern für das Kind wahr; siehe Abschnitt „Deine Rechte“.
+                </li>
+              </UL>
+            </>
           ),
         },
         {
@@ -446,10 +503,10 @@ export default function Page() {
           body: (
             <>
               <P>
-                Wir passen diese Erklärung an, wenn sich Funktionen oder Rechtslage ändern. Das Datum oben zeigt den Stand. Bei wesentlichen Änderungen informieren wir dich in der App oder per E-Mail.
+                Wir passen diese Erklärung an, wenn sich Funktionen oder Rechtslage ändern. Das Datum oben zeigt den Stand. Bei wesentlichen Änderungen informieren wir dich in der App oder per E-Mail; wir bauen dafür keine erzwungene Neu-Zustimmung ein, außer das Gesetz verlangt sie.
               </P>
               <OL>
-                <li>Aktuelle Fassung: 14. November 2026 (Version 2026-11-14).</li>
+                <li>Aktuelle Fassung: 15. November 2026. Bei der Registrierung speichern wir, welche Fassung du bestätigt hast (Version 2026-11-14). Ändern wir Texte, verlangen wir nicht automatisch eine neue Zustimmung; wir weisen auf wesentliche Änderungen hin und nennen das Datum oben.</li>
               </OL>
             </>
           ),

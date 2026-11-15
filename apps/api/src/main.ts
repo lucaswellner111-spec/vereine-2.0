@@ -5,12 +5,13 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { AppModule } from "./app.module";
-import { configureApp, fastifyOptions } from "./app.setup";
+import { assertProductionEnv, configureApp, fastifyOptions } from "./app.setup";
 import { AuthService } from "./auth/auth.service";
 import { REALTIME_BUS } from "./chat/realtime-bus";
 import { attachChatGateway } from "./chat/ws-gateway";
 
 async function bootstrap() {
+  assertProductionEnv();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(fastifyOptions()),

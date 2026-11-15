@@ -94,10 +94,15 @@ describe("Zwei-Faktor-Anmeldung", () => {
     expect(row.secretEnc).not.toContain(secret);
     expect(row.enabledAt).toBeNull();
     // Solange nicht bestaetigt, verlangt die Anmeldung noch keinen Code
-    expect((await call("POST", "/auth/login", { email: me.email, password })).json().email).toBe(me.email);
+    const second = await call("POST", "/auth/login", { email: me.email, password });
+    expect(second.json().email).toBe(me.email);
+    const otherCookie = String(second.headers["set-cookie"]).split(";")[0];
 
     expect((await call("POST", "/auth/2fa/enable", { code: "000000" }, me.cookie)).statusCode).toBe(400);
     const enabled = await call("POST", "/auth/2fa/enable", { code: codeFor(secret) }, me.cookie);
+    // Einschalten beendet alle anderen Sitzungen, die aktuelle bleibt
+    expect((await call("GET", "/auth/me", undefined, otherCookie)).statusCode).toBe(401);
+    expect((await call("GET", "/auth/me", undefined, me.cookie)).statusCode).toBe(200);
     expect(enabled.statusCode).toBe(200);
     recovery = enabled.json().recoveryCodes;
     expect(recovery).toHaveLength(10);

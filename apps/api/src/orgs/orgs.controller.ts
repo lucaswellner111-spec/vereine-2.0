@@ -27,6 +27,7 @@ import {
 } from "@vereine/shared";
 import { CurrentUser, requireVerifiedEmail, SessionGuard } from "../auth/session.guard";
 import { parse } from "../common/parse";
+import { TwoFactorGuard } from "./two-factor.guard";
 import { OrgsService } from "./orgs.service";
 import { CaptchaGuard } from "../captcha/captcha.guard";
 
@@ -63,17 +64,20 @@ export class OrgsController {
   }
 
   /** Vereinsprofil bearbeiten (nur Vorstand). */
+  @UseGuards(TwoFactorGuard)
   @Put(":slug")
   update(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
     return this.orgs.update(slug, user, parse(updateOrgSchema, body));
   }
 
   /** Oeffentliche Vereinsseite /verein/<slug> ein-/ausschalten (nur Vorstand). */
+  @UseGuards(TwoFactorGuard)
   @Put(":slug/public-page")
   setPublicPage(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
     return this.orgs.setPublicPage(slug, user, parse(setPublicPageSchema, body).enabled);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Put(":slug/tags")
   setTags(@CurrentUser() user: PublicUser, @Param("slug") slug: string, @Body() body: unknown): Promise<OrgDetail> {
     return this.orgs.setTags(slug, user, parse(orgTagsSchema, body).tags);
@@ -90,6 +94,7 @@ export class OrgsController {
     return this.orgs.follow(slug, user.id, false);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get(":slug/members")
   members(
     @CurrentUser() user: PublicUser,
@@ -100,11 +105,13 @@ export class OrgsController {
   }
 
   /** Nur Namen aktiver Mitglieder (Vorstand/Moderation), z. B. fuer neue Gruppen-Chats. */
+  @UseGuards(TwoFactorGuard)
   @Get(":slug/member-names")
   memberNames(@CurrentUser() user: PublicUser, @Param("slug") slug: string): Promise<OrgMemberName[]> {
     return this.orgs.memberNames(slug, user);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Post(":slug/members/:userId/decision")
   @HttpCode(204)
   decide(
@@ -116,6 +123,7 @@ export class OrgsController {
     return this.orgs.decide(slug, user, userId, parse(decisionSchema, body).decision);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Put(":slug/members/:userId/role")
   @HttpCode(204)
   setRole(
@@ -127,6 +135,7 @@ export class OrgsController {
     return this.orgs.setRole(slug, user, userId, parse(setRoleSchema, body).role);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Delete(":slug/members/:userId")
   @HttpCode(204)
   removeMember(

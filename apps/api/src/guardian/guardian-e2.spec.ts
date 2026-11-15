@@ -2,8 +2,8 @@ import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { drizzle } from "drizzle-orm/pglite";
-import { and, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { and, eq, inArray } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { GuardianInviteInfo, NotificationsResponse, YouthChild, YouthChildDetail, YouthGuardiansView } from "@vereine/shared";
 import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
@@ -272,5 +272,64 @@ describe("Jugendkonten Etappe E2: zweiter Elternteil, Rechnungsempfaenger, Loesc
     expect(await db.select().from(schema.guardianInvites).where(eq(schema.guardianInvites.youthUserId, kid.id))).toHaveLength(1);
     await app.get(GuardianService).eraseUser(pia.id);
     expect(await db.select().from(schema.guardianInvites).where(eq(schema.guardianInvites.youthUserId, kid.id))).toHaveLength(0);
+  });
+
+  it("P2: Kind-Export ohne Platzhalter-Adresse, Entwuerfe weg, ab 16 keine Eltern-Auskunft/-Loeschung, ruhende Konten nach 12 Monaten, Fehler je Konto", async () => {
+    const paul = await signup("e2-paul", "Paul Elternteil");
+    const [a, b, c] = [await newChild(paul, "Ana", "Eins"), await newChild(paul, "Ben", "Zwei"), await newChild(paul, "Cem", "Drei")];
+
+    // Export: keine *.invalid-Adresse, keine E-Mail-/Sperr-/Wartelisten-Bereiche; 2FA-Fristbeginn im normalen Export
+    const exp = await req(paul, "GET", `/guardian/children/${a.id}/export`);
+    expect(exp.statusCode).toBe(200);
+    expect(exp.body).not.toContain(".invalid");
+    const exported = exp.json();
+    expect(exported).not.toHaveProperty("email");
+    expect(exported).not.toHaveProperty("mailSuppressions");
+    expect(exported).not.toHaveProperty("waitlist");
+    expect((await req(paul, "GET", "/privacy/export")).json().twoFactor).toHaveProperty("requiredSince");
+
+    // Entwuerfe auf das Kind werden mit dem Kind geloescht, finalisierte Rechnungen bleiben ohne Verweis
+    const base = { orgId: a.id, recipientName: "Paul Elternteil", issuerName: "Verein", dueDate: "2030-01-01", createdBy: paul.id, subjectUserId: a.id, subjectName: "Ana E." };
+    await db.insert(schema.invoices).values([{ ...base, status: "draft" }, { ...base, status: "open", number: "2030-0001" }]);
+    expect((await req(paul, "DELETE", `/guardian/children/${a.id}`, { password })).json()).toEqual({ status: "deleted" });
+    const left = await db.select().from(schema.invoices).where(eq(schema.invoices.orgId, a.id));
+    expect(left.map((r) => r.status)).toEqual(["open"]);
+    expect(left[0].subjectUserId).toBeNull();
+
+    // Ab dem 16. Geburtstag: Eltern koennen weder Auskunft noch Loeschung ausloesen
+    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(16), graduationStartedAt: new Date() }).where(eq(schema.youthProfiles.userId, b.id));
+    expect((await req(paul, "GET", `/guardian/children/${b.id}/export`)).statusCode).toBe(409);
+    expect((await req(paul, "DELETE", `/guardian/children/${b.id}`, { password })).statusCode).toBe(409);
+
+    // Ruhend seit 11 Monaten: bleibt; seit 13 Monaten: wird geloescht. Ein Fehler bei einem Konto stoppt die anderen nicht.
+    const privacy = app.get(PrivacyService);
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000);
+    await db.update(schema.youthProfiles).set({ graduationStartedAt: ago(335) }).where(eq(schema.youthProfiles.userId, b.id));
+    expect(await privacy.eraseOrphanedYouth()).toBe(0);
+    await db.update(schema.youthProfiles).set({ birthDate: bornYearsAgo(16), graduationStartedAt: ago(400) }).where(inArray(schema.youthProfiles.userId, [b.id, c.id]));
+    const spy = vi.spyOn(privacy, "eraseEverything").mockImplementationOnce(async () => {
+      throw new Error("Datenbank weg: geheim@example.de");
+    });
+    expect(await privacy.eraseOrphanedYouth()).toBe(1); // ein Konto scheitert, das andere ist weg
+    spy.mockRestore();
+    expect(await privacy.eraseOrphanedYouth()).toBeGreaterThanOrEqual(0); // naechster Lauf holt das gescheiterte nach
+    expect(await db.select().from(schema.users).where(inArray(schema.users.id, [b.id, c.id]))).toHaveLength(0);
+  });
+
+  it("P2: Graduierungsjob arbeitet unerledigte Faelle nach Faelligkeit ab und ist idempotent", async () => {
+    const parent = await signup("e2-greta", "Greta Elternteil");
+    const [x, y] = [await newChild(parent, "Xaver", "Eins"), await newChild(parent, "Yvonne", "Zwei")];
+    const set = (id: string, days: number) => {
+      const due = new Date(Date.now() + days * 86_400_000);
+      const birth = `${due.getUTCFullYear() - 16}-${String(due.getUTCMonth() + 1).padStart(2, "0")}-${String(due.getUTCDate()).padStart(2, "0")}`;
+      return db.update(schema.youthProfiles).set({ birthDate: birth, graduationDueOn: due.toISOString().slice(0, 10) }).where(eq(schema.youthProfiles.userId, id));
+    };
+    await set(x.id, 20); // 20 Tage vorher: 30-Tage-Hinweis
+    await set(y.id, 5); // 5 Tage vorher: 7-Tage-Hinweis
+    const guardians = app.get(GuardianService);
+    const first = await guardians.runGraduation();
+    expect(first.paused).toBe(0);
+    expect(first.notified).toBeGreaterThanOrEqual(2);
+    expect(await guardians.runGraduation()).toEqual({ notified: 0, paused: 0 });
   });
 });

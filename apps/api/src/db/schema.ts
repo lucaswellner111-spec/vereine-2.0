@@ -433,6 +433,7 @@ export const reports = social.table("reports", {
 }, (t) => [
   index("reports_org_status_idx").on(t.orgId, t.status),
   index("reports_post_status_idx").on(t.postId, t.status),
+  index("reports_comment_idx").on(t.commentId),
   // Je Person hoechstens eine offene Meldung pro Beitrag bzw. pro Kommentar (Doppelklicks, Spam).
   uniqueIndex("reports_open_once_uq").on(t.postId, t.reporterId).where(sql`status = 'open' AND comment_id IS NULL`),
   uniqueIndex("reports_comment_open_once_uq").on(t.commentId, t.reporterId).where(sql`status = 'open' AND comment_id IS NOT NULL`),
@@ -528,6 +529,7 @@ export const events = social.table(
     index("events_starts_idx").on(t.startsAt),
     index("events_series_idx").on(t.seriesId),
     index("events_team_idx").on(t.teamId),
+    index("events_created_by_idx").on(t.createdBy),
     check("events_kind_chk", sql`kind IN ('training', 'match', 'meeting', 'party', 'other')`),
     check("events_capacity_chk", sql`capacity IS NULL OR capacity BETWEEN 1 AND 10000`),
     check("events_yes_count_chk", sql`yes_count >= 0 AND (capacity IS NULL OR yes_count <= capacity)`),
@@ -605,6 +607,7 @@ export const eventAttendance = social.table(
     primaryKey({ columns: [t.eventId, t.userId] }),
     index("event_attendance_user_idx").on(t.userId),
     index("event_attendance_marked_idx").on(t.markedAt),
+    index("event_attendance_marked_by_idx").on(t.markedBy),
     check("event_attendance_status_chk", sql`status IN ('present', 'absent', 'excused')`),
   ],
 );
@@ -853,6 +856,7 @@ export const invoices = billing.table(
     uniqueIndex("invoices_fee_run_recipient_uq").on(t.feeRunId, t.recipientUserId, sql`coalesce(${t.subjectUserId}, '00000000-0000-0000-0000-000000000000'::uuid)`),
     index("invoices_org_created_idx").on(t.orgId, t.createdAt),
     index("invoices_recipient_idx").on(t.recipientUserId),
+    index("invoices_subject_idx").on(t.subjectUserId),
     index("invoices_open_due_idx").on(t.status, t.dueDate),
   ],
 );
@@ -941,6 +945,7 @@ export const memberProfiles = membersArea.table(
     primaryKey({ columns: [t.orgId, t.userId] }),
     unique("member_profiles_no_unique").on(t.orgId, t.memberNo),
     index("member_profiles_user_idx").on(t.userId),
+    index("member_profiles_fee_class_idx").on(t.feeClassId),
   ],
 );
 

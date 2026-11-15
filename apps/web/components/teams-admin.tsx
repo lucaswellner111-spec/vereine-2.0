@@ -109,7 +109,7 @@ export function TeamsAdmin({ slug, onError }: { slug: string; onError: (m: strin
                           <button
                             type="button"
                             aria-label={`${m.name} entfernen`}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted hover:text-danger"
+                            className="relative hit-area inline-flex h-6 w-6 items-center justify-center rounded-full text-muted hover:text-danger"
                             onClick={async () => {
                               if (!(await ask(`${m.name} aus dem Team entfernen?`, { confirmLabel: "Entfernen" }))) return;
                               await run(async () => {

@@ -82,4 +82,15 @@ describe("Benachrichtigungen: Paging und einzeln gelesen", () => {
     expect((await req(olaf, "GET", "/notifications")).json().unread).toBe(1);
     expect((await req(nora, "POST", "/notifications/read", { ids: ["kein-uuid"] })).statusCode).toBe(400);
   });
+  it("Geloeschte Empfaenger/Akteure werden herausgefiltert statt den ganzen Insert zu kippen", async () => {
+    const paul = await signup("paul");
+    await db.execute(sql`update identity.users set deleted_at = now() where id = ${paul.id}`);
+    const svc = app.get(NotificationsService);
+    const count = async (uid: string) => (await db.select().from(schema.notifications).where(sql`user_id = ${uid} and data->>'handle' = 'filter'`)).length;
+    await svc.notify([nora.id, paul.id], "new_follower", { name: "Filter", handle: "filter" }); // geloeschter Empfaenger
+    expect(await count(nora.id)).toBe(1);
+    expect(await count(paul.id)).toBe(0);
+    await svc.notify([nora.id], "comment", { postId: "x", commenter: "Paul", excerpt: "x", handle: "filter" }, { actorId: paul.id }); // geloeschter Akteur: entfaellt
+    expect(await count(nora.id)).toBe(1);
+  });
 });

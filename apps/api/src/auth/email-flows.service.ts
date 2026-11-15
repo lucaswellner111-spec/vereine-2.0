@@ -146,6 +146,8 @@ export class EmailFlowsService {
       }
       await this.db.delete(authTokens).where(and(eq(authTokens.userId, user.id), inArray(authTokens.purpose, ["verify", "email_change"]), isNull(authTokens.usedAt)));
       await this.db.insert(auditLog).values({ userId: user.id, action: "user.email.changed" });
+      // Neue Adresse = neuer Anmeldeweg: alle anderen Sitzungen beenden (nur die in diesem Browser bleibt, falls vorhanden)
+      await this.auth.revokeOtherSessions(user.id, currentSession ?? "");
       changed = true;
     } else {
       // Bedingung `pending_verification = true` im UPDATE: Nur wer die Registrierung wirklich abschliesst, wird

@@ -28,7 +28,7 @@ export default function Page() {
                 Klubnest ist eine Plattform für Vereine, Mitglieder und Fans. Der Nutzungsvertrag kommt zustande, wenn du dich registrierst, diese Bedingungen und die <A href="/datenschutz">Datenschutzerklärung</A> bestätigst und dein Konto aktiviert wird (Bestätigung deiner E-Mail-Adresse). Abweichende Bedingungen erkennen wir nicht an.
               </P>
               <P>
-                Du musst mindestens 16 Jahre alt sein und geschäftsfähig, oder die Zustimmung deiner gesetzlichen Vertreter haben. Mit der Registrierung bestätigst du dein Alter.
+                Für ein eigenes Konto musst du mindestens 16 Jahre alt sein; mit der Registrierung bestätigst du dein Alter. Kinder von 6 bis 15 Jahren können nur über ein Jugendkonto teilnehmen, das ihre Eltern oder Sorgeberechtigten unter ihrem eigenen Konto anlegen und verwalten (siehe <A href="/eltern-hinweise">Hinweise für Eltern</A>). Mit der Anlage bestätigst du, dass du für das Kind sorgeberechtigt bist.
               </P>
             </>
           ),
@@ -40,7 +40,7 @@ export default function Page() {
             <>
               <P>Wir stellen dir die folgenden Funktionen zur Verfügung, soweit sie in der App angeboten werden:</P>
               <UL>
-                <li>Konto mit Profil, optional mit Zwei-Faktor-Anmeldung, Datenauskunft und Konto-Löschung</li>
+                <li>Konto mit Profil, Zwei-Faktor-Anmeldung (für Vorstand und Kasse verpflichtend, sonst freiwillig), Datenauskunft und Konto-Löschung; Jugendkonten für Kinder unter 16 unter dem Konto der Eltern („Meine Kinder“)</li>
                 <li>Feed, Beiträge, Kommentare, Likes, Umfragen und Bilder; Folgen von Personen und Vereinen</li>
                 <li>Chat mit Direktnachrichten und Gruppen, Blockieren und Melden</li>
                 <li>Vereine: Gründen, Beitreten, Einladungslinks, Rollen (Vorstand, Kasse, Moderation, Mitglied), Teams</li>
@@ -98,7 +98,7 @@ export default function Page() {
           body: (
             <>
               <P>
-                Wer einen Verein gründet oder als Vorstand verwaltet, handelt für den Verein und sichert zu, dazu berechtigt zu sein. Der Verein ist unser Vertragspartner für die Vereinsfunktionen. Der Vorstand ist für die Rollenvergabe (Kasse, Moderation) verantwortlich.
+                Wer einen Verein gründet oder als Vorstand verwaltet, handelt für den Verein und sichert zu, dazu berechtigt zu sein. Wer als Vorstand oder in der Kasse Zugriff auf Mitglieder- und Rechnungsdaten hat, muss die Zwei-Faktor-Anmeldung einrichten; nach der ersten Prüfung gilt dafür eine Frist von 14 Tagen, danach sind diese Bereiche gesperrt, bis sie eingerichtet ist. Der Verein ist unser Vertragspartner für die Vereinsfunktionen. Der Vorstand ist für die Rollenvergabe (Kasse, Moderation) verantwortlich.
               </P>
               <UL>
                 <li>
@@ -111,7 +111,7 @@ export default function Page() {
                   <Strong>Öffentliche Vereinsseite.</Strong> Der Vorstand schaltet sie bewusst frei und verantwortet Texte, Logo und Banner. Der Verein stellt sicher, dass er die Rechte an den Bildern hat und dass öffentliche Beiträge keine Personen ohne Einwilligung erkennbar nennen oder zeigen.
                 </li>
                 <li>
-                  <Strong>Minderjährige.</Strong> Hat der Verein Mitglieder unter 16 Jahren, sorgt er dafür, dass diese Klubnest nur mit Zustimmung ihrer Erziehungsberechtigten nutzen; Klubnest selbst steht nur Personen ab 16 offen.
+                  <Strong>Minderjährige.</Strong> Hat der Verein Mitglieder unter 16 Jahren, sorgt er dafür, dass diese Klubnest nur mit Zustimmung ihrer Erziehungsberechtigten nutzen. Ein eigenes Konto steht nur Personen ab 16 offen; jüngere Mitglieder nehmen über ein Jugendkonto ihrer Eltern teil. Die Eltern verwalten es allein: das Kind hat keine eigene Anmeldung.
                 </li>
                 <li>
                   <Strong>Rechnungen.</Strong> Der Verein ist Aussteller der Rechnungen und verantwortlich für Inhalt, Steuerhinweis und Angaben. Klubnest erstellt Rechnungen als PDF-Dokument nach den Vorgaben des Vorstands und der Kasse und stellt sie dem Mitglied bereit; eine steuerliche oder rechtliche Beratung ist damit nicht verbunden. Finalisierte Rechnungen werden wegen gesetzlicher Aufbewahrungspflichten nicht gelöscht, sondern bei Konto- oder Vereinslöschung aufbewahrt und anonymisiert, soweit zulässig.

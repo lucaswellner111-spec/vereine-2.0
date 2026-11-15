@@ -5,7 +5,7 @@ import { Eye, EyeOff, MessageSquareX } from "lucide-react";
 import { useState } from "react";
 import { tagLabel, type ModerationCommentItem, type ModerationPostItem } from "@vereine/shared";
 import { api, describeError } from "@/lib/api";
-import { useApi } from "@/lib/use-api";
+import { useApi, useBusy } from "@/lib/use-api";
 import { ReportQueue } from "./moderation-queue";
 import { Badge, Button, Card, CardSkeletons, EmptyState, ErrorState, TextareaField, UserNameLink } from "./ui";
 import { SegmentedControl, tabPanelProps } from "./ui-client";
@@ -63,19 +63,21 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
   const list = useApi<ModerationPostItem[]>(`/orgs/${slug}/moderation/posts?filter=${filter}`);
   const [hiding, setHiding] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [acting, runAct] = useBusy();
 
-  async function act(id: string, body: object) {
-    onError(null);
-    try {
-      await api(`/posts/${id}/moderation`, { method: "POST", body });
-      setHiding(null);
-      setReason("");
-      toast.success("Gespeichert");
-      list.reload();
-    } catch (e) {
-      onError(describeError(e));
-    }
-  }
+  const act = (id: string, body: object) =>
+    runAct(async () => {
+      onError(null);
+      try {
+        await api(`/posts/${id}/moderation`, { method: "POST", body });
+        setHiding(null);
+        setReason("");
+        toast.success("Gespeichert");
+        list.reload();
+      } catch (e) {
+        onError(describeError(e));
+      }
+    });
 
   let content;
   if (list.error && !list.data) content = <ErrorState message={list.error} onRetry={list.reload} />;
@@ -109,14 +111,14 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
                     onChange={(e) => setReason(e.target.value)}
                   />
                   <div className="flex gap-2">
-                    <Button size="sm" variant="danger" disabled={reason.trim().length < 10} onClick={() => act(p.id, { action: "hide", reason })}>Ausblenden</Button>
+                    <Button size="sm" variant="danger" busy={acting} disabled={reason.trim().length < 10} onClick={() => act(p.id, { action: "hide", reason })}>Ausblenden</Button>
                     <Button size="sm" variant="ghost" onClick={() => setHiding(null)}>Abbrechen</Button>
                   </div>
                 </div>
               ) : (
                 <div className="mt-3">
                   {p.hidden ? (
-                    <Button size="sm" variant="secondary" onClick={() => act(p.id, { action: "unhide" })}><Eye size={14} aria-hidden /> Wieder einblenden</Button>
+                    <Button size="sm" variant="secondary" busy={acting} onClick={() => act(p.id, { action: "unhide" })}><Eye size={14} aria-hidden /> Wieder einblenden</Button>
                   ) : (
                     <Button
                       size="sm"
@@ -148,16 +150,19 @@ function PostsPanel({ slug, onError }: { slug: string; onError: (m: string | nul
 function CommentsPanel({ slug, onError }: { slug: string; onError: (m: string | null) => void }) {
   const list = useApi<ModerationCommentItem[]>(`/orgs/${slug}/moderation/comments`);
 
+  const [removing, runRemove] = useBusy();
   async function remove(id: string) {
     if (!(await ask("Der Kommentar wird gelöscht und kann nicht wiederhergestellt werden.", { title: "Kommentar endgültig löschen?", confirmLabel: "Endgültig löschen", danger: true }))) return;
-    onError(null);
-    try {
-      await api(`/moderation/comments/${id}`, { method: "DELETE", body: {} });
-      toast.success("Kommentar gelöscht");
-      list.setData((l) => l?.filter((c) => c.id !== id) ?? l);
-    } catch (e) {
-      onError(describeError(e));
-    }
+    await runRemove(async () => {
+      onError(null);
+      try {
+        await api(`/moderation/comments/${id}`, { method: "DELETE", body: {} });
+        toast.success("Kommentar gelöscht");
+        list.setData((l) => l?.filter((c) => c.id !== id) ?? l);
+      } catch (e) {
+        onError(describeError(e));
+      }
+    });
   }
 
   if (list.error && !list.data) return <ErrorState message={list.error} onRetry={list.reload} />;
@@ -171,7 +176,7 @@ function CommentsPanel({ slug, onError }: { slug: string; onError: (m: string | 
             <p className="text-xs text-muted"><UserNameLink handle={c.authorHandle} name={c.authorName} className="font-medium text-text" /> · {when(c.createdAt)} · unter „{c.postExcerpt}“</p>
             <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p>
           </div>
-          <Button size="sm" variant="ghost" aria-label="Kommentar löschen" onClick={() => remove(c.id)}><MessageSquareX size={16} aria-hidden /></Button>
+          <Button size="sm" variant="ghost" aria-label="Kommentar löschen" disabled={removing} onClick={() => remove(c.id)}><MessageSquareX size={16} aria-hidden /></Button>
         </div>
       ))}
     </Card>

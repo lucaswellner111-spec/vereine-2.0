@@ -130,13 +130,32 @@ export class TeamsService implements OnModuleInit {
     const org = await this.orgs.requireBySlug(slug);
     if (targetId !== user.id) await this.requireAdmin(org.id, user.id);
     await this.requireTeam(org.id, teamId);
-    await this.db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, targetId)));
+    const freed = await this.db.transaction(async (tx) => {
+      await tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, targetId)));
+      // Kuenftige Zusagen und Helfer-Eintraege der Team-Termine mit entfernen (sonst bleibt ein Ex-Mitglied angemeldet)
+      const future = tx.select({ id: events.id }).from(events).where(and(eq(events.teamId, teamId), gt(events.startsAt, sql`now()`)));
+      const removed = await tx
+        .delete(eventRsvps)
+        .where(and(eq(eventRsvps.userId, targetId), inArray(eventRsvps.eventId, future)))
+        .returning({ eventId: eventRsvps.eventId, status: eventRsvps.status });
+      const shifts = tx.select({ id: eventShifts.id }).from(eventShifts).where(inArray(eventShifts.eventId, future));
+      await tx.delete(eventShiftSignups).where(and(eq(eventShiftSignups.userId, targetId), inArray(eventShiftSignups.shiftId, shifts)));
+      return removed.filter((r) => r.status === "yes").map((r) => r.eventId);
+    });
+    await this.events.fillWaitlistsFor(freed);
   }
 
   async remove(user: PublicUser, slug: string, teamId: string): Promise<void> {
     const org = await this.orgs.requireBySlug(slug);
     await this.requireAdmin(org.id, user.id);
     await this.requireTeam(org.id, teamId);
+    // Der Fremdschluessel loescht sonst alle Termine des Teams mit: mit kuenftigen Terminen verweigern
+    const [upcoming] = await this.db
+      .select({ id: events.id })
+      .from(events)
+      .where(and(eq(events.teamId, teamId), gt(events.startsAt, sql`now()`)))
+      .limit(1);
+    if (upcoming) throw new ConflictException("Das Team hat noch kuenftige Termine. Lösche oder verschiebe sie zuerst, dann kannst Du das Team löschen.");
     await this.db.delete(teams).where(eq(teams.id, teamId));
   }
 }

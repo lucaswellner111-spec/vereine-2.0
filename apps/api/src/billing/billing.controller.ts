@@ -69,11 +69,13 @@ export class BillingController {
     return this.billing.create(user, slug, parse(createInvoiceSchema, body));
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("invoices/:id")
   one(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<InvoiceDetail> {
     return this.billing.get(user, id);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Get("invoices/:id/pdf")
   @Header("Content-Type", "application/pdf")
   @Header("Cache-Control", "private, no-store")
@@ -107,6 +109,7 @@ export class BillingController {
     return this.billing.voidInvoice(user, id, parse(voidInvoiceSchema, body).reason);
   }
 
+  @UseGuards(TwoFactorGuard)
   @Delete("invoices/:id")
   @HttpCode(204)
   remove(@CurrentUser() user: PublicUser, @Param("id", ParseUUIDPipe) id: string): Promise<void> {

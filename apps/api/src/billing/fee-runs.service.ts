@@ -13,6 +13,7 @@ import { MembersService } from "../members/members.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { describeError } from "../common/log-redact";
 
 const BILLERS: OrgRole[] = ["admin", "treasurer"];
 const CHUNK = 200;
@@ -111,7 +112,7 @@ export class FeeRunsService implements OnModuleInit {
       await this.jobs.enqueue(JOB, { runId: row.id });
     } catch (err) {
       // Lauf ist angelegt: inline steht ein Fehler schon als "failed" am Lauf, sonst holt der Sweep "queued" nach.
-      this.log.error(`Beitragslauf ${row.id}: ${(err as Error).message}`);
+      this.log.error(`Beitragslauf ${row.id}: ${describeError(err)}`);
     }
     const [fresh] = await this.db.select().from(feeRuns).where(eq(feeRuns.id, row.id)).limit(1);
     return this.view(fresh ?? row);
@@ -138,7 +139,7 @@ export class FeeRunsService implements OnModuleInit {
     try {
       await this.jobs.enqueue(JOB, { runId: id });
     } catch (err) {
-      this.log.error(`Beitragslauf ${id}: ${(err as Error).message}`);
+      this.log.error(`Beitragslauf ${id}: ${describeError(err)}`);
     }
     const [fresh] = await this.db.select().from(feeRuns).where(eq(feeRuns.id, id)).limit(1);
     return this.view(fresh ?? reset);
@@ -170,7 +171,7 @@ export class FeeRunsService implements OnModuleInit {
       try {
         if ((await this.execute(id)) !== null) started += 1;
       } catch (err) {
-        this.log.error(`Beitragslauf ${id} (Nachholen): ${(err as Error).message}`);
+        this.log.error(`Beitragslauf ${id} (Nachholen): ${describeError(err)}`);
       }
     }
     return started;
@@ -205,7 +206,7 @@ export class FeeRunsService implements OnModuleInit {
     try {
       await this.notifyDone(run, created);
     } catch (err) {
-      this.log.warn(`Beitragslauf ${runId}: Benachrichtigung fehlgeschlagen: ${(err as Error).message}`);
+      this.log.warn(`Beitragslauf ${runId}: Benachrichtigung fehlgeschlagen: ${describeError(err)}`);
     }
     return created;
   }

@@ -7,6 +7,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FeeClassItem, FeeRunItem, FeeRunPreview, InvoiceDetail, InvoiceSummary, MemberRegistryPage, NotificationsResponse, PublicUser, YouthChild, YouthChildDetail } from "@vereine/shared";
+import { YOUTH_CONSENT_VERSION } from "@vereine/shared";
 import { AppModule } from "../app.module";
 import { configureApp } from "../app.setup";
 import { ARGON_OPTIONS, AuthService } from "../auth/auth.service";
@@ -87,7 +88,7 @@ describe("Jugendkonten: Eltern verwalten Kinder (Etappe E1)", () => {
     expect(p.birthDate).toBe(bornYearsAgo(11));
     // Nachweis der Selbstauskunft (append-only), ohne IP/User-Agent
     const consents = await db.select().from(schema.guardianConsents).where(eq(schema.guardianConsents.youthUserId, lena.id));
-    expect(consents).toEqual([expect.objectContaining({ purpose: "account", granted: true, guardianUserId: pia.id, textVersion: "2026-11-14" })]);
+    expect(consents).toEqual([expect.objectContaining({ purpose: "account", granted: true, guardianUserId: pia.id, textVersion: YOUTH_CONSENT_VERSION })]);
     expect(Object.keys(consents[0])).not.toContain("ip");
     expect((await req(pia, "GET", "/guardian/children")).json()).toEqual([expect.objectContaining({ id: lena.id })]);
     // Audit ohne Klartext-Personendaten

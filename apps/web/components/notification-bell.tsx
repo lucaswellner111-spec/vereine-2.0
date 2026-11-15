@@ -54,11 +54,11 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
+    const close = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
   }, [open]);
 
   // Escape ueber den gemeinsamen Stapel: schliesst nur, wenn das Popover die oberste Ebene ist
@@ -112,7 +112,7 @@ export function NotificationBell({ align = "right" }: { align?: "left" | "right"
             "absolute z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface shadow-lg",
             align === "left" ? "left-0" : "right-0",
             // Handy: volle Breite unter der Kopfleiste, damit nichts aus dem Bildschirm ragt
-            "max-md:fixed max-md:inset-x-2 max-md:top-14 max-md:mt-0 max-md:w-auto max-md:max-w-none",
+            "max-md:fixed max-md:inset-x-2 max-md:top-[calc(3.5rem+env(safe-area-inset-top))] max-md:mt-0 max-md:w-auto max-md:max-w-none",
           )}
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-1.5">

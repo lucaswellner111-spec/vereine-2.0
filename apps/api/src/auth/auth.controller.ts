@@ -152,8 +152,8 @@ export class AuthController {
   @Post("2fa/enable")
   @UseGuards(SessionGuard)
   @HttpCode(200)
-  async twoFactorEnable(@CurrentUser() user: PublicUser, @Body() body: unknown): Promise<{ recoveryCodes: string[] }> {
-    return { recoveryCodes: await this.auth.twoFactorEnable(user.id, parse(twoFactorCodeSchema, body).code) };
+  async twoFactorEnable(@CurrentUser() user: PublicUser, @Body() body: unknown, @Req() req: FastifyRequest): Promise<{ recoveryCodes: string[] }> {
+    return { recoveryCodes: await this.auth.twoFactorEnable(user.id, parse(twoFactorCodeSchema, body).code, req.cookies[SESSION_COOKIE]!) };
   }
 
   @Post("2fa/disable")

@@ -20,8 +20,8 @@ import { usePageTitle } from "@/lib/use-page-title";
 const mapUrl = (place: string) => `https://www.openstreetmap.org/search?query=${encodeURIComponent(place)}`;
 const MAX_FACES = 12;
 
-const dateFmt = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const timeFmt = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+const dateFmt = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
 const ended = (e: EventItem) => (e.endsAt ? new Date(e.endsAt) : new Date(new Date(e.startsAt).getTime() + 3 * 3600_000)) < new Date();
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {

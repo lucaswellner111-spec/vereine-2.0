@@ -232,6 +232,20 @@
       "when": 1794690499161,
       "tag": "0032_f1_guardian_invites_import_youth",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794734533739,
+      "tag": "0033_fk_indizes",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794735031394,
+      "tag": "0034_consents_append_only",
+      "breakpoints": true
     }
   ]
 }

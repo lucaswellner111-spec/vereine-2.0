@@ -1,6 +1,6 @@
 /** Minimaler iCalendar-Export (RFC 5545): einzelne Termine und Abo-Kalender. */
 
-const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
 const utc = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
 /** Zeilen laenger als 75 Oktette werden gefaltet (Fortsetzung mit fuehrendem Leerzeichen). */
@@ -31,6 +31,8 @@ export type IcsEvent = {
   endsAt: Date | null;
   canceled: boolean;
   orgName: string;
+  /** Letzte Aenderung (events.updated_at): speist SEQUENCE und LAST-MODIFIED, damit Kalender Aenderungen uebernehmen. */
+  modifiedAt?: Date;
 };
 
 function vevent(e: IcsEvent, stamp: Date): string[] {
@@ -38,8 +40,9 @@ function vevent(e: IcsEvent, stamp: Date): string[] {
     "BEGIN:VEVENT",
     `UID:${e.id}@vereine`,
     `DTSTAMP:${utc(stamp)}`,
+    ...(e.modifiedAt ? [`LAST-MODIFIED:${utc(e.modifiedAt)}`, `SEQUENCE:${Math.floor(e.modifiedAt.getTime() / 1000)}`] : []),
     `DTSTART:${utc(e.startsAt)}`,
-    `DTEND:${utc(e.endsAt ?? new Date(e.startsAt.getTime() + 2 * 3600_000))}`,
+    `DTEND:${utc(e.endsAt ?? new Date(e.startsAt.getTime() + 3 * 3600_000))}`,
     `SUMMARY:${esc(e.title)}`,
     ...(e.location ? [`LOCATION:${esc(e.location)}`] : []),
     `DESCRIPTION:${esc([e.orgName, e.description].filter(Boolean).join(" – "))}`,

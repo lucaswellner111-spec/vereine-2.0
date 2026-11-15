@@ -101,7 +101,7 @@ export class OrgsService {
       .where(
         and(
           term
-            ? or(ilike(organizations.name, `%${term}%`), ilike(organizations.city, `%${term}%`), ilike(organizations.category, `%${term}%`))
+            ? or(ilike(organizations.name, `%${escapeLike(term)}%`), ilike(organizations.city, `%${escapeLike(term)}%`), ilike(organizations.category, `%${escapeLike(term)}%`))
             : undefined,
           tag && isTagId(tag) ? sql`${organizations.tags} @> ARRAY[${tag}]::text[]` : undefined,
           place ? ilike(organizations.city, `%${escapeLike(place)}%`) : undefined,
@@ -113,12 +113,12 @@ export class OrgsService {
     return this.summaries(rows);
   }
 
-  /** Ist die Person Vorstand (Rolle admin) in mindestens einem Verein? (Zwei-Faktor-Pflicht) */
+  /** Hat die Person in mindestens einem Verein eine Rolle mit Zugriff auf Personendaten (Vorstand, Kasse)? (Zwei-Faktor-Pflicht) */
   async isAnyAdmin(userId: string): Promise<boolean> {
     const [row] = await this.db
       .select({ id: orgMembers.userId })
       .from(orgMembers)
-      .where(and(eq(orgMembers.userId, userId), eq(orgMembers.role, "admin"), eq(orgMembers.status, "active")))
+      .where(and(eq(orgMembers.userId, userId), inArray(orgMembers.role, ["admin", "treasurer"]), eq(orgMembers.status, "active")))
       .limit(1);
     return !!row;
   }

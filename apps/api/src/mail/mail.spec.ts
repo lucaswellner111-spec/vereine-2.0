@@ -297,6 +297,9 @@ describe("Mail: Kostenbremse", () => {
     expect(new Date(Date.parse("2026-11-09T21:00:00Z") + ms).toISOString()).toBe("2026-11-10T05:00:00.000Z"); // 06:00 MEZ
     const summer = msUntilNextMorning(new Date("2026-07-01T10:00:00Z"));
     expect(new Date(Date.parse("2026-07-01T10:00:00Z") + summer).toISOString()).toBe("2026-07-02T04:00:00.000Z"); // 06:00 MESZ
+    // 00:30 MEZ: der Morgen ist noch heute, nicht erst morgen
+    const night = msUntilNextMorning(new Date("2026-11-09T23:30:00Z"));
+    expect(new Date(Date.parse("2026-11-09T23:30:00Z") + night).toISOString()).toBe("2026-11-10T05:00:00.000Z");
   });
 });
 

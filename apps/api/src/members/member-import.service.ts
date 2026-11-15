@@ -24,6 +24,7 @@ import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { ago, purgeInRounds, RETENTION, RETENTION_BATCH } from "../common/retention";
 import { DB, type Database } from "../db/db.module";
 import { feeClasses, pendingMembers } from "../db/schema";
+import { describeError } from "../common/log-redact";
 import { JobsService } from "../jobs/jobs.service";
 import { addressHash, MAIL_LIMITS } from "../mail/mail-limits";
 import { MailLimits } from "../mail/mail-limits";
@@ -47,6 +48,10 @@ const FIELD_LABEL: Record<MemberImportField, string> = {
 };
 /** Haengt ein Versand (Absturz des Workers), gibt der naechste Lauf die Zeile nach dieser Zeit wieder frei. */
 const STALE_MS = 15 * 60_000;
+const SWEEP_JOB = "members.import-invites-sweep";
+const SWEEP_INTERVAL_MS = 6 * 3600_000;
+/** Wartende Zeilen aelter als das: der verzoegerte Folgejob haette sie laengst verschicken muessen. */
+const SWEEP_AGE_MS = 26 * 3600_000;
 /** Nutzungslimits (je Stunde): Pruefungen je Vorstand, Bestaetigungen je Verein. Schuetzt vor Massenabfragen und Mail-Missbrauch. */
 export const IMPORT_PREVIEWS_PER_HOUR = 30;
 export const IMPORT_CONFIRMS_PER_HOUR = 20;
@@ -99,6 +104,9 @@ export class MemberImportService implements OnModuleInit {
     this.jobs.define(JOB, async (d: { orgId: string }) => {
       await this.sendInvites(d.orgId);
     });
+    // Auffangnetz: ging ein Folgejob verloren (Redis-Fehler, Neustart), holt der Sweep haengende Zeilen nach.
+    this.jobs.define(SWEEP_JOB, async () => void (await this.sweepInvites()));
+    this.jobs.every(SWEEP_JOB, SWEEP_INTERVAL_MS);
     // Persoenliche Einladung fuer ein Kind: nur ein Elternteil darf sie fuer das Jugendkonto annehmen (Geburtsdatum muss passen)
     this.orgEvents.onInviteGate("member-import", async (orgId, inviteId) => {
       const [row] = await this.db
@@ -317,12 +325,28 @@ export class MemberImportService implements OnModuleInit {
     });
     await this.audit.record(user.id, "members.imported", { orgId: org.id, count: inserted, skipped: preview.total - inserted, youth: minors });
     // Versand im Worker (BullMQ); lokal/Tests laeuft der Job sofort im selben Prozess.
-    await this.jobs.enqueue(JOB, { orgId: org.id }, { attempts: 3, backoffMs: 60_000 });
+    // Die Vormerkungen sind gespeichert: ein Fehler beim Einreihen darf den Import nicht scheitern lassen (Sweep holt es nach).
+    await this.jobs.enqueue(JOB, { orgId: org.id }, { attempts: 3, backoffMs: 60_000 }).catch((e) => this.log.error(`Import-Einladungen nicht eingereiht: ${describeError(e)}`));
     const mailToday = Math.min(split.today, inserted);
     return { imported: inserted, skipped: preview.total - inserted, mailToday, mailLater: inserted - mailToday };
   }
 
   // --- Versand (Job) ----------------------------------------------------------------------------
+
+  /** Reiht fuer Vereine mit lange wartenden oder haengenden ("sending") Einladungen den Versandjob neu ein. */
+  async sweepInvites(): Promise<number> {
+    const old = new Date(Date.now() - SWEEP_AGE_MS);
+    const stale = new Date(Date.now() - STALE_MS);
+    const orgs = await this.db
+      .selectDistinct({ orgId: pendingMembers.orgId })
+      .from(pendingMembers)
+      .where(or(and(eq(pendingMembers.status, "queued"), lt(pendingMembers.createdAt, old)), and(eq(pendingMembers.status, "sending"), lt(pendingMembers.sentAt, stale))))
+      .limit(500);
+    for (const { orgId } of orgs) {
+      await this.jobs.enqueue(JOB, { orgId }, { attempts: 3, backoffMs: 60_000 }).catch((e) => this.log.error(`Import-Sweep: ${describeError(e)}`));
+    }
+    return orgs.length;
+  }
 
   /** Verschickt wartende Einladungen eines Vereins bis zum Tageslimit; der Rest folgt am naechsten Morgen. */
   async sendInvites(orgId: string): Promise<{ sent: number; remaining: number }> {

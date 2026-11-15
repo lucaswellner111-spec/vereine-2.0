@@ -95,7 +95,7 @@ export class ChatCrypto {
   private open(key: Buffer, token: string, aad: string): Buffer {
     const [iv, tag, ct] = token.split(".");
     if (!iv || !tag || ct === undefined) throw new Error("Ungueltiges Chiffrat.");
-    const decipher = createDecipheriv("aes-256-gcm", key, fromB64(iv));
+    const decipher = createDecipheriv("aes-256-gcm", key, fromB64(iv), { authTagLength: 16 }); // kurze Tags ablehnen
     decipher.setAAD(Buffer.from(aad));
     decipher.setAuthTag(fromB64(tag));
     return Buffer.concat([decipher.update(fromB64(ct)), decipher.final()]);

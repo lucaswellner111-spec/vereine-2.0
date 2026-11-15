@@ -3,6 +3,7 @@ import { Bell } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePullToRefresh, PULL_THRESHOLD } from "@/lib/use-pull-to-refresh";
 import { ListGroup, ListRow, Toggle } from "./ui";
+import { PullIndicator } from "./ui-client";
 
 afterEach(cleanup);
 
@@ -37,10 +38,16 @@ describe("ListGroup/ListRow", () => {
 });
 
 function Pull({ onRefresh }: { onRefresh: () => void }) {
-  const { pull, refreshing } = usePullToRefresh(onRefresh);
-  return <p data-testid="state">{`${Math.round(pull)}|${refreshing}`}</p>;
+  const ptr = usePullToRefresh(onRefresh);
+  return (
+    <>
+      <PullIndicator {...ptr} />
+      <p data-testid="refreshing">{String(ptr.refreshing)}</p>
+    </>
+  );
 }
 
+const indicator = () => document.querySelector<HTMLElement>("[data-pulling], .group")!;
 const touch = (type: "touchStart" | "touchMove" | "touchEnd", y: number) =>
   fireEvent[type](window, { touches: type === "touchEnd" ? [] : [{ clientY: y }] });
 
@@ -52,19 +59,21 @@ describe("usePullToRefresh", () => {
     // zu kurz gezogen
     touch("touchStart", 0);
     touch("touchMove", 60);
-    expect(screen.getByTestId("state").textContent).toBe("30|false");
+    expect(indicator().style.height).toBe("30px");
     touch("touchEnd", 60);
     expect(onRefresh).not.toHaveBeenCalled();
     // ueber die Schwelle (Daempfung 0,5)
     touch("touchStart", 0);
     touch("touchMove", PULL_THRESHOLD * 2 + 10);
     act(() => touch("touchEnd", 0));
-    expect(screen.getByTestId("state").textContent).toBe("0|true");
+    expect(indicator().style.height).toBe("48px");
+    expect(screen.getByTestId("refreshing").textContent).toBe("true");
     await act(async () => {
       await vi.runAllTimersAsync();
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(screen.getByTestId("state").textContent).toBe("0|false");
+    expect(screen.getByTestId("refreshing").textContent).toBe("false");
+    expect(indicator().style.height).toBe("");
     vi.useRealTimers();
   });
 });

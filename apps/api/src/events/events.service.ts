@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
@@ -34,6 +35,7 @@ import { eventAttendance, eventRsvps, eventShiftSignups, eventShifts, events, fo
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgsService } from "../orgs/orgs.service";
 import { ProfileAccess } from "../profiles/profile-access.service";
+import { describeError } from "../common/log-redact";
 import { buildIcs, buildIcsFeed } from "./ics";
 import { occurrences } from "./recurrence";
 
@@ -65,6 +67,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class EventsService implements OnModuleInit {
+  private readonly log = new Logger(EventsService.name);
+
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(OrgsService) private readonly orgs: OrgsService,
@@ -193,9 +197,23 @@ export class EventsService implements OnModuleInit {
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
   }
 
+  /** Benachrichtigung nach dem Commit: ein Fehler (z. B. Redis/Push) darf die schon gespeicherte Aktion nicht scheitern lassen. */
+  private notifySafe(...args: Parameters<NotificationsService["notify"]>): Promise<void> {
+    return this.notifications.notify(...args).catch((e) => this.log.error(`Benachrichtigung ${args[1]} fehlgeschlagen: ${describeError(e)}`));
+  }
+
+  /** Letzte Aenderung je Termin (fuer SEQUENCE/LAST-MODIFIED im Kalender-Export). */
+  private async modifiedAt(ids: string[]): Promise<Map<string, Date>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.db.select({ id: events.id, at: events.updatedAt }).from(events).where(inArray(events.id, ids));
+    return new Map(rows.map((r) => [r.id, r.at]));
+  }
+
   async ics(user: PublicUser, id: string): Promise<string> {
     const e = await this.get(user, id);
+    const modified = await this.modifiedAt([id]);
     return buildIcs({
+      modifiedAt: modified.get(id),
       id: e.id,
       title: e.title,
       description: e.description,
@@ -341,7 +359,7 @@ export class EventsService implements OnModuleInit {
           .select({ id: orgMembers.userId })
           .from(orgMembers)
           .where(and(eq(orgMembers.orgId, org.id), eq(orgMembers.status, "active")));
-    await this.notifications.notify(
+    await this.notifySafe(
       recipients.map((r) => r.id).filter((id) => id !== user.id),
       "event_created",
       { eventId: row.id, title: row.title, orgSlug: org.slug, orgName: org.name, startsAt: row.startsAt.toISOString(), ...(input.repeat ? { series: String(created.length) } : {}) },
@@ -421,7 +439,7 @@ export class EventsService implements OnModuleInit {
         .selectDistinct({ userId: eventRsvps.userId })
         .from(eventRsvps)
         .where(and(inArray(eventRsvps.eventId, affected), inArray(eventRsvps.status, ["yes", "maybe", "waitlist"])));
-      await this.notifications.notify(
+      await this.notifySafe(
         rows.map((r) => r.userId).filter((u) => u !== user.id),
         "event_updated",
         {
@@ -447,13 +465,13 @@ export class EventsService implements OnModuleInit {
     const target = wholeSeries
       ? and(eq(events.seriesId, event.seriesId!), gte(events.startsAt, new Date(event.startsAt)), isNull(events.canceledAt))!
       : eq(events.id, id);
-    const canceled = await this.db.update(events).set({ canceledAt: new Date() }).where(target).returning({ id: events.id });
+    const canceled = await this.db.update(events).set({ canceledAt: new Date(), updatedAt: new Date() }).where(target).returning({ id: events.id });
     await invalidatePublicOrg(this.cache, event.orgSlug);
     const attendees = await this.db
       .select({ userId: eventRsvps.userId })
       .from(eventRsvps)
       .where(and(inArray(eventRsvps.eventId, canceled.length ? canceled.map((c) => c.id) : [id]), inArray(eventRsvps.status, ["yes", "maybe", "waitlist"])));
-    await this.notifications.notify(
+    await this.notifySafe(
       attendees.map((a) => a.userId).filter((u) => u !== user.id),
       "event_canceled",
       { eventId: id, title: event.title, orgSlug: event.orgSlug, orgName: event.orgName, startsAt: event.startsAt, ...(wholeSeries ? { series: String(canceled.length) } : {}) },
@@ -462,14 +480,20 @@ export class EventsService implements OnModuleInit {
 
   /** Abo-Kalender eines Nutzers: sichtbare Termine der letzten 30 und naechsten 180 Tage (max. 500). */
   async icsFeed(userId: string): Promise<string> {
-    const items = await this.query(
-      { id: userId } as PublicUser,
-      undefined,
-      { from: new Date(Date.now() - 30 * DAY_MS).toISOString(), to: new Date(Date.now() + 180 * DAY_MS).toISOString() },
-      500,
-    );
+    const now = Date.now();
+    const user = { id: userId } as PublicUser;
+    // Kuenftige Termine zuerst: sie sollen nie am Limit von 500 hinter vergangenen herausfallen.
+    const upcoming = await this.query(user, undefined, { from: new Date(now - 2 * 3600_000).toISOString(), to: new Date(now + 180 * DAY_MS).toISOString() }, 500);
+    const seen = new Set(upcoming.map((e) => e.id));
+    const earlier =
+      upcoming.length >= 500
+        ? []
+        : (await this.query(user, undefined, { past: true, from: new Date(now - 30 * DAY_MS).toISOString(), to: new Date(now - 2 * 3600_000).toISOString() }, 500 - upcoming.length)).filter((e) => !seen.has(e.id));
+    const items = [...upcoming, ...earlier];
+    const modified = await this.modifiedAt(items.map((e) => e.id));
     return buildIcsFeed(
       items.map((e) => ({
+        modifiedAt: modified.get(e.id),
         id: e.id,
         title: e.title,
         description: e.description,
@@ -602,7 +626,7 @@ export class EventsService implements OnModuleInit {
     const youth = await this.youth.youthIds(userIds);
     const recipients = new Set(userIds.filter((u) => !youth.has(u)));
     for (const child of youth) for (const g of await this.youth.guardiansOf(child)) recipients.add(g);
-    await this.notifications.notify([...recipients], "event_waitlist_promoted", {
+    await this.notifySafe([...recipients], "event_waitlist_promoted", {
       eventId,
       title: e.title,
       orgSlug: e.orgSlug,
@@ -631,7 +655,7 @@ export class EventsService implements OnModuleInit {
         .select({ userId: eventRsvps.userId })
         .from(eventRsvps)
         .where(and(eq(eventRsvps.eventId, e.id), inArray(eventRsvps.status, ["yes", "maybe"])));
-      await this.notifications.notify(attendees.map((a) => a.userId), "event_reminder", {
+      await this.notifySafe(attendees.map((a) => a.userId), "event_reminder", {
         eventId: e.id,
         title: e.title,
         orgSlug: org?.slug ?? "",

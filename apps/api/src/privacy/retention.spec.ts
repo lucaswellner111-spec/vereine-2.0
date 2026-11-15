@@ -143,6 +143,18 @@ describe("Aufraeum-Jobs (privacy.retention)", () => {
     expect(await postsSvc.purgeExpired()).toBe(1);
   });
 
+  it("erledigte Meldungen: 30 Tage nach Bearbeitung weg, offene und frische bleiben", async () => {
+    const [p] = await db.insert(schema.posts).values({ authorId: userA, body: "lebt weiter" }).returning();
+    await db.insert(schema.reports).values([
+      { postId: p.id, reporterId: userB, reason: "spam", status: "dismissed", resolvedAt: daysAgo(31) }, // weg
+      { postId: p.id, reporterId: userA, reason: "spam", status: "actioned", resolvedAt: daysAgo(29) }, // bleibt
+    ]);
+    await db.insert(schema.reports).values({ postId: p.id, reporterId: userB, reason: "spam", status: "open", createdAt: daysAgo(90) }); // offen: bleibt
+    expect(await postsSvc.purgeExpired()).toBe(1);
+    const left = await db.select().from(schema.reports).where(eq(schema.reports.postId, p.id));
+    expect(left.map((r) => r.status).sort()).toEqual(["actioned", "open"]);
+  });
+
   it("Zugriffsprotokoll: 12 Monate allgemein, 24 Monate Moderation, 10 Jahre Rechnungen", async () => {
     const rows = await db
       .insert(schema.auditLog)
