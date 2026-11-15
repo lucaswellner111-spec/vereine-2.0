@@ -30,6 +30,7 @@ const LABELS: Record<string, [string, string]> = {
   fee_run_done: ["abgeschlossener Beitragslauf", "abgeschlossene Beitragsläufe"],
   child_rsvp: ["Zu-/Absage für dein Kind", "Zu-/Absagen für dein Kind"],
   child_graduation: ["Hinweis zum 16. Geburtstag deines Kindes", "Hinweise zum 16. Geburtstag deines Kindes"],
+  guardian_notice: ["Hinweis zum Jugendkonto deines Kindes", "Hinweise zum Jugendkonto deines Kindes"],
 };
 
 /** Zeilen der Sammelmail aus Anzahlen je Typ ("3 neue Kommentare"). Unbekannte Typen (z. B. Likes) fallen weg. */

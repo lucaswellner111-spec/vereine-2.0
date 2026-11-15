@@ -379,6 +379,8 @@ describe("Mail: Vorlagen", () => {
     "email-change-notice": { name: "Lena", newEmailMasked: "n***@example.de", link: "https://klubnest.de/passwort-vergessen" },
     invite: { orgName: "SV Grün", link: "https://klubnest.de/einladung/1", unsubscribeLink: "https://klubnest.de/abmelden#t=x" },
     "member-invite": { orgName: "SV Grün", firstName: "Lena", link: "https://klubnest.de/einladung/2", validDays: 30, unsubscribeLink: "https://klubnest.de/abmelden#t=z" },
+    "member-invite-guardian": { orgName: "SV Grün", childFirstName: "Mia", link: "https://klubnest.de/einladung/3", validDays: 30, unsubscribeLink: "https://klubnest.de/abmelden#t=g" },
+    "guardian-invite": { inviterName: "Pia", link: "https://klubnest.de/eltern-einladung/4", validDays: 7 },
     "invoice-new": { name: "Lena", orgName: "SV Grün", number: "2026-0001", amount: "48,00 €", dueDate: "01.12.2026", link: "https://klubnest.de/rechnungen" },
     "notification-digest": { name: "Lena", lines: ["2 neue Kommentare", "1 neue Rechnung"], link: "https://klubnest.de/benachrichtigungen", unsubscribeLink: "https://klubnest.de/abmelden#t=y" },
     "waitlist-confirm": { orgName: "SV Grün", link: "https://klubnest.de/warteliste/bestaetigen#t=1", validHours: 48, removeLink: "https://klubnest.de/warteliste/austragen#t=r" },

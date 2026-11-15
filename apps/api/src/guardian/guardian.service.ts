@@ -1,8 +1,14 @@
-import { createHash, randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { and, desc, eq, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import {
+  GUARDIAN_INVITE_VALID_DAYS,
   MAX_CHILDREN_PER_GUARDIAN,
+  MAX_GUARDIANS_PER_CHILD,
+  YOUTH_DELETION_NOTICE_DAYS,
+  type DeleteChildResult,
+  type GuardianInviteInfo,
+  type YouthGuardiansView,
   YOUTH_AGE_LIMIT,
   YOUTH_AGE_MIN,
   YOUTH_CONSENT_TEXTS,
@@ -24,18 +30,22 @@ import { AuthService } from "../auth/auth.service";
 import { YouthDirectory } from "../auth/youth-directory.service";
 import { CACHE, type Cache } from "../cache/cache.module";
 import { ageOn, daysUntil16, isYouthAge, reached16 } from "../common/age";
+import { appLink } from "../common/app-url";
 import { berlinDate } from "../common/berlin-date";
 import { enforceLimit, limitMessage } from "../common/rate-limit";
 import { ago, RETENTION } from "../common/retention";
 import { DB, type Database } from "../db/db.module";
-import { guardianConsents, guardianships, users, youthProfiles } from "../db/schema";
+import { guardianConsents, guardianInvites, guardianships, users, youthProfiles } from "../db/schema";
 import { EventsService } from "../events/events.service";
 import { ShiftsService } from "../events/shifts.service";
 import { JobsService } from "../jobs/jobs.service";
+import { addressHash } from "../mail/mail-limits";
+import { MailService } from "../mail/mail.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OrgAdminService } from "../orgs/org-admin.service";
 import { OrgEvents } from "../orgs/org-events";
 import { OrgsService } from "../orgs/orgs.service";
+import { objectingGuardian } from "./consent-rules";
 
 /** Kein gueltiger argon2-Hash: `verify` schlaegt nie an, ausserdem blockiert der Login Jugendkonten ausdruecklich. */
 export const NO_LOGIN_HASH = "!kein-login";
@@ -69,6 +79,7 @@ export class GuardianService implements OnModuleInit {
     @Inject(ShiftsService) private readonly shifts: ShiftsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(JobsService) private readonly jobs: JobsService,
+    @Inject(MailService) private readonly mail: MailService,
   ) {}
 
   onModuleInit() {
@@ -216,8 +227,14 @@ export class GuardianService implements OnModuleInit {
       .sort((a, b) => b.eventStartsAt.localeCompare(a.eventStartsAt))
       .slice(0, ATTENDANCE_LIMIT)
       .map((a) => ({ eventTitle: a.eventTitle, startsAt: a.eventStartsAt, status: a.status as "present" | "absent" | "excused" }));
-    void profile;
-    return { ...base, consents, events, attendance };
+    const deletion = profile.deletionRequestedAt
+      ? {
+          requestedAt: profile.deletionRequestedAt.toISOString(),
+          deleteAfter: new Date(profile.deletionRequestedAt.getTime() + YOUTH_DELETION_NOTICE_DAYS * 86_400_000).toISOString(),
+          byMe: profile.deletionRequestedBy === guardian.id,
+        }
+      : null;
+    return { ...base, consents, events, attendance, deletion };
   }
 
   // --- Freigaben (Nachweis, append-only) --------------------------------------------------------------
@@ -283,6 +300,11 @@ export class GuardianService implements OnModuleInit {
     const { user } = await this.requireActiveChild(guardian.id, childId);
     await enforceLimit(this.cache, `guardian:join:${guardian.id}`, 20, 86_400, limitMessage("Vereinsbeitritte für Kinder"));
     const child = this.childUser(user);
+    // Freigaben restriktiv: hat der andere Elternteil der Mitgliedschaft in diesem Verein widersprochen, kann sie nicht erneut erteilt werden
+    const targetSlug = input.slug ?? (await this.orgAdmin.info(child, input.token!)).orgSlug;
+    if (await this.objectedByOther(childId, (await this.orgs.requireBySlug(targetSlug)).id, guardian.id)) {
+      throw new ConflictException("Der andere Elternteil hat der Mitgliedschaft in diesem Verein widersprochen. Ihr müsst euch einigen: Er oder sie meldet dein Kind selbst wieder an.");
+    }
     let orgName: string;
     let orgSlug: string;
     let status: "active" | "pending";
@@ -308,6 +330,203 @@ export class GuardianService implements OnModuleInit {
     const org = await this.orgs.requireBySlug(slug);
     if (await this.currentlyGranted(childId, org.id)) await this.recordConsent(childId, guardian.id, "org_membership", org.id, false);
     await this.orgs.removeMember(slug, this.childUser(user), childId);
+    const others = (await this.youth.guardiansOf(childId)).filter((g) => g !== guardian.id);
+    if (others.length) await this.notifications.notify(others, "guardian_notice", { kind: "org_left" }, { actorId: guardian.id });
+  }
+
+  /** Hat ein anderer aktiver Elternteil dieser Mitgliedschaft widersprochen (letzter eigener Eintrag = Widerruf)? */
+  private async objectedByOther(childId: string, orgId: string, me: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ guardianUserId: guardianConsents.guardianUserId, granted: guardianConsents.granted })
+      .from(guardianConsents)
+      .where(and(eq(guardianConsents.youthUserId, childId), eq(guardianConsents.purpose, "org_membership"), eq(guardianConsents.orgId, orgId)))
+      .orderBy(desc(guardianConsents.createdAt), desc(guardianConsents.id))
+      .limit(50);
+    return objectingGuardian(rows, await this.youth.guardiansOf(childId), me) !== null;
+  }
+
+  // --- Zweiter Elternteil (Einladung) und Rechnungsempfaenger (Etappe E2) -----------------------------------------------------
+
+  private async activeGuardianRows(childId: string) {
+    return this.db
+      .select({ g: guardianships, name: users.displayName })
+      .from(guardianships)
+      .innerJoin(users, and(eq(users.id, guardianships.guardianUserId), isNull(users.deletedAt)))
+      .where(and(eq(guardianships.youthUserId, childId), eq(guardianships.status, "active")))
+      .orderBy(guardianships.createdAt);
+  }
+
+  private openInvites(childId: string) {
+    return this.db
+      .select()
+      .from(guardianInvites)
+      .where(and(eq(guardianInvites.youthUserId, childId), eq(guardianInvites.status, "open"), gt(guardianInvites.expiresAt, sql`now()`)))
+      .orderBy(guardianInvites.createdAt);
+  }
+
+  /** Beide Elternteile (mit Namen, die sehen sich ohnehin) und offene Einladungen (ohne Adresse). */
+  async guardiansView(guardian: PublicUser, childId: string): Promise<YouthGuardiansView> {
+    const { profile } = await this.requireChild(guardian.id, childId);
+    const [rows, invites] = await Promise.all([this.activeGuardianRows(childId), this.openInvites(childId)]);
+    return {
+      guardians: rows.map((r) => ({ userId: r.g.guardianUserId, name: r.name, isMe: r.g.guardianUserId === guardian.id, isBillingContact: r.g.isBillingContact, since: r.g.createdAt.toISOString() })),
+      invites: invites.map((i) => ({ id: i.id, createdAt: i.createdAt.toISOString(), expiresAt: i.expiresAt.toISOString() })),
+      canInvite: !this.paused(profile) && rows.length + invites.length < MAX_GUARDIANS_PER_CHILD,
+    };
+  }
+
+  /** Einladung per Mail: die Adresse wird nur gehasht gespeichert (Bindung der Annahme an dieses Konto), Link 7 Tage gueltig. */
+  async inviteGuardian(guardian: PublicUser, childId: string, email: string): Promise<void> {
+    await this.requireActiveChild(guardian.id, childId);
+    if (email === guardian.email.trim().toLowerCase()) throw new BadRequestException("Das ist deine eigene Adresse. Lade den anderen Elternteil mit dessen Adresse ein.");
+    await enforceLimit(this.cache, `guardian:invite:${guardian.id}`, 5, 86_400, limitMessage("Einladungen für Elternteile"));
+    const [rows, invites] = await Promise.all([this.activeGuardianRows(childId), this.openInvites(childId)]);
+    if (rows.length >= MAX_GUARDIANS_PER_CHILD) throw new BadRequestException("Dein Kind hat schon zwei Elternteile.");
+    if (rows.length + invites.length >= MAX_GUARDIANS_PER_CHILD) throw new BadRequestException("Es gibt schon eine offene Einladung. Warte auf die Annahme oder ziehe sie zurück.");
+    const token = randomBytes(32).toString("base64url");
+    const [row] = await this.db
+      .insert(guardianInvites)
+      .values({ youthUserId: childId, inviterUserId: guardian.id, tokenHash: sha256(token), emailHash: addressHash(email), expiresAt: new Date(Date.now() + GUARDIAN_INVITE_VALID_DAYS * 86_400_000) })
+      .returning({ id: guardianInvites.id });
+    // Kostenbremse: Mail ueber den MailService (je Empfaenger/Konto begrenzt, globales Kontingent). Adresse nie in Logs oder Audit.
+    const result = await this.mail.send(email, "guardian-invite", { inviterName: guardian.displayName, link: appLink(`/eltern-einladung/${token}`), validDays: GUARDIAN_INVITE_VALID_DAYS }, { actorId: guardian.id });
+    const limited: Record<string, string> = {
+      "limited:actor": "Du hast heute schon 20 Mails ausgelöst. Bitte versuche es morgen erneut.",
+      "limited:recipient": "An diese Adresse wurden gerade schon mehrere Mails geschickt. Bitte versuche es später erneut.",
+      "limited:org": "Bitte versuche es später erneut.",
+    };
+    if (limited[result]) {
+      await this.db.delete(guardianInvites).where(eq(guardianInvites.id, row.id));
+      throw new HttpException({ message: limited[result], statusCode: 429 }, 429);
+    }
+    await this.audit.record(guardian.id, "youth.guardian.invited", { youthId: childId, inviteId: row.id });
+  }
+
+  async revokeGuardianInvite(guardian: PublicUser, childId: string, inviteId: string): Promise<void> {
+    await this.requireChild(guardian.id, childId);
+    const res = await this.db
+      .update(guardianInvites)
+      .set({ status: "revoked" })
+      .where(and(eq(guardianInvites.id, inviteId), eq(guardianInvites.youthUserId, childId), eq(guardianInvites.status, "open")))
+      .returning({ id: guardianInvites.id });
+    if (res.length === 0) throw new NotFoundException("Einladung nicht gefunden.");
+    await this.audit.record(guardian.id, "youth.guardian.invite_revoked", { youthId: childId, inviteId });
+  }
+
+  /** Einladung pruefen: gueltig, offen und fuer das Konto mit der eingeladenen Adresse (sonst erfaehrt niemand etwas ueber das Kind). */
+  private async usableInvite(user: PublicUser, token: string) {
+    const gone = new NotFoundException("Dieser Einladungslink ist ungültig oder abgelaufen.");
+    if (user.accountType === "youth") throw gone;
+    const [row] = await this.db
+      .select()
+      .from(guardianInvites)
+      .where(and(eq(guardianInvites.tokenHash, sha256(token)), eq(guardianInvites.status, "open"), gt(guardianInvites.expiresAt, sql`now()`)))
+      .limit(1);
+    if (!row) throw gone;
+    if (row.emailHash !== addressHash(user.email)) {
+      throw new ForbiddenException("Diese Einladung gilt für ein Konto mit einer anderen E-Mail-Adresse. Melde dich mit der Adresse an, an die sie geschickt wurde.");
+    }
+    if (await this.youth.isGuardianOf(user.id, row.youthUserId)) throw new ConflictException("Du bist schon Elternteil dieses Kindes.");
+    return row;
+  }
+
+  async guardianInviteInfo(user: PublicUser, token: string): Promise<GuardianInviteInfo> {
+    const row = await this.usableInvite(user, token);
+    const ids = [row.youthUserId, ...(row.inviterUserId ? [row.inviterUserId] : [])];
+    const found = await this.db.select({ id: users.id, name: users.displayName }).from(users).where(and(inArray(users.id, ids), isNull(users.deletedAt)));
+    const name = (id: string | null) => found.find((u) => u.id === id)?.name;
+    if (!name(row.youthUserId)) throw new NotFoundException("Dieser Einladungslink ist ungültig oder abgelaufen.");
+    return { inviterName: name(row.inviterUserId) ?? "Ein Elternteil", childName: name(row.youthUserId)! };
+  }
+
+  /** Annahme: nur mit eigenem bestaetigten Konto (Controller), passender Adresse und Selbstauskunft; der andere Elternteil erfaehrt es. */
+  async acceptGuardianInvite(user: PublicUser, token: string): Promise<{ childId: string }> {
+    const row = await this.usableInvite(user, token);
+    await enforceLimit(this.cache, `guardian:accept:${user.id}`, 10, 86_400, limitMessage("Annahmen von Einladungen"));
+    await this.db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(guardianInvites)
+        .set({ status: "accepted", acceptedBy: user.id, acceptedAt: sql`now()` })
+        .where(and(eq(guardianInvites.id, row.id), eq(guardianInvites.status, "open"), gt(guardianInvites.expiresAt, sql`now()`)))
+        .returning({ id: guardianInvites.id });
+      if (claimed.length === 0) throw new NotFoundException("Dieser Einladungslink ist ungültig oder abgelaufen.");
+      const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(guardianships).where(and(eq(guardianships.youthUserId, row.youthUserId), eq(guardianships.status, "active")));
+      if (n >= MAX_GUARDIANS_PER_CHILD) throw new ConflictException("Dein Kind hat schon zwei Elternteile.");
+      await tx.insert(guardianships).values({ guardianUserId: user.id, youthUserId: row.youthUserId, isBillingContact: false });
+      await tx.insert(guardianConsents).values(this.consentRow(row.youthUserId, user.id, "account", null, true));
+    });
+    const others = (await this.youth.guardiansOf(row.youthUserId)).filter((g) => g !== user.id);
+    if (others.length) await this.notifications.notify(others, "guardian_notice", { kind: "invite_accepted" }, { actorId: user.id });
+    await this.audit.record(user.id, "youth.guardian.joined", { youthId: row.youthUserId, inviteId: row.id });
+    return { childId: row.youthUserId };
+  }
+
+  /**
+   * Rechnungsempfaenger wechseln: genau ein Empfaenger je Kind bleibt erhalten (partieller Unique-Index; beide Updates in einer
+   * Transaktion). Jeder aktive Elternteil darf; beide erfahren es. Bereits gestellte Rechnungen bleiben beim bisherigen Empfaenger.
+   */
+  async setBillingContact(guardian: PublicUser, childId: string, targetId: string): Promise<void> {
+    await this.requireActiveChild(guardian.id, childId);
+    await enforceLimit(this.cache, `guardian:billing:${guardian.id}`, 10, 86_400, limitMessage("Wechsel des Rechnungsempfängers"));
+    const rows = await this.activeGuardianRows(childId);
+    if (!rows.some((r) => r.g.guardianUserId === targetId)) throw new NotFoundException("Dieser Elternteil gehört nicht zu deinem Kind.");
+    const current = rows.find((r) => r.g.isBillingContact)?.g.guardianUserId ?? null;
+    if (current === targetId) return;
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx.update(guardianships).set({ isBillingContact: false }).where(and(eq(guardianships.youthUserId, childId), eq(guardianships.status, "active"), eq(guardianships.isBillingContact, true)));
+        await tx.update(guardianships).set({ isBillingContact: true }).where(and(eq(guardianships.youthUserId, childId), eq(guardianships.guardianUserId, targetId), eq(guardianships.status, "active")));
+      });
+    } catch {
+      throw new ConflictException("Der Rechnungsempfänger wurde gerade gleichzeitig geändert. Bitte lade die Seite neu und versuche es erneut.");
+    }
+    await this.audit.record(guardian.id, "youth.billing_contact.changed", { youthId: childId, from: current, to: targetId });
+    const notify = [...new Set([current, targetId].filter((g): g is string => !!g && g !== guardian.id))];
+    if (notify.length) await this.notifications.notify(notify, "guardian_notice", { kind: "billing_changed" }, { actorId: guardian.id });
+  }
+
+  // --- Loeschung mit Vorankuendigung (zwei Elternteile) ----------------------------------------------------------------------
+
+  /**
+   * Gibt es einen weiteren Elternteil, wird nicht sofort geloescht: der andere bekommt 7 Tage Vorankuendigung und kann
+   * widersprechen (`cancelDeletion`). Mit nur einem Elternteil: sofort (Aufrufer loescht).
+   */
+  async planDeletion(guardianId: string, childId: string): Promise<DeleteChildResult> {
+    const { profile } = await this.requireChild(guardianId, childId);
+    const others = (await this.youth.guardiansOf(childId)).filter((g) => g !== guardianId);
+    if (others.length === 0) return { status: "deleted" };
+    const after = (d: Date) => new Date(d.getTime() + YOUTH_DELETION_NOTICE_DAYS * 86_400_000).toISOString();
+    if (profile.deletionRequestedAt) return { status: "scheduled", deleteAfter: after(profile.deletionRequestedAt) }; // laeuft schon, Frist wird nicht verlaengert
+    const [row] = await this.db
+      .update(youthProfiles)
+      .set({ deletionRequestedAt: sql`now()`, deletionRequestedBy: guardianId })
+      .where(and(eq(youthProfiles.userId, childId), isNull(youthProfiles.deletionRequestedAt)))
+      .returning({ at: youthProfiles.deletionRequestedAt });
+    if (!row?.at) return { status: "scheduled", deleteAfter: after(new Date()) }; // paralleler Antrag war schneller
+    const deleteAfter = after(row.at);
+    await this.notifications.notify(others, "guardian_notice", { kind: "deletion_requested", deleteAfter }, { actorId: guardianId });
+    await this.audit.record(guardianId, "youth.deletion.requested", { youthId: childId });
+    return { status: "scheduled", deleteAfter };
+  }
+
+  /** Widerspruch (oder Rueckzug) gegen die geplante Loeschung: jeder aktive Elternteil. */
+  async cancelDeletion(guardian: PublicUser, childId: string): Promise<void> {
+    const { profile } = await this.requireChild(guardian.id, childId);
+    if (!profile.deletionRequestedAt) throw new NotFoundException("Es ist keine Löschung geplant.");
+    await this.db.update(youthProfiles).set({ deletionRequestedAt: null, deletionRequestedBy: null }).where(eq(youthProfiles.userId, childId));
+    const others = (await this.youth.guardiansOf(childId)).filter((g) => g !== guardian.id);
+    if (others.length) await this.notifications.notify(others, "guardian_notice", { kind: "deletion_canceled" }, { actorId: guardian.id });
+    await this.audit.record(guardian.id, "youth.deletion.canceled", { youthId: childId });
+  }
+
+  /** Jugendkonten, deren Vorankuendigung (7 Tage) abgelaufen ist und die nicht widersprochen wurden (Job privacy.retention loescht sie). */
+  async deletionDue(limit = 100): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: youthProfiles.userId })
+      .from(youthProfiles)
+      .where(and(isNotNull(youthProfiles.deletionRequestedAt), lt(youthProfiles.deletionRequestedAt, ago(RETENTION.youthDeletionNotice))))
+      .limit(limit);
+    return rows.map((r) => r.id);
   }
 
   // --- Zu-/Absagen und Helferlisten (im Namen des Kindes) ----------------------------------------------------
@@ -375,7 +594,10 @@ export class GuardianService implements OnModuleInit {
       this.db.select().from(guardianConsents).where(eq(guardianConsents.guardianUserId, userId)).orderBy(guardianConsents.createdAt),
     ]);
     const orgs = await this.orgs.lookupByIds(given.flatMap((c) => (c.orgId ? [c.orgId] : [])));
+    const invited = await this.db.select().from(guardianInvites).where(eq(guardianInvites.inviterUserId, userId)).orderBy(guardianInvites.createdAt);
     return {
+      // Eingeladene Adresse wird nicht gespeichert (nur ein Hash zur Bindung der Annahme)
+      guardianInvitesSent: invited.map((i) => ({ childId: i.youthUserId, status: i.status, at: i.createdAt.toISOString(), expiresAt: i.expiresAt.toISOString() })),
       children: links.map((l) => ({ childId: l.g.youthUserId, childName: l.name ?? null, status: l.g.status, billingContact: l.g.isBillingContact, since: l.g.createdAt.toISOString() })),
       consentsGiven: given.map((c) => ({ childId: c.youthUserId, purpose: c.purpose, club: c.orgId ? (orgs.get(c.orgId)?.name ?? null) : null, granted: c.granted, textVersion: c.textVersion, at: c.createdAt.toISOString() })),
     };
@@ -402,6 +624,8 @@ export class GuardianService implements OnModuleInit {
           await tx.update(guardianships).set({ isBillingContact: true }).where(eq(guardianships.id, others[0].id));
         }
       }
+      // Einladungen an/von diesem Konto sind ohne das Konto sinnlos (Hash der Adresse, Token)
+      await tx.delete(guardianInvites).where(or(eq(guardianInvites.inviterUserId, userId), eq(guardianInvites.acceptedBy, userId)));
       // Nachweis bleibt, die Person wird entkoppelt (erlaubte Aenderung des Triggers)
       await tx.update(guardianConsents).set({ guardianUserId: null }).where(eq(guardianConsents.guardianUserId, userId));
       // Jugendkonto: Aufbewahrungsfrist der Nachweise beginnt (pseudonym: nur IDs)
@@ -414,6 +638,16 @@ export class GuardianService implements OnModuleInit {
 
   /** Loeschfrist (Job privacy.retention): Nachweise geloeschter Jugendkonten nach 3 Jahren. Der Trigger erlaubt Loeschen nur hier. */
   async purgeExpired(): Promise<number> {
+    // Einladungen an einen zweiten Elternteil: 30 Tage nach Ablauf bzw. Annahme/Widerruf
+    const old = ago(RETENTION.guardianInvites);
+    const gone = await this.db
+      .delete(guardianInvites)
+      .where(or(and(eq(guardianInvites.status, "open"), lt(guardianInvites.expiresAt, old)), and(sql`${guardianInvites.status} <> 'open'`, lt(guardianInvites.createdAt, old))))
+      .returning({ id: guardianInvites.id });
+    return gone.length + (await this.purgeConsents());
+  }
+
+  private async purgeConsents(): Promise<number> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('vereine.consent_purge', 'on', true)`);
       const rows = await tx.delete(guardianConsents).where(and(isNotNull(guardianConsents.retainUntil), lt(guardianConsents.retainUntil, sql`now()`))).returning({ id: guardianConsents.id });
@@ -431,7 +665,7 @@ export class GuardianService implements OnModuleInit {
     return rows.map((r) => r.id);
   }
 
-  async auditDeleted(guardianId: string, childId: string): Promise<void> {
+  async auditDeleted(guardianId: string | null, childId: string): Promise<void> {
     await this.audit.record(guardianId, "youth.deleted", { youthId: childId });
   }
 

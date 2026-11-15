@@ -42,6 +42,7 @@ export const STORED_ABOUT_CHILD: string[] = [
   "Geburtsdatum: nur für die Altersprüfung. Am 16. Geburtstag braucht dein Kind ein eigenes Konto.",
   "Mitgliedschaften, Zu- und Absagen und Helfer-Eintragungen, die du für dein Kind machst.",
   "Anwesenheit beim Training, das erfasst nur der Verein. Einen Grund für Fehlen gibt es nicht.",
+  "Ein zweiter Elternteil (nur mit deiner Einladung und eigenem Konto) sieht und verwaltet dein Kind mit. Freigaben gelten restriktiv: Widerspricht einer von euch, gilt es nicht.",
   "Rechnungen für dein Kind gehen an dich. Der Verein sieht nur den Namen deines Kindes auf der Rechnung.",
 ];
 

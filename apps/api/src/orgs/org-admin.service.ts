@@ -233,7 +233,8 @@ export class OrgAdminService {
     const row = await this.findUsable(token);
     const [org] = await this.db.select().from(organizations).where(eq(organizations.id, row.orgId)).limit(1);
     const role = await this.orgs.activeRole(row.orgId, user.id);
-    return { orgName: org.name, orgSlug: org.slug, alreadyMember: !!role };
+    const gate = await this.events.inviteGate(row.orgId, row.id);
+    return { orgName: org.name, orgSlug: org.slug, alreadyMember: !!role, ...(gate?.forChild ? { forChild: true } : {}) };
   }
 
   /** Tritt dem Verein bei (aktives Mitglied, ohne weitere Freigabe) und folgt ihm. */
@@ -242,6 +243,12 @@ export class OrgAdminService {
     if (!opts.viaGuardian && (await this.youth.isYouth(user.id))) throw new ForbiddenException("Das macht dein Elternteil für dich.");
     const row = await this.findUsable(token);
     const [org] = await this.db.select().from(organizations).where(eq(organizations.id, row.orgId)).limit(1);
+    // Persoenliche Einladung fuer ein Kind (Import): nur ein Elternteil fuer das Jugendkonto mit passendem Geburtsdatum, nie fuer das Elternkonto selbst
+    const gate = await this.events.inviteGate(row.orgId, row.id);
+    if (gate?.forChild) {
+      if (!opts.viaGuardian) throw new ConflictException("Diese Einladung gilt für ein Kind unter 16. Lege unter „Meine Kinder“ ein Jugendkonto an und melde es dort mit diesem Link an.");
+      if (gate.birthDate && (await this.youth.birthDate(user.id)) !== gate.birthDate) throw new ConflictException("Das Geburtsdatum deines Kindes passt nicht zu dieser Einladung. Bitte frage beim Verein nach.");
+    }
     if (await this.orgs.activeRole(row.orgId, user.id)) return { orgName: org.name, orgSlug: org.slug, alreadyMember: true };
 
     await this.db.transaction(async (tx) => {

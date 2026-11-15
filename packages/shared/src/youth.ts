@@ -11,8 +11,11 @@ export const YOUTH_AGE_LIMIT = 16;
 export const YOUTH_AGE_MIN = 6;
 /** Je Elternteil hoechstens so viele Jugendkonten (haelt Abfragen klein). */
 export const MAX_CHILDREN_PER_GUARDIAN = 10;
-/** Je Kind hoechstens so viele aktive Elternteile (E1: genau einer; zweiter Elternteil folgt in E2). */
-export const MAX_GUARDIANS_PER_CHILD = 4;
+/** Je Kind hoechstens so viele aktive Elternteile (E2: zwei; weitere Sorgeberechtigte sind eine offene Frage, siehe F1-DOKU). */
+export const MAX_GUARDIANS_PER_CHILD = 2;
+/** Zweiter Elternteil: Einladung gilt so viele Tage; Loeschung eines Kindes wird dem anderen Elternteil so viele Tage vorher angekuendigt. */
+export const GUARDIAN_INVITE_VALID_DAYS = 7;
+export const YOUTH_DELETION_NOTICE_DAYS = 7;
 
 export type AccountType = "adult" | "youth";
 
@@ -47,6 +50,11 @@ export const joinOrgForChildSchema = z.object({
   slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9-]+$/).optional(),
 }).refine((v) => !!v.token !== !!v.slug, { message: "Entweder Einladungslink oder Verein angeben." });
 export type JoinOrgForChildInput = z.infer<typeof joinOrgForChildSchema>;
+
+export const inviteGuardianSchema = z.object({ email: z.string().trim().toLowerCase().email("E-Mail-Adresse ist ungültig.").max(254) });
+export const setBillingContactSchema = z.object({ guardianId: z.uuid() });
+/** Annahme der Einladung: Selbstauskunft "sorgeberechtigt" (wird als Nachweis gespeichert). */
+export const acceptGuardianInviteSchema = z.object({ confirmGuardian: z.literal(true) });
 
 export const deleteChildSchema = z.object({ password: z.string().min(1).max(128) });
 
@@ -118,4 +126,14 @@ export type YouthChildDetail = YouthChild & {
   events: YouthEvent[];
   /** Anwesenheit der letzten Termine (nur Status, kein Grund). */
   attendance: { eventTitle: string; startsAt: string; status: "present" | "absent" | "excused" }[];
+  /** Geplante Loeschung (zwei Elternteile): Vorankuendigung laeuft, jeder Elternteil kann widersprechen. */
+  deletion: { requestedAt: string; deleteAfter: string; byMe: boolean } | null;
 };
+
+export type YouthGuardian = { userId: string; name: string; isMe: boolean; isBillingContact: boolean; since: string };
+export type YouthGuardianInvite = { id: string; createdAt: string; expiresAt: string };
+export type YouthGuardiansView = { guardians: YouthGuardian[]; invites: YouthGuardianInvite[]; canInvite: boolean };
+/** Was die eingeladene Person vor der Annahme sieht (nur mit passendem Konto). */
+export type GuardianInviteInfo = { inviterName: string; childName: string };
+/** Loeschung eines Kindes: sofort (ein Elternteil) oder mit Vorankuendigung (zwei Elternteile). */
+export type DeleteChildResult = { status: "deleted" } | { status: "scheduled"; deleteAfter: string };

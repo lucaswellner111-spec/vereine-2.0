@@ -300,7 +300,13 @@ describe("Jugendkonten: Eltern verwalten Kinder (Etappe E1)", () => {
     expect(own.guardianship.consentsGiven.length).toBeGreaterThanOrEqual(3);
 
     expect((await req(pia, "DELETE", `/guardian/children/${lena.id}`, { password: "falsch-falsch-falsch" })).statusCode).toBe(403);
-    expect((await req(pam, "DELETE", `/guardian/children/${lena.id}`, { password })).statusCode).toBe(204); // zweiter Elternteil darf ebenfalls
+    // Zwei Elternteile (E2): zweiter Elternteil darf ebenfalls, aber mit 7 Tagen Vorankuendigung; nach Fristende loescht der Job
+    const scheduled = await req(pam, "DELETE", `/guardian/children/${lena.id}`, { password });
+    expect(scheduled.statusCode).toBe(200);
+    expect(scheduled.json()).toMatchObject({ status: "scheduled" });
+    expect(await app.get(PrivacyService).eraseOrphanedYouth()).toBe(0);
+    await db.update(schema.youthProfiles).set({ deletionRequestedAt: new Date(Date.now() - 8 * 86400_000) }).where(eq(schema.youthProfiles.userId, lena.id));
+    expect(await app.get(PrivacyService).eraseOrphanedYouth()).toBe(1);
     expect(await db.select().from(schema.users).where(eq(schema.users.id, lena.id))).toHaveLength(0);
     expect(await db.select().from(schema.youthProfiles).where(eq(schema.youthProfiles.userId, lena.id))).toHaveLength(0);
     expect(await db.select().from(schema.guardianships).where(eq(schema.guardianships.youthUserId, lena.id))).toHaveLength(0);

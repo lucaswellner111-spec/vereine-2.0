@@ -225,6 +225,13 @@
       "when": 1794680235345,
       "tag": "0031_youth_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794690499161,
+      "tag": "0032_f1_guardian_invites_import_youth",
+      "breakpoints": true
     }
   ]
 }

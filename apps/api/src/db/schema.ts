@@ -100,6 +100,10 @@ export const youthProfiles = identity.table(
     notified7At: timestamp("notified_7_at", { withTimezone: true }),
     /** Letzter Elternteil hat sein Konto geloescht: nach 30 Tagen wird das Jugendkonto geloescht. */
     orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
+    /** Loeschung durch einen Elternteil mit Vorankuendigung an den anderen (E2): ab diesem Zeitpunkt laeuft die 7-Tage-Frist. */
+    deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+    /** Ohne Fremdschluessel (leer, wenn das Konto des Elternteils geloescht wird; die Frist laeuft weiter). */
+    deletionRequestedBy: uuid("deletion_requested_by"),
     /** Elternteil, der das Konto angelegt hat (ohne Fremdschluessel, leer nach dessen Loeschung). */
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -126,6 +130,30 @@ export const guardianships = identity.table(
     index("guardianships_youth_idx").on(t.youthUserId),
     check("guardianships_status_chk", sql`status IN ('active', 'ended')`),
     check("guardianships_not_self_chk", sql`guardian_user_id <> youth_user_id`),
+  ],
+);
+
+/**
+ * Einladung eines zweiten Elternteils (E2). Der Token wird nur als Hash gespeichert, die Adresse nur als Hash (Bindung an
+ * das Konto der eingeladenen Person: ein weitergeleiteter Link nuetzt Dritten nichts). Frist: abgelaufen/verbraucht 30 Tage, dann Job.
+ */
+export const guardianInvites = identity.table(
+  "guardian_invites",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    youthUserId: uuid("youth_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    inviterUserId: uuid("inviter_user_id").references(() => users.id, { onDelete: "set null" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    emailHash: text("email_hash").notNull(),
+    status: text("status").notNull().default("open"), // open | accepted | revoked
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedBy: uuid("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("guardian_invites_youth_idx").on(t.youthUserId, t.status),
+    check("guardian_invites_status_chk", sql`status IN ('open', 'accepted', 'revoked')`),
   ],
 );
 
@@ -939,6 +967,9 @@ export const pendingMembers = membersArea.table(
     memberNo: integer("member_no"),
     joinedOn: date("joined_on", { mode: "string" }),
     feeClassId: uuid("fee_class_id").references(() => feeClasses.id, { onDelete: "set null" }),
+    /** Kind unter 16 (E2): `email` ist die Adresse der Eltern, die Einladung geht dorthin. Geburtsdatum nur bei Kindern (Datenminimierung). */
+    isMinor: boolean("is_minor").notNull().default(false),
+    birthDate: date("birth_date", { mode: "string" }),
     /** queued = Einladung wartet auf Versand | sent = eingereiht/verschickt. */
     status: text("status").notNull().default("queued"),
     inviteId: uuid("invite_id"),
@@ -949,7 +980,10 @@ export const pendingMembers = membersArea.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique("pending_members_email_unique").on(t.orgId, t.email),
+    // Erwachsene: eine Vormerkung je Adresse. Kinder: Geschwister teilen sich die Elternadresse, je Kind (Vor-/Nachname, Geburtsdatum) eine Vormerkung.
+    uniqueIndex("pending_members_email_adult_uq").on(t.orgId, t.email).where(sql`NOT is_minor`),
+    uniqueIndex("pending_members_email_minor_uq").on(t.orgId, t.email, sql`lower(first_name)`, sql`lower(last_name)`, t.birthDate).where(sql`is_minor`),
+    check("pending_members_minor_chk", sql`NOT is_minor OR birth_date IS NOT NULL`),
     unique("pending_members_no_unique").on(t.orgId, t.memberNo),
     index("pending_members_status_idx").on(t.orgId, t.status),
     index("pending_members_invite_idx").on(t.inviteId),

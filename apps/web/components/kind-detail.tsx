@@ -4,7 +4,8 @@ import { Download, LogOut, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { YOUTH_AGE_LIMIT, type RsvpStatus, type YouthChildDetail, type YouthEvent } from "@vereine/shared";
+import { YOUTH_AGE_LIMIT, YOUTH_DELETION_NOTICE_DAYS, type DeleteChildResult, type RsvpStatus, type YouthChildDetail, type YouthEvent } from "@vereine/shared";
+import { KindGuardians } from "@/components/kind-guardians";
 import { StoredAboutChild } from "@/components/kinder-admin";
 import { Alert, ArrowLink, BackLink, Badge, Button, Card, EmptyState, ErrorState, Field, ListSkeleton, PageHeader, SectionTitle } from "@/components/ui";
 import { Dialog, SegmentedControl } from "@/components/ui-client";
@@ -24,6 +25,8 @@ export function KindDetail({ id }: { id: string }) {
   const [busy, run] = useBusy();
   const [joinOpen, setJoinOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const guardians = useApi<{ guardians: unknown[] }>(`/guardian/children/${id}/guardians`);
+  const twoGuardians = (guardians.data?.guardians.length ?? 1) > 1;
 
   if (child.error && !child.data) {
     return (
@@ -70,6 +73,17 @@ export function KindDetail({ id }: { id: string }) {
       }
     });
 
+  const cancelDeletion = () =>
+    void run(async () => {
+      try {
+        await api(`/guardian/children/${id}/deletion`, { method: "DELETE" });
+        toast.success("Die Löschung wurde abgebrochen.");
+        child.reload();
+      } catch (err) {
+        toast.error(describeError(err));
+      }
+    });
+
   async function download() {
     try {
       const data = await api<unknown>(`/guardian/children/${id}/export`);
@@ -95,6 +109,19 @@ export function KindDetail({ id }: { id: string }) {
           </>
         }
       />
+      {c.deletion && (
+        <div className="mb-4">
+          <Alert tone="info">
+            <p>
+              {c.deletion.byMe ? "Du hast" : "Dein Elternteil hat"} die Löschung des Jugendkontos beantragt. Es wird am {dateDe(c.deletion.deleteAfter.slice(0, 10))} gelöscht, wenn niemand widerspricht. Bis dahin
+              bleibt alles unverändert.
+            </p>
+            <Button size="sm" variant="secondary" className="relative hit-area mt-2" disabled={busy} onClick={cancelDeletion}>
+              {c.deletion.byMe ? "Löschung zurückziehen" : "Widersprechen"}
+            </Button>
+          </Alert>
+        </div>
+      )}
       {c.paused && (
         <div className="mb-4">
           <Alert tone="info">
@@ -199,6 +226,8 @@ export function KindDetail({ id }: { id: string }) {
         )}
       </Card>
 
+      <KindGuardians childId={id} childName={c.name} paused={c.paused} onChanged={() => child.reload()} />
+
       <SectionTitle>Rechnungen</SectionTitle>
       <Card className="mb-6 text-sm">
         <p>Rechnungen der Vereine für {c.name} gehen an dich{c.isBillingContact ? " (du bist der Rechnungsempfänger)" : ""}. Du findest sie bei <Link href="/rechnungen" className="font-medium underline">Meine Rechnungen</Link>.</p>
@@ -234,7 +263,20 @@ export function KindDetail({ id }: { id: string }) {
       <ArrowLink href="/kinder">Zurück zu Meine Kinder</ArrowLink>
 
       <JoinDialog open={joinOpen} onClose={() => setJoinOpen(false)} childId={id} name={c.name} onDone={() => child.reload()} />
-      <DeleteDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} childId={id} name={c.fullName} onDeleted={() => router.replace("/kinder")} />
+      <DeleteDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        childId={id}
+        name={c.fullName}
+        twoGuardians={twoGuardians}
+        onDone={(res) => {
+          if (res.status === "deleted") router.replace("/kinder");
+          else {
+            setDeleteOpen(false);
+            child.reload();
+          }
+        }}
+      />
     </>
   );
 }
@@ -299,7 +341,7 @@ function JoinDialog({ open, onClose, childId, name, onDone }: { open: boolean; o
   );
 }
 
-function DeleteDialog({ open, onClose, childId, name, onDeleted }: { open: boolean; onClose: () => void; childId: string; name: string; onDeleted: () => void }) {
+function DeleteDialog({ open, onClose, childId, name, twoGuardians, onDone }: { open: boolean; onClose: () => void; childId: string; name: string; twoGuardians: boolean; onDone: (res: DeleteChildResult) => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, run] = useBusy();
@@ -308,9 +350,10 @@ function DeleteDialog({ open, onClose, childId, name, onDeleted }: { open: boole
     void run(async () => {
       setError(null);
       try {
-        await api(`/guardian/children/${childId}`, { method: "DELETE", body: { password } });
-        toast.success("Das Jugendkonto wurde gelöscht.");
-        onDeleted();
+        const res = await api<DeleteChildResult>(`/guardian/children/${childId}`, { method: "DELETE", body: { password } });
+        toast.success(res.status === "deleted" ? "Das Jugendkonto wurde gelöscht." : "Die Löschung ist angekündigt. Der andere Elternteil kann widersprechen.");
+        setPassword("");
+        onDone(res);
       } catch (e) {
         setError(describeError(e));
       }
@@ -322,11 +365,11 @@ function DeleteDialog({ open, onClose, childId, name, onDeleted }: { open: boole
       onClose={onClose}
       title="Jugendkonto löschen"
       role="alertdialog"
-      description={`Alle Daten von ${name} werden gelöscht: Mitgliedschaften, Zu-/Absagen, Anwesenheit und Stammdaten bei den Vereinen. Das lässt sich nicht rückgängig machen. Rechnungen bleiben als Beleg für den Verein erhalten (gesetzliche Aufbewahrung).`}
+      description={`Alle Daten von ${name} werden gelöscht: Mitgliedschaften, Zu-/Absagen, Anwesenheit und Stammdaten bei den Vereinen. Das lässt sich nicht rückgängig machen. Rechnungen bleiben als Beleg für den Verein erhalten (gesetzliche Aufbewahrung).${twoGuardians ? ` Weil dein Kind zwei Eltern hat, kündigen wir die Löschung dem anderen Elternteil an. Sie passiert erst nach ${YOUTH_DELETION_NOTICE_DAYS} Tagen, und er oder sie kann widersprechen.` : ""}`}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Abbrechen</Button>
-          <Button variant="danger" onClick={submit} busy={busy} disabled={password === ""}>Endgültig löschen</Button>
+          <Button variant="danger" onClick={submit} busy={busy} disabled={password === ""}>{twoGuardians ? "Löschung ankündigen" : "Endgültig löschen"}</Button>
         </div>
       }
     >

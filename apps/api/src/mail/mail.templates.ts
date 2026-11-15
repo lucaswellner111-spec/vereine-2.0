@@ -15,6 +15,10 @@ export type MailTemplates = {
   invite: { orgName: string; link: string; inviterName?: string; unsubscribeLink?: string };
   /** Persoenliche Einladung aus dem Mitglieder-Import (Vorname aus der Liste des Vereins). */
   "member-invite": { orgName: string; firstName: string; link: string; validDays: number; unsubscribeLink?: string };
+  /** Import fuer ein Kind unter 16: Einladung geht an die Eltern (Adresse aus der Mitgliederliste des Vereins). */
+  "member-invite-guardian": { orgName: string; childFirstName: string; link: string; validDays: number; unsubscribeLink?: string };
+  /** Zweiter Elternteil: Einladung durch einen Elternteil (ohne Namen des Kindes). */
+  "guardian-invite": { inviterName: string; link: string; validDays: number };
   "invoice-new": { name: string; orgName: string; number: string; amount: string; dueDate: string; link: string };
   "notification-digest": { name: string; lines: string[]; link: string; unsubscribeLink?: string };
   /** Warteliste: Double-Opt-in (ohne Konto, daher ohne Namen). Austragelink in jeder Mail. */
@@ -34,6 +38,8 @@ export const MAIL_TEMPLATES: MailTemplate[] = [
   "email-change-notice",
   "invite",
   "member-invite",
+  "member-invite-guardian",
+  "guardian-invite",
   "invoice-new",
   "notification-digest",
   "waitlist-confirm",
@@ -55,6 +61,8 @@ export const TEMPLATE_META: Record<MailTemplate, { priority: "critical" | "norma
   "registration-complete": { priority: "critical", category: "auth" },
   invite: { priority: "normal", category: "invite" },
   "member-invite": { priority: "normal", category: "invite" },
+  "member-invite-guardian": { priority: "normal", category: "invite" },
+  "guardian-invite": { priority: "normal", category: "service" },
   "invoice-new": { priority: "normal", category: "service" },
   "notification-digest": { priority: "normal", category: "digest" },
   "waitlist-confirm": { priority: "normal", category: "notice" },
@@ -222,6 +230,34 @@ export function renderMail<T extends MailTemplate>(template: T, data: MailTempla
         { label: "Einladung annehmen", link: d.link },
         `Du möchtest kein Konto? Dann ignoriere diese E-Mail einfach – ohne Annahme wird deine Adresse bei ${BRAND} nach Ablauf gelöscht.`,
         { unsubscribe: d.unsubscribeLink },
+      );
+    }
+    case "member-invite-guardian": {
+      const d = data as MailTemplates["member-invite-guardian"];
+      return compose(
+        `Einladung für ${d.childFirstName} zu ${d.orgName}`,
+        hello(),
+        [
+          `„${d.orgName}“ nutzt ${BRAND} für Neuigkeiten, Termine und die Mitgliederverwaltung und möchte ${d.childFirstName} als Mitglied einladen. Weil ${d.childFirstName} unter 16 ist, gehört die Einladung zu dir als Elternteil.`,
+          `Über den Button legst du ein Konto an (oder meldest dich an) und meldest ${d.childFirstName} mit einem Jugendkonto an. Dein Kind bekommt keinen eigenen Zugang, du verwaltest alles. Der Link gilt ${d.validDays} Tage.`,
+          `Deine Adresse und die Angaben zu deinem Kind hat der Verein aus seiner Mitgliederliste übernommen; verantwortlich dafür ist der Verein.`,
+        ],
+        { label: "Einladung ansehen", link: d.link },
+        `Du möchtest das nicht? Dann ignoriere diese E-Mail einfach – ohne Annahme werden die Angaben nach Ablauf bei ${BRAND} gelöscht.`,
+        { unsubscribe: d.unsubscribeLink },
+      );
+    }
+    case "guardian-invite": {
+      const d = data as MailTemplates["guardian-invite"];
+      return compose(
+        `Einladung als Elternteil bei ${BRAND}`,
+        hello(),
+        [
+          `${d.inviterName.trim() || "Jemand"} lädt dich ein, ein Kind gemeinsam bei ${BRAND} zu verwalten (Jugendkonto: Vereinsmitgliedschaft, Zu-/Absagen, Rechnungen).`,
+          `Du brauchst dafür ein eigenes Konto mit bestätigter E-Mail-Adresse, und zwar mit genau dieser Adresse. Der Link gilt ${d.validDays} Tage und funktioniert nur einmal.`,
+        ],
+        { label: "Einladung ansehen", link: d.link },
+        `Du kennst die Person nicht oder bist nicht sorgeberechtigt? Dann ignoriere diese E-Mail – ohne Annahme passiert nichts.`,
       );
     }
     case "invoice-new": {

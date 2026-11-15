@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { InviteInfo } from "@vereine/shared";
 import { Alert, ArrowLink, Button, Card, ErrorState, LinkButton, Skeleton } from "@/components/ui";
 import { Logo } from "@/components/site";
+import { CopyField } from "@/components/ui-client";
 import { api, ApiError, describeError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { withNext } from "@/lib/next-url";
@@ -63,6 +64,15 @@ export default function InvitePage() {
           <Alert>Dieser Einladungslink ist ungültig oder abgelaufen. Bitte den Vorstand um einen neuen Link.</Alert>
         ) : !info ? (
           loadError ? <ErrorState message={loadError} onRetry={load} /> : <InviteSkeleton />
+        ) : info.forChild ? (
+          <>
+            <p className="text-sm">
+              <strong>{info.orgName}</strong> lädt dein Kind ein. Weil Kinder unter 16 kein eigenes Konto bekommen, meldest du es selbst mit einem Jugendkonto an und verwaltest es: Termine, Zu- und Absagen, Rechnungen.
+            </p>
+            <p className="text-sm text-muted">Lege dein Kind unter „Meine Kinder“ an (falls noch nicht geschehen) und füge dort diesen Einladungslink bei „Im Verein anmelden“ ein.</p>
+            <LinkButton href="/kinder" className="w-full">Zu „Meine Kinder“</LinkButton>
+            <CopyField label="Einladungslink" value={typeof window === "undefined" ? "" : window.location.href} />
+          </>
         ) : info.alreadyMember ? (
           <>
             <p className="text-sm">Du bist bereits Mitglied bei <strong>{info.orgName}</strong>.</p>
