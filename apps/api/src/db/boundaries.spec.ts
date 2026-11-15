@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  */
 const root = join(__dirname, "..");
 const SOCIAL_MODULES = ["orgs", "posts", "events", "notifications", "profiles", "media", "public"];
-const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog", "youthProfiles", "guardianships", "guardianConsents"];
+const IDENTITY_TABLES = ["users", "sessions", "consents", "auditLog", "youthProfiles", "guardianships", "guardianConsents", "guardianInvites"];
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -163,7 +163,7 @@ describe("AVV-Bereich", () => {
  * Alle anderen Bereiche lesen ueber YouthDirectory bzw. rufen den GuardianService (privacy: exportFor/eraseUser/purgeExpired).
  */
 describe("Jugend-Tabellen (Bereich identity)", () => {
-  const YOUTH_TABLES = ["youthProfiles", "guardianships", "guardianConsents"];
+  const YOUTH_TABLES = ["youthProfiles", "guardianships", "guardianConsents", "guardianInvites"];
   const ALLOWED = ["auth", "guardian"];
   const modules = readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory() && !ALLOWED.includes(e.name) && e.name !== "db" && e.name !== "testing");
   for (const mod of modules) {
